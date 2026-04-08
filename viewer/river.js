@@ -104,29 +104,38 @@
   function updateFrameLabel() {
     if (!state) { hzLabel.textContent = FRAME_LABELS[horizonHours] || ''; return; }
     var now = new Date(state.now);
-    var center = new Date(now.getTime() + scrollHours * 3600000);
     var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+    // For short horizons (6h, day) — show relative offset in hours
+    if (horizonHours <= 24) {
+      if (Math.abs(scrollHours) < 1) {
+        hzLabel.textContent = horizonHours <= 6 ? 'now' : 'today';
+      } else {
+        var sign = scrollHours > 0 ? '+' : '';
+        var h = Math.round(scrollHours);
+        hzLabel.textContent = sign + h + 'h';
+      }
+      return;
+    }
+
+    // For longer horizons — show the center date contextually
+    var center = new Date(now.getTime() + (scrollHours + horizonHours / 2) * 3600000);
+
     if (Math.abs(scrollHours) < horizonHours * 0.1) {
-      // Near "now" — show friendly label
-      if (horizonHours <= 6) hzLabel.textContent = 'now';
-      else if (horizonHours <= 24) hzLabel.textContent = 'today';
-      else if (horizonHours <= 72) hzLabel.textContent = 'this week';
+      if (horizonHours <= 72) hzLabel.textContent = 'next 3 days';
       else if (horizonHours <= 168) hzLabel.textContent = 'this week';
       else if (horizonHours <= 720) hzLabel.textContent = months[now.getMonth()];
-      else if (horizonHours <= 2160) hzLabel.textContent = 'Q' + (Math.floor(now.getMonth()/3)+1) + ' ' + now.getFullYear();
+      else if (horizonHours <= 2160) hzLabel.textContent = 'Q' + (Math.floor(now.getMonth()/3)+1) + ' \u2019' + (now.getFullYear()%100);
       else hzLabel.textContent = '' + now.getFullYear();
     } else {
-      // Scrolled away — show the center date
-      if (horizonHours <= 24) {
-        hzLabel.textContent = days[center.getDay()] + ' ' + months[center.getMonth()] + ' ' + center.getDate();
-      } else if (horizonHours <= 168) {
-        hzLabel.textContent = months[center.getMonth()] + ' ' + center.getDate() + '–' + new Date(center.getTime() + horizonHours*3600000).getDate();
+      if (horizonHours <= 168) {
+        var start = new Date(now.getTime() + scrollHours * 3600000);
+        hzLabel.textContent = months[start.getMonth()] + ' ' + start.getDate() + '\u2009\u2013\u2009' + new Date(start.getTime() + horizonHours*3600000).getDate();
       } else if (horizonHours <= 720) {
-        hzLabel.textContent = months[center.getMonth()] + ' ' + center.getFullYear();
+        hzLabel.textContent = months[center.getMonth()] + ' \u2019' + (center.getFullYear()%100);
       } else if (horizonHours <= 2160) {
-        hzLabel.textContent = 'Q' + (Math.floor(center.getMonth()/3)+1) + ' ' + center.getFullYear();
+        hzLabel.textContent = 'Q' + (Math.floor(center.getMonth()/3)+1) + ' \u2019' + (center.getFullYear()%100);
       } else {
         hzLabel.textContent = '' + center.getFullYear();
       }
@@ -477,30 +486,29 @@
     }
   }
 
-  // Format a date for display, adapting to how far away it is
-  function formatTime(date, hoursFromNow) {
+  // Format a date for display — always clean, never "11:21pm"
+  function formatTime(date) {
     var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var h = date.getHours(), m = date.getMinutes();
+    var ampm = h >= 12 ? 'pm' : 'am';
+    var dh = h % 12 || 12;
 
     if (horizonHours <= 6) {
-      // Just time: "2pm", "3:30pm"
-      var h = date.getHours(), m = date.getMinutes();
-      var ampm = h >= 12 ? 'pm' : 'am';
-      var dh = h % 12 || 12;
-      return m === 0 ? dh + ampm : dh + ':' + (m < 10 ? '0' : '') + m + ampm;
+      // "2pm", "2:30pm" — show :30 but not :21
+      if (m === 0) return dh + ampm;
+      if (m === 30) return dh + ':30' + ampm;
+      return dh + ':' + (m < 10 ? '0' : '') + m + ampm;
     } else if (horizonHours <= 24) {
-      // Time: "2pm", "10pm"
-      var h2 = date.getHours();
-      return (h2 % 12 || 12) + (h2 >= 12 ? 'pm' : 'am');
+      return dh + ampm;
     } else if (horizonHours <= 168) {
-      // Day + time or just day: "Wed 8", "Thu"
-      return days[date.getDay()] + ' ' + (date.getHours() === 0 ? '' : (date.getHours() % 12 || 12) + (date.getHours() >= 12 ? 'p' : 'a'));
+      // "Wed", "Thu 9", showing day name
+      if (h === 0 && m === 0) return days[date.getDay()];
+      return days[date.getDay()] + ' ' + dh + (ampm === 'am' ? 'a' : 'p');
     } else if (horizonHours <= 2160) {
-      // Date: "Apr 12", "May 3"
       return months[date.getMonth()] + ' ' + date.getDate();
     } else {
-      // Month: "Apr '26", "Jul '26"
-      return months[date.getMonth()] + ' \'' + date.getFullYear().toString().slice(2);
+      return months[date.getMonth()] + ' \u2019' + (date.getFullYear() % 100);
     }
   }
 
