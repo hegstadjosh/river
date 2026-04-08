@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>River</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="river-canvas"></canvas>
+
+  <div id="panel" class="panel hidden">
+    <label class="panel-label">
+      Name
+      <input type="text" id="panel-name" class="panel-input" spellcheck="false">
+    </label>
+    <label class="panel-label">
+      Size
+      <input type="range" id="panel-mass" min="5" max="240" value="30" class="panel-slider">
+    </label>
+    <label class="panel-label">
+      Commitment
+      <input type="range" id="panel-solidity" min="0" max="100" value="10" class="panel-slider">
+    </label>
+    <label class="panel-label panel-row">
+      <input type="checkbox" id="panel-fixed">
+      Pinned
+    </label>
+    <button id="panel-dissolve" class="panel-dissolve">Dissolve</button>
+  </div>
+
+  <script src="river.js"></script>
+</body>
+</html>

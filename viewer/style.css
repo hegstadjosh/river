@@ -1,0 +1,134 @@
+/* River — warm dark theme */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #1a1614;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: #d4c4b0;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: default;
+}
+
+/* ── Click Panel ─────────────────────────────────────── */
+
+.panel {
+  position: absolute;
+  z-index: 10;
+  min-width: 200px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(30, 24, 20, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 170, 110, 0.18);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 0.15s ease;
+}
+
+.panel.hidden {
+  display: none;
+}
+
+.panel-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(212, 196, 176, 0.55);
+  text-transform: uppercase;
+}
+
+.panel-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+}
+
+.panel-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(212, 170, 110, 0.15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #d4c4b0;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.panel-input:focus {
+  border-color: rgba(212, 170, 110, 0.4);
+}
+
+.panel-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+  accent-color: #d4aa6e;
+}
+
+.panel-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d4aa6e;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.panel-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d4aa6e;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="checkbox"] {
+  accent-color: #d4aa6e;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.panel-dissolve {
+  background: rgba(212, 170, 110, 0.08);
+  border: 1px solid rgba(212, 170, 110, 0.12);
+  border-radius: 6px;
+  color: rgba(212, 196, 176, 0.5);
+  font-size: 12px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.03em;
+}
+
+.panel-dissolve:hover {
+  background: rgba(212, 170, 110, 0.15);
+  color: rgba(212, 196, 176, 0.8);
+  border-color: rgba(212, 170, 110, 0.25);
+}
