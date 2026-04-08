@@ -14,7 +14,8 @@
 
   // ── World Constants ─────────────────────────────────────────────────
 
-  var PIXELS_PER_HOUR = 180;
+  var PIXELS_PER_HOUR = 0; // set by horizon selector
+  var horizonHours = 24;  // default: day view
   var CLOUD_RATIO = 0.30;       // top 30% is cloud (sky)
   var SURFACE_RATIO = 0.35;     // the river surface starts here
   var NOW_X = 0.25;             // now-line at 25% from left
@@ -67,8 +68,27 @@
     initStreaks();
   }
 
-  window.addEventListener('resize', resize);
+  function recalcScale() {
+    // The visible future spans from the now-line to the right edge
+    var futureWidth = W * (1 - NOW_X) - 30; // 30px margin
+    PIXELS_PER_HOUR = futureWidth / horizonHours;
+  }
+
+  window.addEventListener('resize', function () { resize(); recalcScale(); sync(); });
   resize();
+  recalcScale();
+
+  // Horizon selector bar
+  var hzBtns = document.querySelectorAll('.hz-btn');
+  hzBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      hzBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      horizonHours = Number(btn.dataset.hours);
+      recalcScale();
+      sync(); // recalculate all target positions
+    });
+  });
 
   // ── Layout ──────────────────────────────────────────────────────────
 
