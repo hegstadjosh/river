@@ -16,6 +16,8 @@
 
   var PIXELS_PER_HOUR = 0; // set by horizon selector
   var horizonHours = 24;  // default: day view
+  var scrollHours = 0;    // horizontal scroll offset (hours from now)
+  var scrollVel = 0;      // scroll momentum (hours/sec)
   var CLOUD_RATIO = 0.30;       // top 30% is cloud (sky)
   var SURFACE_RATIO = 0.35;     // the river surface starts here
   var NOW_X = 0.25;             // now-line at 25% from left
@@ -78,24 +80,103 @@
   resize();
   recalcScale();
 
-  // Horizon selector bar
+  // ── Horizon Bar ──────────────────────────────────────────────────────
+
   var hzBtns = document.querySelectorAll('.hz-btn');
+  var hzLabel = document.getElementById('hz-label');
+  var hzPrev = document.getElementById('hz-prev');
+  var hzNext = document.getElementById('hz-next');
+
+  var FRAME_LABELS = {
+    6: '6 hours', 24: 'day', 72: '3 days',
+    168: 'week', 720: 'month', 2160: 'quarter', 8760: 'year'
+  };
+
+  function setHorizon(hours) {
+    hzBtns.forEach(function (b) { b.classList.remove('active'); });
+    hzBtns.forEach(function (b) { if (Number(b.dataset.hours) === hours) b.classList.add('active'); });
+    horizonHours = hours;
+    recalcScale();
+    sync();
+    updateFrameLabel();
+  }
+
+  function updateFrameLabel() {
+    if (!state) { hzLabel.textContent = FRAME_LABELS[horizonHours] || ''; return; }
+    var now = new Date(state.now);
+    var center = new Date(now.getTime() + scrollHours * 3600000);
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    if (Math.abs(scrollHours) < horizonHours * 0.1) {
+      // Near "now" — show friendly label
+      if (horizonHours <= 6) hzLabel.textContent = 'now';
+      else if (horizonHours <= 24) hzLabel.textContent = 'today';
+      else if (horizonHours <= 72) hzLabel.textContent = 'this week';
+      else if (horizonHours <= 168) hzLabel.textContent = 'this week';
+      else if (horizonHours <= 720) hzLabel.textContent = months[now.getMonth()];
+      else if (horizonHours <= 2160) hzLabel.textContent = 'Q' + (Math.floor(now.getMonth()/3)+1) + ' ' + now.getFullYear();
+      else hzLabel.textContent = '' + now.getFullYear();
+    } else {
+      // Scrolled away — show the center date
+      if (horizonHours <= 24) {
+        hzLabel.textContent = days[center.getDay()] + ' ' + months[center.getMonth()] + ' ' + center.getDate();
+      } else if (horizonHours <= 168) {
+        hzLabel.textContent = months[center.getMonth()] + ' ' + center.getDate() + '–' + new Date(center.getTime() + horizonHours*3600000).getDate();
+      } else if (horizonHours <= 720) {
+        hzLabel.textContent = months[center.getMonth()] + ' ' + center.getFullYear();
+      } else if (horizonHours <= 2160) {
+        hzLabel.textContent = 'Q' + (Math.floor(center.getMonth()/3)+1) + ' ' + center.getFullYear();
+      } else {
+        hzLabel.textContent = '' + center.getFullYear();
+      }
+    }
+  }
+
   hzBtns.forEach(function (btn) {
     btn.addEventListener('click', function () {
-      hzBtns.forEach(function (b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      horizonHours = Number(btn.dataset.hours);
-      recalcScale();
-      sync(); // recalculate all target positions
+      scrollHours = 0; scrollVel = 0;
+      setHorizon(Number(btn.dataset.hours));
     });
   });
 
+  hzPrev.addEventListener('click', function () {
+    scrollHours -= horizonHours * 0.75;
+    scrollVel = 0;
+    sync(); updateFrameLabel();
+  });
+
+  hzNext.addEventListener('click', function () {
+    scrollHours += horizonHours * 0.75;
+    scrollVel = 0;
+    sync(); updateFrameLabel();
+  });
+
+  // ── Scroll / Trackpad ──────────────────────────────────────────────
+  // Horizontal scroll (wheel or trackpad) pans the river smoothly.
+
+  canvas.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    // deltaX for horizontal trackpad, deltaY for mouse wheel
+    var delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    // Convert pixels to hours
+    var hoursPerPx = 1 / PIXELS_PER_HOUR;
+    scrollHours += delta * hoursPerPx * 1.2;
+    scrollVel = 0; // kill momentum on direct input
+    sync();
+    updateFrameLabel();
+  }, { passive: false });
+
   // ── Layout ──────────────────────────────────────────────────────────
 
-  function nx()        { return W * NOW_X; }
   function surfaceY()  { return H * SURFACE_RATIO; }
   function cloudTopY() { return 40; }
   function riverMidY() { return surfaceY() + (H - surfaceY()) * 0.45; }
+
+  // Convert hours-from-now to screen X, accounting for scroll
+  function hoursToX(h) { return W * NOW_X + (h - scrollHours) * PIXELS_PER_HOUR; }
+  // The now-line's screen position (moves when scrolling)
+  function nx() { return hoursToX(0); }
 
   // Deterministic scatter from ID
   function hashFrac(id, seed) {
@@ -115,7 +196,7 @@
   }
 
   function riverPos(task) {
-    var x = nx() + (task.position || 0) * PIXELS_PER_HOUR;
+    var x = hoursToX(task.position || 0);
     var top = surfaceY() + 30;
     var bot = H - 50;
     var mid = (top + bot) / 2;
@@ -278,6 +359,9 @@
 
   function drawNowLine(t) {
     var x = nx();
+    // Don't draw if scrolled off screen
+    if (x < -40 || x > W + 40) return;
+
     var sY = surfaceY();
     var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
 
@@ -317,10 +401,13 @@
     var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-    // ── 3 division lines, splitting the future into quarters ──
+    // ── 3 division lines, splitting the visible window ──
+    // They divide the viewport's river portion into quarters
+    var viewStartHours = scrollHours;
+    var viewEndHours = scrollHours + horizonHours;
     for (var q = 1; q <= 3; q++) {
-      var divHours = horizonHours * q / 4;
-      var divX = nx() + divHours * PIXELS_PER_HOUR;
+      var divHours = viewStartHours + horizonHours * q / 4;
+      var divX = hoursToX(divHours);
       var divTime = new Date(now.getTime() + divHours * 3600000);
 
       // Vertical line — thinner and fainter than now-line
@@ -351,20 +438,22 @@
     }
 
     var subStepMs = subStep * 3600000;
-    var startMs = Math.floor(now.getTime() / subStepMs) * subStepMs;
+    var viewStartMs = now.getTime() + scrollHours * 3600000;
+    var viewEndMs = now.getTime() + (scrollHours + horizonHours) * 3600000;
+    var startMs = Math.floor(viewStartMs / subStepMs) * subStepMs - subStepMs;
 
     ctx.font = '8px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
 
-    for (var ms = startMs; ms < now.getTime() + horizonHours * 3600000 + subStepMs; ms += subStepMs) {
+    for (var ms = startMs; ms < viewEndMs + subStepMs; ms += subStepMs) {
       var hrs = (ms - now.getTime()) / 3600000;
-      var x = nx() + hrs * PIXELS_PER_HOUR;
-      if (x < nx() + 5 || x > W - 5) continue;
+      var x = hoursToX(hrs);
+      if (x < 5 || x > W - 5) continue;
 
       // Skip if too close to a division line
       var nearDiv = false;
       for (var dq = 1; dq <= 3; dq++) {
-        if (Math.abs(x - (nx() + horizonHours * dq / 4 * PIXELS_PER_HOUR)) < 25) {
+        if (Math.abs(x - hoursToX(viewStartHours + horizonHours * dq / 4)) < 25) {
           nearDiv = true; break;
         }
       }
@@ -760,12 +849,14 @@
     if (!a) return;
     var boundary = surfaceY();
 
+    // Convert screen X to hours-from-now: invert hoursToX
+    var dropHours = (a.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
     if (d.zone === 'cloud' && a.y > boundary) {
-      post('move', { id: d.id, position: (a.x - nx()) / PIXELS_PER_HOUR });
+      post('move', { id: d.id, position: dropHours });
     } else if (d.zone === 'river' && a.y < boundary) {
       post('move', { id: d.id, position: null });
     } else if (d.zone === 'river') {
-      post('move', { id: d.id, position: (a.x - nx()) / PIXELS_PER_HOUR });
+      post('move', { id: d.id, position: dropHours });
     }
   });
 
@@ -807,7 +898,14 @@
     });
 
     for (var j = 0; j < sorted.length; j++) {
-      drawBlob(sorted[j], t);
+      var task = sorted[j];
+      // Viewport culling — skip river tasks far off-screen
+      if (task.position !== null && task.position !== undefined) {
+        var screenX = hoursToX(task.position);
+        var r = blobR(task.mass) * 2;
+        if (screenX + r < -50 || screenX - r > W + 50) continue;
+      }
+      drawBlob(task, t);
     }
 
     drawPastFade();
