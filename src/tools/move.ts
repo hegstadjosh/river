@@ -52,6 +52,7 @@ export function registerMove(server: McpServer, state: RiverState): void {
               }),
             },
           ],
+          isError: true,
         };
       }
 

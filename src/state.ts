@@ -675,8 +675,6 @@ export class RiverState {
       if (params?.position !== undefined) {
         sets.push('anchor = @set_anchor');
         values.set_anchor = params.position === null ? null : positionToAnchor(params.position);
-      } else if (params?.position === null) {
-        sets.push('anchor = NULL');
       }
 
       if (sets.length === 0) return 0;

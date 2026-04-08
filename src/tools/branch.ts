@@ -40,6 +40,7 @@ export function registerBranch(server: McpServer, state: RiverState): void {
           if (!args.name) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Branch name is required for create' }) }],
+              isError: true,
             };
           }
           result = state.createBranch(args.name);
@@ -56,6 +57,7 @@ export function registerBranch(server: McpServer, state: RiverState): void {
           if (!args.name) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Branch name is required for switch' }) }],
+              isError: true,
             };
           }
           state.switchBranch(args.name);
@@ -68,6 +70,7 @@ export function registerBranch(server: McpServer, state: RiverState): void {
           if (!args.name) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Branch name is required for commit' }) }],
+              isError: true,
             };
           }
           state.commitBranch(args.name);
@@ -82,6 +85,7 @@ export function registerBranch(server: McpServer, state: RiverState): void {
           if (!b) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Provide `b` (or `name`) for the branch to diff against' }) }],
+              isError: true,
             };
           }
           result = state.diffBranches(a, b);
@@ -92,6 +96,7 @@ export function registerBranch(server: McpServer, state: RiverState): void {
           if (!args.name) {
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Branch name is required for delete' }) }],
+              isError: true,
             };
           }
           state.deleteBranch(args.name);
