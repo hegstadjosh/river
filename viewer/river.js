@@ -305,69 +305,113 @@
     ctx.fillText('now', x, sY + 18);
   }
 
-  // ── Drawing: Time Markers ───────────────────────────────────────────
-  // Adapts to horizon: hours for short views, days/weeks/months for long views.
-  // Ensures markers never overlap by picking an appropriate step size.
+  // ── Drawing: Time Markers + Division Lines ──────────────────────────
+  // Always exactly 3 division lines to the right of now, evenly splitting
+  // the horizon into quarters. Labels adapt to the timescale.
 
   function drawTimeMarkers() {
     if (!state) return;
     var now = new Date(state.now);
+    var sY = surfaceY();
+    var futureW = W * (1 - NOW_X) - 30;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-    // Pick step size (in hours) so markers are ≥60px apart
-    var minGap = 65;
-    var candidateSteps = [1, 2, 3, 4, 6, 12, 24, 48, 168, 336, 720, 2160];
-    var stepHours = 1;
-    for (var s = 0; s < candidateSteps.length; s++) {
-      stepHours = candidateSteps[s];
-      if (stepHours * PIXELS_PER_HOUR >= minGap) break;
-    }
+    // ── 3 division lines, splitting the future into quarters ──
+    for (var q = 1; q <= 3; q++) {
+      var divHours = horizonHours * q / 4;
+      var divX = nx() + divHours * PIXELS_PER_HOUR;
+      var divTime = new Date(now.getTime() + divHours * 3600000);
 
-    var stepMs = stepHours * 3600000;
-
-    // Find the first marker before now
-    var startMs = Math.floor(now.getTime() / stepMs) * stepMs;
-    // Go one step back to cover left of now-line
-    startMs -= stepMs;
-
-    ctx.font = '9px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-
-    for (var ms = startMs; ms < now.getTime() + horizonHours * 3600000 + stepMs; ms += stepMs) {
-      var hrs = (ms - now.getTime()) / 3600000;
-      var x = nx() + hrs * PIXELS_PER_HOUR;
-      if (x < -30 || x > W + 30) continue;
-
-      var mt = new Date(ms);
-      var label;
-
-      if (stepHours < 24) {
-        // Show time: "2pm", "6am"
-        var h = mt.getHours();
-        label = (h % 12 || 12) + (h >= 12 ? 'pm' : 'am');
-      } else if (stepHours < 168) {
-        // Show day: "Mon", "Tue" or "Apr 8"
-        var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        label = days[mt.getDay()] + ' ' + mt.getDate();
-      } else if (stepHours < 2160) {
-        // Show week/month: "Apr 8", "Apr 15"
-        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        label = months[mt.getMonth()] + ' ' + mt.getDate();
-      } else {
-        // Show month/quarter: "Apr", "Jul"
-        var months2 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        label = months2[mt.getMonth()] + ' ' + mt.getFullYear().toString().slice(2);
-      }
-
-      // Tick
+      // Vertical line — thinner and fainter than now-line
       ctx.beginPath();
-      ctx.moveTo(x, H - 5);
-      ctx.lineTo(x, H);
-      ctx.strokeStyle = 'rgba(200, 165, 110, 0.1)';
+      ctx.moveTo(divX, sY + 10);
+      ctx.lineTo(divX, H);
+      ctx.strokeStyle = 'rgba(200, 165, 110, 0.08)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(200, 165, 110, 0.18)';
-      ctx.fillText(label, x, H - 10);
+      // Label for this division
+      var label = formatTime(divTime, divHours);
+      ctx.font = '9px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(200, 165, 110, 0.25)';
+      ctx.fillText(label, divX, H - 10);
+    }
+
+    // ── Finer tick marks between divisions ──
+    // Pick a sub-step that gives ~4-8 ticks per quarter
+    var quarterHours = horizonHours / 4;
+    var subStepCandidates = [0.5, 1, 2, 3, 4, 6, 12, 24, 48, 168, 720];
+    var subStep = 1;
+    for (var c = 0; c < subStepCandidates.length; c++) {
+      subStep = subStepCandidates[c];
+      var ticksPerQuarter = quarterHours / subStep;
+      if (ticksPerQuarter <= 8) break;
+    }
+
+    var subStepMs = subStep * 3600000;
+    var startMs = Math.floor(now.getTime() / subStepMs) * subStepMs;
+
+    ctx.font = '8px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+
+    for (var ms = startMs; ms < now.getTime() + horizonHours * 3600000 + subStepMs; ms += subStepMs) {
+      var hrs = (ms - now.getTime()) / 3600000;
+      var x = nx() + hrs * PIXELS_PER_HOUR;
+      if (x < nx() + 5 || x > W - 5) continue;
+
+      // Skip if too close to a division line
+      var nearDiv = false;
+      for (var dq = 1; dq <= 3; dq++) {
+        if (Math.abs(x - (nx() + horizonHours * dq / 4 * PIXELS_PER_HOUR)) < 25) {
+          nearDiv = true; break;
+        }
+      }
+      if (nearDiv) continue;
+
+      // Small tick
+      ctx.beginPath();
+      ctx.moveTo(x, H - 3);
+      ctx.lineTo(x, H);
+      ctx.strokeStyle = 'rgba(200, 165, 110, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Sub-label (only if there's room — skip if PIXELS_PER_HOUR is tiny)
+      if (subStep * PIXELS_PER_HOUR > 30) {
+        var st = new Date(ms);
+        var subLabel = formatTime(st, hrs);
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.12)';
+        ctx.fillText(subLabel, x, H - 8);
+      }
+    }
+  }
+
+  // Format a date for display, adapting to how far away it is
+  function formatTime(date, hoursFromNow) {
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    if (horizonHours <= 6) {
+      // Just time: "2pm", "3:30pm"
+      var h = date.getHours(), m = date.getMinutes();
+      var ampm = h >= 12 ? 'pm' : 'am';
+      var dh = h % 12 || 12;
+      return m === 0 ? dh + ampm : dh + ':' + (m < 10 ? '0' : '') + m + ampm;
+    } else if (horizonHours <= 24) {
+      // Time: "2pm", "10pm"
+      var h2 = date.getHours();
+      return (h2 % 12 || 12) + (h2 >= 12 ? 'pm' : 'am');
+    } else if (horizonHours <= 168) {
+      // Day + time or just day: "Wed 8", "Thu"
+      return days[date.getDay()] + ' ' + (date.getHours() === 0 ? '' : (date.getHours() % 12 || 12) + (date.getHours() >= 12 ? 'p' : 'a'));
+    } else if (horizonHours <= 2160) {
+      // Date: "Apr 12", "May 3"
+      return months[date.getMonth()] + ' ' + date.getDate();
+    } else {
+      // Month: "Apr '26", "Jul '26"
+      return months[date.getMonth()] + ' \'' + date.getFullYear().toString().slice(2);
     }
   }
 
