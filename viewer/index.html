@@ -41,9 +41,17 @@
       <div class="panel-durations" id="panel-durations"></div>
     </div>
     <div class="panel-times" id="panel-times" style="display:none">
-      <input type="text" id="panel-start" class="time-pick" spellcheck="false" placeholder="3:00pm">
+      <div class="time-group">
+        <input type="text" id="panel-start" class="time-pick" spellcheck="false" placeholder="3pm">
+        <input type="datetime-local" id="panel-start-picker" class="time-picker-hidden">
+        <button class="time-icon" id="panel-start-icon" title="Pick time">&#128197;</button>
+      </div>
       <span class="time-arrow">&#8594;</span>
-      <input type="text" id="panel-end" class="time-pick" spellcheck="false" placeholder="5:00pm">
+      <div class="time-group">
+        <input type="text" id="panel-end" class="time-pick" spellcheck="false" placeholder="5pm">
+        <input type="datetime-local" id="panel-end-picker" class="time-picker-hidden">
+        <button class="time-icon" id="panel-end-icon" title="Pick time">&#128197;</button>
+      </div>
     </div>
     <label class="panel-label">
       Commitment

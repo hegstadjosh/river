@@ -139,6 +139,15 @@ canvas {
   gap: 4px;
 }
 
+.time-group {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  min-width: 0;
+}
+
 .time-pick {
   flex: 1;
   background: transparent;
@@ -150,17 +159,41 @@ canvas {
   font-family: -apple-system, system-ui, sans-serif;
   padding: 2px 0;
   outline: none;
-  text-align: center;
   min-width: 0;
   transition: border-color 0.15s;
 }
 
-.time-pick:first-child { text-align: left; }
-.time-pick:last-child { text-align: right; }
+.time-group:first-child .time-pick { text-align: left; }
+.time-group:last-child .time-pick { text-align: right; }
 
 .time-pick:focus {
   border-color: rgba(200, 165, 110, 0.5);
   color: #d4c4b0;
+}
+
+.time-picker-hidden {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.time-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 1px;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.time-icon:hover {
+  opacity: 0.6;
 }
 
 .time-arrow {

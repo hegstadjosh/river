@@ -1093,6 +1093,40 @@
     if (!selectedId) return;
     post('put', { id: selectedId, solidity: Number(panelSolidity.value) / 100 });
   });
+  // Hidden native pickers — opened by icon click
+  var startPicker = document.getElementById('panel-start-picker');
+  var endPicker = document.getElementById('panel-end-picker');
+  var startIcon = document.getElementById('panel-start-icon');
+  var endIcon = document.getElementById('panel-end-icon');
+
+  function toLocalISO(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' +
+      String(d.getDate()).padStart(2,'0') + 'T' +
+      String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+
+  startIcon.addEventListener('click', function() {
+    var parsed = parseCompactTime(panelStart.value);
+    if (parsed) startPicker.value = toLocalISO(parsed);
+    startPicker.showPicker();
+  });
+  endIcon.addEventListener('click', function() {
+    var parsed = parseCompactTime(panelEnd.value);
+    if (parsed) endPicker.value = toLocalISO(parsed);
+    endPicker.showPicker();
+  });
+
+  startPicker.addEventListener('change', function() {
+    var d = new Date(startPicker.value);
+    panelStart.value = fmtCompact(d);
+    panelStart.dispatchEvent(new Event('blur'));
+  });
+  endPicker.addEventListener('change', function() {
+    var d = new Date(endPicker.value);
+    panelEnd.value = fmtCompact(d);
+    panelEnd.dispatchEvent(new Event('blur'));
+  });
+
   // Start changed: keep duration, move task
   panelStart.addEventListener('keydown', function(e) { if (e.key === 'Enter') { panelStart.blur(); } });
   panelStart.addEventListener('blur', function () {
