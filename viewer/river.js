@@ -267,7 +267,8 @@
         a.name = t.name; a.mass = t.mass; a.solidity = t.solidity;
         a.fixed = t.fixed; a.alive = t.alive; a.tags = t.tags;
         a.position = t.position; a.anchor = t.anchor;
-        a.tx = tgt.x; a.ty = tgt.y;
+        a.tx = tgt.x;
+        a.ty = (a.customY !== undefined) ? a.customY : tgt.y;
       } else {
         animTasks.push({
           id: t.id, name: t.name, mass: t.mass, solidity: t.solidity,
@@ -860,12 +861,20 @@
     // Convert screen X to hours-from-now: invert hoursToX
     var dropHours = (a.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
     if (d.zone === 'cloud' && a.y > boundary) {
+      a.customY = a.y; // persist vertical position
       post('move', { id: d.id, position: dropHours });
     } else if (d.zone === 'river' && a.y < boundary) {
+      a.customY = a.y; // persist in cloud too
       post('move', { id: d.id, position: null });
     } else if (d.zone === 'river') {
+      a.customY = a.y; // persist vertical position
       post('move', { id: d.id, position: dropHours });
+    } else {
+      // Cloud → Cloud: just persist the Y
+      a.customY = a.y;
     }
+    // Update target to where it was dropped (keep Y, let X snap to data)
+    a.ty = a.y;
   });
 
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
