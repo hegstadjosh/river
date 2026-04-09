@@ -48,6 +48,7 @@
   var dragging = null;
   var lastTime = 0;
   var mouseX = 0, mouseY = 0;
+  var snapTimesMs = []; // major + minor grid times, updated each frame
 
   // Flow streaks — the river's current
   var streaks = [];
@@ -601,6 +602,46 @@
         }
       }
     }
+
+    // Store snap targets: grid lines + sub-grid for finer snapping
+    snapTimesMs = majorTimes.concat(minorTimes);
+
+    // Add sub-grid snap points (not drawn, just for snapping)
+    // 6h: every 15min. Day: every hour. 4d: every 6h. Week: every 6h. Month+: already fine.
+    var subSnapMs = 0;
+    if (horizonHours <= 6) subSnapMs = 15 * 60000;          // 15min
+    else if (horizonHours <= 24) subSnapMs = 3600000;        // 1hr
+    else if (horizonHours <= 96) subSnapMs = 6 * 3600000;    // 6hr
+    else if (horizonHours <= 168) subSnapMs = 6 * 3600000;   // 6hr
+
+    if (subSnapMs > 0) {
+      var subStart = Math.floor(viewLeftMs / subSnapMs) * subSnapMs;
+      for (var ss = subStart; ss <= viewRightMs; ss += subSnapMs) {
+        snapTimesMs.push(ss);
+      }
+    }
+  }
+
+  // Snap a screen X to the nearest grid line. Returns snapped X or original if nothing close.
+  var SNAP_PX = 10;
+  function snapX(screenX) {
+    if (!state || snapTimesMs.length === 0) return screenX;
+    var now = new Date(state.now);
+    var best = screenX;
+    var bestDist = SNAP_PX + 1;
+    for (var i = 0; i < snapTimesMs.length; i++) {
+      var hrs = (snapTimesMs[i] - now.getTime()) / 3600000;
+      var gx = hoursToX(hrs);
+      var dist = Math.abs(screenX - gx);
+      if (dist < bestDist) { bestDist = dist; best = gx; }
+    }
+    return best;
+  }
+
+  // Convert screen X to hours-from-now with snapping
+  function screenXToHours(sx) {
+    var snapped = snapX(sx);
+    return (snapped - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
   }
 
   // ── Drawing: Blobs ──────────────────────────────────────────────────
@@ -1076,20 +1117,23 @@
       var a = findTask(resizing.id);
       if (!a) return;
 
+      // Snap the dragged edge to grid
+      var rawEdgeX = e.clientX;
+      var snappedEdge = snapX(rawEdgeX);
+
       if (resizing.side === 'right') {
-        // Stretch right: keep left edge fixed, grow rightward
-        a.mass = Math.max(5, Math.round(resizing.startMass + deltaMins));
-        // Shift visual center rightward to keep left edge pinned
-        var massDelta = a.mass - resizing.startMass;
-        var pxDelta = (massDelta / 60) * PIXELS_PER_HOUR / 2;
-        a.x = resizing.startX + pxDelta;
+        // Left edge is pinned. Right edge = snapped position.
+        var leftEdgeX = resizing.startX - (resizing.startMass / 60) * PIXELS_PER_HOUR / 2;
+        var newWidthPx = Math.max(8, snappedEdge - leftEdgeX);
+        a.mass = Math.max(5, Math.round((newWidthPx / PIXELS_PER_HOUR) * 60));
+        a.x = leftEdgeX + newWidthPx / 2;
         a.tx = a.x;
       } else {
-        // Stretch left: keep right edge fixed, grow leftward
-        a.mass = Math.max(5, Math.round(resizing.startMass - deltaMins));
-        var massDelta = a.mass - resizing.startMass;
-        var pxDelta = (massDelta / 60) * PIXELS_PER_HOUR / 2;
-        a.x = resizing.startX - pxDelta;
+        // Right edge is pinned. Left edge = snapped position.
+        var rightEdgeX = resizing.startX + (resizing.startMass / 60) * PIXELS_PER_HOUR / 2;
+        var newWidthPx = Math.max(8, rightEdgeX - snappedEdge);
+        a.mass = Math.max(5, Math.round((newWidthPx / PIXELS_PER_HOUR) * 60));
+        a.x = rightEdgeX - newWidthPx / 2;
         a.tx = a.x;
       }
       canvas.style.cursor = 'ew-resize';
@@ -1111,7 +1155,16 @@
     dragging.moved = true;
     canvas.style.cursor = 'grabbing';
     var a = findTask(dragging.id);
-    if (a) { a.x = dragging.sx + dx; a.y = dragging.sy + dy; a.tx = a.x; a.ty = a.y; }
+    if (a) {
+      var rawX = dragging.sx + dx;
+      // Snap the START edge (left edge = center - halfWidth) to grid
+      var dd = taskStretch(a);
+      var startEdgeX = rawX - dd.hw;
+      var snappedStart = snapX(startEdgeX);
+      a.x = snappedStart + dd.hw; // shift center so start edge aligns
+      a.y = dragging.sy + dy;
+      a.tx = a.x; a.ty = a.y;
+    }
   });
 
   canvas.addEventListener('mouseup', function (e) {
@@ -1152,8 +1205,10 @@
     if (!a) return;
     var boundary = surfaceY();
 
-    // Convert screen X to hours-from-now: invert hoursToX
-    var dropHours = (a.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
+    // Convert snapped start edge to hours-from-now
+    var dd2 = taskStretch(a);
+    var startEdge = a.x - dd2.hw;
+    var dropHours = screenXToHours(startEdge) + a.mass / 120; // center = start + halfDur
     if (d.zone === 'cloud' && a.y > boundary) {
       a.customY = a.y;
       post('move', { id: d.id, position: dropHours });
@@ -1162,7 +1217,10 @@
       post('move', { id: d.id, position: null });
     } else if (d.zone === 'river') {
       a.customY = a.y;
-      post('move', { id: d.id, position: dropHours });
+      var dd3 = taskStretch(a);
+      var startEdge2 = a.x - dd3.hw;
+      var dropHours2 = screenXToHours(startEdge2) + a.mass / 120;
+      post('move', { id: d.id, position: dropHours2 });
     } else {
       a.customY = a.y;
     }
