@@ -425,9 +425,9 @@
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // "now" label — small, at the surface
-    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.25 + breath * 0.1) + ')';
-    ctx.font = '9px -apple-system, system-ui, sans-serif';
+    // "now" label — at the surface
+    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.3 + breath * 0.15) + ')';
+    ctx.font = '500 11px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('now', x, sY + 18);
   }
@@ -463,10 +463,10 @@
 
       // Label for this division
       var label = formatTime(divTime, divHours);
-      ctx.font = '9px -apple-system, system-ui, sans-serif';
+      ctx.font = '500 12px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(200, 165, 110, 0.25)';
-      ctx.fillText(label, divX, H - 10);
+      ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
+      ctx.fillText(label, divX, H - 14);
     }
 
     // ── Finer tick marks between divisions ──
@@ -485,7 +485,7 @@
     var viewEndMs = now.getTime() + (scrollHours + horizonHours) * 3600000;
     var startMs = Math.floor(viewStartMs / subStepMs) * subStepMs - subStepMs;
 
-    ctx.font = '8px -apple-system, system-ui, sans-serif';
+    ctx.font = '400 11px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
 
     for (var ms = startMs; ms < viewEndMs + subStepMs; ms += subStepMs) {
@@ -504,9 +504,9 @@
 
       // Small tick
       ctx.beginPath();
-      ctx.moveTo(x, H - 3);
+      ctx.moveTo(x, H - 6);
       ctx.lineTo(x, H);
-      ctx.strokeStyle = 'rgba(200, 165, 110, 0.06)';
+      ctx.strokeStyle = 'rgba(200, 165, 110, 0.1)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -514,8 +514,8 @@
       if (subStep * PIXELS_PER_HOUR > 30) {
         var st = new Date(ms);
         var subLabel = formatTime(st, hrs);
-        ctx.fillStyle = 'rgba(200, 165, 110, 0.12)';
-        ctx.fillText(subLabel, x, H - 8);
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.22)';
+        ctx.fillText(subLabel, x, H - 12);
       }
     }
   }
