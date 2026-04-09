@@ -242,10 +242,12 @@
     return { x: x, y: y };
   }
 
-  // Base radius — capped so long tasks don't become vertically huge
-  // Vertical size represents "weight/presence", NOT duration
-  var MAX_BLOB_R = 30;
-  function blobR(mass) { return Math.min(MAX_BLOB_R, Math.sqrt(mass) * BLOB_SCALE); }
+  // Base radius — log-scaled so short tasks differ visibly,
+  // but month-long tasks don't become vertically enormous
+  function blobR(mass) {
+    if (mass <= 240) return Math.sqrt(mass) * BLOB_SCALE; // normal for ≤4h
+    return Math.sqrt(240) * BLOB_SCALE + Math.log2(mass / 240) * 8; // log taper above 4h
+  }
 
   function tagHue(tags) {
     if (!tags || !tags.length) return DEFAULT_HUE;
