@@ -711,39 +711,46 @@
     var alpha = (0.2 + sol * 0.75) * dim;
     var blur = Math.max(0, (1 - sol) * 10);
 
-    // Color from energy — blue to gold to red, NO GREEN.
-    // Blue→gold goes through desaturation (avoids hue wheel green).
-    // Gold→red is a clean hue rotation.
+    // Color from energy — RGB interpolation to avoid hue-wheel green.
+    // 5 stops defined in RGB, linearly interpolated:
+    //   0.00 = dark blue    rgb(35, 50, 90)
+    //   0.25 = light blue   rgb(90, 130, 170)
+    //   0.50 = gold         rgb(200, 165, 110)  ← matches now-bar exactly
+    //   0.75 = mid red      rgb(180, 80, 55)
+    //   1.00 = dark red     rgb(140, 40, 35)
     var e = Math.max(0, Math.min(1, energy));
-    var hue, sat, lit;
-
-    if (e < 0.25) {
-      // Dark blue → light blue
-      var t = e / 0.25;
-      hue = 220; sat = 35 + t * 20; lit = 25 + t * 30;
-    } else if (e < 0.5) {
-      // Light blue → gold: desaturate through neutral, then re-saturate at gold hue
-      // This avoids going through green on the hue wheel
-      var t = (e - 0.25) / 0.25;
-      // Hue: jump from blue to gold at the midpoint via low saturation
-      hue = t < 0.5 ? 220 : 42;
-      sat = 55 * (1 - 4 * Math.pow(t - 0.5, 2)); // dips to ~0 at t=0.5, back to 55 at edges
-      sat = Math.max(10, sat); // don't go fully gray
-      lit = 55 + t * 0; // stays ~55
-    } else if (e < 0.75) {
-      // Gold → mid red
-      var t = (e - 0.5) / 0.25;
-      hue = 42 - t * 34;  // 42 → 8
-      sat = 60 + t * 10;  // 60 → 70
-      lit = 52 - t * 7;   // 52 → 45
-    } else {
-      // Mid red → dark red
-      var t = (e - 0.75) / 0.25;
-      hue = 8 - t * 8;    // 8 → 0
-      sat = 70 + t * 10;  // 70 → 80
-      lit = 45 - t * 13;  // 45 → 32
+    var colorStops = [
+      [0,    35,  50,  90],
+      [0.25, 90,  130, 170],
+      [0.5,  200, 165, 110],
+      [0.75, 180, 80,  55],
+      [1,    140, 40,  35]
+    ];
+    var cr = 200, cg = 165, cb = 110; // default gold
+    for (var ci = 0; ci < colorStops.length - 1; ci++) {
+      if (e >= colorStops[ci][0] && e <= colorStops[ci+1][0]) {
+        var t = (e - colorStops[ci][0]) / (colorStops[ci+1][0] - colorStops[ci][0]);
+        cr = colorStops[ci][1] + (colorStops[ci+1][1] - colorStops[ci][1]) * t;
+        cg = colorStops[ci][2] + (colorStops[ci+1][2] - colorStops[ci][2]) * t;
+        cb = colorStops[ci][3] + (colorStops[ci+1][3] - colorStops[ci][3]) * t;
+        break;
+      }
     }
-    sat *= (0.4 + sol * 0.6);
+    // Solidity dims the color
+    var dimSol = 0.4 + sol * 0.6;
+    // Convert to HSL for the existing rendering pipeline
+    var rn = cr/255, gn = cg/255, bn = cb/255;
+    var cmax = Math.max(rn,gn,bn), cmin = Math.min(rn,gn,bn), delta = cmax - cmin;
+    var hue = 0, sat = 0, lit = (cmax + cmin) / 2;
+    if (delta > 0) {
+      sat = delta / (1 - Math.abs(2 * lit - 1));
+      if (cmax === rn) hue = 60 * (((gn - bn) / delta) % 6);
+      else if (cmax === gn) hue = 60 * ((bn - rn) / delta + 2);
+      else hue = 60 * ((rn - gn) / delta + 4);
+      if (hue < 0) hue += 360;
+    }
+    sat = sat * 100 * dimSol;
+    lit = lit * 100;
 
     // Past tasks: desaturate and cool
     if (a.position !== null && a.position < 0) {
@@ -1073,7 +1080,7 @@
     renderPresetButtons(a.mass);
     panelSolidity.value = Math.round(a.solidity * 100);
     var panelEnergy = document.getElementById('panel-energy');
-    panelEnergy.value = Math.round((a.energy || 0.5) * 100);
+    panelEnergy.value = Math.round((a.energy != null ? a.energy : 0.5) * 100);
     panelFixed.checked = a.fixed;
 
     // Show start/end for river tasks
@@ -1542,7 +1549,7 @@
 
         if (resizing.side === 'top') {
           // Top = energy
-          var pct = Math.round((ra.energy || 0.5) * 100);
+          var pct = Math.round((ra.energy !== undefined ? ra.energy : 0.5) * 100);
           ctx.fillText(pct + '%', ra.x, re.top - 14);
           ctx.font = '400 9px -apple-system, system-ui, sans-serif';
           ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
