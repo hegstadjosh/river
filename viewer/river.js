@@ -444,14 +444,14 @@
     var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-    // ── 3 division lines, splitting the visible window ──
-    // They divide the viewport's river portion into quarters
-    var viewStartHours = scrollHours;
-    var viewEndHours = scrollHours + horizonHours;
-    for (var q = 1; q <= 3; q++) {
-      var divHours = viewStartHours + horizonHours * q / 4;
+    // ── 4 evenly-spaced division lines across the visible viewport ──
+    var viewLeftHours = scrollHours - (W * NOW_X / PIXELS_PER_HOUR); // hours at left edge
+    var viewSpanHours = W / PIXELS_PER_HOUR; // total hours visible
+    for (var q = 1; q <= 4; q++) {
+      var divHours = viewLeftHours + viewSpanHours * q / 5;
       var divX = hoursToX(divHours);
       var divTime = new Date(now.getTime() + divHours * 3600000);
+      if (divX < 5 || divX > W - 5) continue;
 
       // Vertical line — thinner and fainter than now-line
       ctx.beginPath();
@@ -495,8 +495,8 @@
 
       // Skip if too close to a division line
       var nearDiv = false;
-      for (var dq = 1; dq <= 3; dq++) {
-        if (Math.abs(x - hoursToX(viewStartHours + horizonHours * dq / 4)) < 25) {
+      for (var dq = 1; dq <= 4; dq++) {
+        if (Math.abs(x - hoursToX(viewLeftHours + viewSpanHours * dq / 5)) < 25) {
           nearDiv = true; break;
         }
       }
@@ -945,16 +945,21 @@
     return { left: a.x - d.hw, right: a.x + d.hw, top: a.y - d.hh, bottom: a.y + d.hh, hw: d.hw };
   }
 
-  // Detect if mouse is in the resize handle zone (outer 15px of left/right edge)
-  var HANDLE_ZONE = 15;
+  // Detect if mouse is in the resize handle zone.
+  // Handles are OUTSIDE the grab area — they extend beyond the task edges.
+  var HANDLE_ZONE = 12;
   function edgeHit(mx, my) {
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
-      if (a.position === null || a.position === undefined) continue; // cloud tasks can't resize
+      if (a.position === null || a.position === undefined) continue;
+      var d = taskStretch(a);
+      // Only show resize handles on tasks wide enough to have distinct edges
+      if (d.hw < 20) continue;
       var e = taskEdges(a);
-      if (my < e.top - 5 || my > e.bottom + 5) continue;
-      if (mx >= e.right - HANDLE_ZONE && mx <= e.right + 5) return { task: a, side: 'right' };
-      if (mx >= e.left - 5 && mx <= e.left + HANDLE_ZONE) return { task: a, side: 'left' };
+      if (my < e.top - 8 || my > e.bottom + 8) continue;
+      // Handles are on the OUTER side of the edge
+      if (mx >= e.right - 4 && mx <= e.right + HANDLE_ZONE) return { task: a, side: 'right' };
+      if (mx >= e.left - HANDLE_ZONE && mx <= e.left + 4) return { task: a, side: 'left' };
     }
     return null;
   }
@@ -962,12 +967,12 @@
   var resizing = null; // { id, side, startMass, startPosition, startMX }
 
   canvas.addEventListener('mousedown', function (e) {
-    // For small tasks, grab takes priority over resize
+    // Grab always wins inside the task. Resize only on outer handles.
     var hit = hitTest(e.clientX, e.clientY);
     var edge = edgeHit(e.clientX, e.clientY);
 
-    // Only use resize if the task is wide enough to have distinct edges
-    if (edge && (!hit || taskStretch(edge.task).hw > 20)) {
+    // Resize only if we're NOT inside the grab area, OR the task is big
+    if (edge && !hit) {
       resizing = {
         id: edge.task.id,
         side: edge.side,
