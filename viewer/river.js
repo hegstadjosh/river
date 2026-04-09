@@ -539,6 +539,14 @@
   //   0.5  → forming, moderate blur, coming into focus
   //   0.1  → a wisp, barely there, bleeding edges, suggestion of a thought
 
+  // ── Drawing: Unified blob rendering ─────────────────────────────────
+  // One continuous function. Solidity drives EVERYTHING:
+  //   0.0 → circular wisp, maximum blur, barely visible
+  //   0.5 → forming, widening, coming into focus
+  //   0.8 → crisp rounded rectangle spanning actual duration
+  //   1.0 → sharp time block, full opacity, minimal corner radius
+  // "Fixed" just means pinned to a time. Not a different shape.
+
   function drawBlob(a, t) {
     var r = blobR(a.mass);
     var hue = tagHue(a.tags);
@@ -552,90 +560,130 @@
     }
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
-    // Alive: grow, intensify
     if (a.alive) r *= 1.35;
 
-    // Duration-based horizontal stretch for river tasks
-    // At low solidity: circular (stretch = 1). At high: width = actual duration.
+    // ── Dimensions: circle → duration rectangle ──
     var stretch = 1;
-    if (a.position !== null && a.position !== undefined && sol > 0.3) {
+    if (a.position !== null && a.position !== undefined) {
       var durationPx = (a.mass / 60) * PIXELS_PER_HOUR;
       var targetStretch = Math.max(1, durationPx / (r * 2));
-      stretch = 1 + (targetStretch - 1) * Math.min(1, (sol - 0.3) / 0.6);
+      // Fixed tasks always show full duration. Others lerp with solidity.
+      stretch = a.fixed ? targetStretch : 1 + (targetStretch - 1) * Math.min(1, sol / 0.8);
     }
 
-    // Fixed tasks → rock (always show full duration)
-    if (a.fixed) {
-      var rockStretch = Math.max(1, ((a.mass / 60) * PIXELS_PER_HOUR) / (r * 2));
-      drawRock(x, y, r, rockStretch, a, dim, t);
-      return;
-    }
+    var hw = r * stretch;  // half-width
+    var hh = r * 0.85;     // half-height (slightly squished)
 
-    // Solidity → visual parameters
-    var alpha = (0.2 + sol * 0.75) * dim;          // 0.2 – 0.95
-    var blur = Math.max(0, (1 - sol) * 10);         // 0 – 10px
-    var sat = 30 + sol * 45;                         // 30 – 75%
-    var lit = 40 + sol * 18;                         // 40 – 58%
+    // ── Visual parameters from solidity ──
+    var alpha = (0.2 + sol * 0.75) * dim;
+    var blur = Math.max(0, (1 - sol) * 10);
+    var sat = 30 + sol * 45;
+    var lit = 40 + sol * 18;
 
-    // For past tasks (position < 0), desaturate and cool
-    var isPast = (a.position !== null && a.position < 0);
-    if (isPast) {
+    // Past tasks: desaturate
+    if (a.position !== null && a.position < 0) {
       sat *= 0.4;
-      hue = hue * 0.5 + 210 * 0.5; // shift toward blue-gray
-      alpha *= Math.max(0.1, 1 + a.position * 0.3); // fade over ~3 hours
+      hue = hue * 0.5 + 210 * 0.5;
+      alpha *= Math.max(0.1, 1 + a.position * 0.3);
     }
+
+    // Corner radius: fully round at sol=0, tight at sol=1
+    var maxCorner = Math.min(hw, hh);
+    var cornerR = maxCorner * (1 - sol * 0.85); // round → 15% of size
 
     ctx.save();
 
-    // Alive glow — pulses with the now-line
+    // ── Alive glow ──
     if (a.alive) {
       var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
-      var gr = r * 2.0 + breath * r * 0.4;
-      var gg = ctx.createRadialGradient(x, y, r * 0.5, x, y, gr);
+      var glowR = Math.max(hw, hh) * 2.0 + breath * r * 0.4;
+      var gg = ctx.createRadialGradient(x, y, r * 0.5, x, y, glowR);
       gg.addColorStop(0, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0.18)');
       gg.addColorStop(1, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
       ctx.fillStyle = gg;
       ctx.beginPath();
-      ctx.ellipse(x, y, gr, gr * 0.85, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y, glowR, glowR * 0.85, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Apply blur for softer blobs
     if (blur > 1.5) ctx.filter = 'blur(' + blur.toFixed(1) + 'px)';
 
-    // The blob: 3 overlapping ellipses, slightly offset
-    // `stretch` widens them horizontally as solidity increases (blob → time block)
-    var scatter = Math.max(0, 1 - sol * 1.2); // organic scatter decreases with solidity
-    var layers = [
-      { dx: 0,                     dy: 0,                     rx: r * stretch,        ry: r * 0.85, rot: 0,                a: alpha },
-      { dx: r * 0.1 * scatter,     dy: -r * 0.07 * scatter,   rx: r * 0.9 * stretch,  ry: r * 0.92, rot: 0.15 * scatter,  a: alpha * 0.65 },
-      { dx: -r * 0.07 * scatter,   dy: r * 0.09 * scatter,    rx: r * 0.82 * stretch, ry: r * 0.78, rot: -0.1 * scatter,  a: alpha * 0.45 }
-    ];
+    // ── The shape: continuous morph ──
+    // Low solidity: overlapping organic ellipses (wispy, scattered)
+    // High solidity: single filled roundRect (crisp time block)
+    // The crossover is around sol 0.55
 
-    for (var li = 0; li < layers.length; li++) {
-      var L = layers[li];
-      var cx = x + L.dx, cy = y + L.dy;
-      var maxR = Math.max(L.rx, L.ry);
-      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+    var rectness = Math.max(0, Math.min(1, (sol - 0.35) / 0.45)); // 0 at ≤0.35, 1 at ≥0.8
 
-      // Inner: warm and present. Outer: fades to nothing.
-      g.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,' + L.a + ')');
-      g.addColorStop(0.5, 'hsla(' + hue + ',' + (sat * 0.8) + '%,' + (lit * 0.9) + '%,' + (L.a * 0.6) + ')');
-      g.addColorStop(0.8, 'hsla(' + hue + ',' + (sat * 0.6) + '%,' + (lit * 0.8) + '%,' + (L.a * 0.2) + ')');
-      g.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
+    if (rectness < 1) {
+      // Organic layers — fade out as rectness increases
+      var organicAlpha = alpha * (1 - rectness * 0.7);
+      var scatter = Math.max(0, 1 - sol * 1.2);
+      var layers = [
+        { dx: 0,                   dy: 0,                   rx: hw,        ry: hh,        a: organicAlpha },
+        { dx: r * 0.1 * scatter,   dy: -r * 0.07 * scatter, rx: hw * 0.9,  ry: hh * 1.05, a: organicAlpha * 0.6 },
+        { dx: -r * 0.07 * scatter, dy: r * 0.09 * scatter,  rx: hw * 0.85, ry: hh * 0.9,  a: organicAlpha * 0.4 }
+      ];
 
-      ctx.fillStyle = g;
+      for (var li = 0; li < layers.length; li++) {
+        var L = layers[li];
+        var cx = x + L.dx, cy = y + L.dy;
+        var maxR = Math.max(L.rx, L.ry);
+        var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+        g.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,' + L.a + ')');
+        g.addColorStop(0.5, 'hsla(' + hue + ',' + (sat*0.8) + '%,' + (lit*0.9) + '%,' + (L.a*0.6) + ')');
+        g.addColorStop(0.8, 'hsla(' + hue + ',' + (sat*0.6) + '%,' + (lit*0.8) + '%,' + (L.a*0.2) + ')');
+        g.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, L.rx, L.ry, 0.05 * (li - 1) * scatter, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (rectness > 0) {
+      // Solid form — fades in as rectness increases
+      var solidAlpha = alpha * rectness;
+      var fg = ctx.createLinearGradient(x - hw, y, x + hw, y);
+      fg.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + solidAlpha + ')');
+      fg.addColorStop(0.5, 'hsla(' + hue + ',' + (sat + 5) + '%,' + lit + '%,' + solidAlpha + ')');
+      fg.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + (solidAlpha * 0.9) + ')');
+      ctx.fillStyle = fg;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, L.rx, L.ry, L.rot, 0, Math.PI * 2);
+      ctx.roundRect(x - hw, y - hh, hw * 2, hh * 2, cornerR);
       ctx.fill();
+
+      // Subtle top bevel at high solidity
+      if (sol > 0.7) {
+        var bevelA = (sol - 0.7) / 0.3 * 0.1 * dim;
+        var bg = ctx.createLinearGradient(x, y - hh, x, y - hh + 6);
+        bg.addColorStop(0, 'rgba(255, 255, 255, ' + bevelA + ')');
+        bg.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = bg;
+        ctx.beginPath();
+        ctx.roundRect(x - hw, y - hh, hw * 2, 6, [cornerR, cornerR, 0, 0]);
+        ctx.fill();
+      }
+
+      // Shadow at high solidity — things with form have weight
+      if (sol > 0.6) {
+        var shadowA = (sol - 0.6) / 0.4 * 0.08 * dim;
+        var bs = ctx.createLinearGradient(x, y + hh - 4, x, y + hh);
+        bs.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        bs.addColorStop(1, 'rgba(0, 0, 0, ' + shadowA + ')');
+        ctx.fillStyle = bs;
+        ctx.beginPath();
+        ctx.roundRect(x - hw, y + hh - 4, hw * 2, 4, [0, 0, cornerR, cornerR]);
+        ctx.fill();
+      }
     }
 
     ctx.filter = 'none';
 
-    // Selection indicator — soft dashed ring
+    // Selection ring
     if (selectedId === a.id) {
       ctx.beginPath();
-      ctx.ellipse(x, y, r * stretch + 6, r * 0.85 + 6, 0, 0, Math.PI * 2);
+      ctx.roundRect(x - hw - 5, y - hh - 5, hw * 2 + 10, hh * 2 + 10, cornerR + 3);
       ctx.strokeStyle = 'rgba(200, 165, 110, 0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
@@ -645,101 +693,22 @@
 
     ctx.restore();
 
-    // Label — hide during resize (duration overlay replaces it)
+    // Label — hide during resize
     if (resizing && resizing.id === a.id) return;
 
-    var fontSize = Math.max(11, Math.min(14, r * 0.4));
+    var fontSize = Math.max(11, Math.min(14, Math.min(hw * 0.35, hh * 0.7)));
     var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
 
-    // For small blobs, render label below instead of inside
     var nameW = ctx.measureText(a.name).width;
-    if (nameW < r * stretch * 2) {
+    if (nameW < hw * 1.8) {
       ctx.fillText(a.name, x, y);
     } else {
-      ctx.fillText(a.name, x, y + r + fontSize + 2);
+      ctx.fillText(a.name, x, y + hh + fontSize + 2);
     }
-  }
-
-  // ── Drawing: Rocks ──────────────────────────────────────────────────
-  // Fixed tasks. The geology of your day. Immovable. Geometric.
-  // Rounded rectangles with a stone texture — warm grays, subtle bevel.
-  // The river flows around them; they don't flow with it.
-
-  function drawRock(x, y, r, rockStretch, a, dim, t) {
-    var w = r * 2.0 * rockStretch;
-    var h = r * 1.3;
-    var cr = 8;
-    var alpha = 0.9 * dim;
-
-    ctx.save();
-
-    // Shadow — rocks have weight
-    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 3;
-
-    // Stone body
-    var sg = ctx.createLinearGradient(x, y - h/2, x, y + h/2);
-    sg.addColorStop(0,   'rgba(155, 145, 128, ' + alpha + ')');
-    sg.addColorStop(0.4, 'rgba(135, 125, 110, ' + alpha + ')');
-    sg.addColorStop(1,   'rgba(110, 102, 88, '  + alpha + ')');
-    ctx.fillStyle = sg;
-    ctx.beginPath();
-    ctx.roundRect(x - w/2, y - h/2, w, h, cr);
-    ctx.fill();
-
-    ctx.shadowColor = 'transparent';
-
-    // Top bevel — light catching the edge
-    var bg = ctx.createLinearGradient(x, y - h/2, x, y - h/2 + 8);
-    bg.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
-    bg.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.roundRect(x - w/2, y - h/2, w, 8, [cr, cr, 0, 0]);
-    ctx.fill();
-
-    // Bottom shadow — depth
-    var bs = ctx.createLinearGradient(x, y + h/2 - 6, x, y + h/2);
-    bs.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    bs.addColorStop(1, 'rgba(0, 0, 0, 0.08)');
-    ctx.fillStyle = bs;
-    ctx.beginPath();
-    ctx.roundRect(x - w/2, y + h/2 - 6, w, 6, [0, 0, cr, cr]);
-    ctx.fill();
-
-    // Subtle border
-    ctx.strokeStyle = 'rgba(180, 170, 155, ' + (0.15 * dim) + ')';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.roundRect(x - w/2, y - h/2, w, h, cr);
-    ctx.stroke();
-
-    // Selection
-    if (selectedId === a.id) {
-      ctx.beginPath();
-      ctx.roundRect(x - w/2 - 5, y - h/2 - 5, w + 10, h + 10, cr + 3);
-      ctx.strokeStyle = 'rgba(200, 165, 110, 0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 5]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    ctx.restore();
-
-    if (resizing && resizing.id === a.id) { ctx.restore(); return; }
-    // Label — always crisp on rocks
-    var fontSize = Math.max(11, Math.min(14, r * 0.32));
-    ctx.fillStyle = 'rgba(235, 225, 210, ' + (0.9 * dim) + ')';
-    ctx.font = '600 ' + fontSize + 'px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(a.name, x, y);
   }
 
   // ── Drawing: Past Fade ──────────────────────────────────────────────
@@ -764,19 +733,22 @@
 
   // ── Hit Testing ─────────────────────────────────────────────────────
 
+  function taskStretch(a) {
+    var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
+    var s = 1;
+    if (a.position !== null && a.position !== undefined) {
+      var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
+      var target = Math.max(1, dpx / (r * 2));
+      s = a.fixed ? target : 1 + (target - 1) * Math.min(1, a.solidity / 0.8);
+    }
+    return { r: r, hw: r * s, hh: r * 0.85 };
+  }
+
   function hitTest(mx, my) {
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
-      var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
-      // Account for horizontal stretch
-      var s = 1;
-      if (a.position !== null && a.position !== undefined) {
-        var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
-        s = Math.max(1, dpx / (r * 2));
-        if (!a.fixed && a.solidity <= 0.3) s = 1;
-      }
-      var hw = r * s + 5, hh = r * 0.85 + 5;
-      if (Math.abs(mx - a.x) <= hw && Math.abs(my - a.y) <= hh) return a;
+      var d = taskStretch(a);
+      if (Math.abs(mx - a.x) <= d.hw + 5 && Math.abs(my - a.y) <= d.hh + 5) return a;
     }
     return null;
   }
@@ -939,16 +911,9 @@
     return null;
   }
 
-  // Get the screen-space edges of a task for resize handle detection
   function taskEdges(a) {
-    var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
-    var s = 1;
-    if (a.position !== null && a.position !== undefined) {
-      var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
-      s = Math.max(1, dpx / (r * 2));
-      if (!a.fixed && a.solidity <= 0.3) s = 1;
-    }
-    return { left: a.x - r * s, right: a.x + r * s, top: a.y - r * 0.85, bottom: a.y + r * 0.85, hw: r * s };
+    var d = taskStretch(a);
+    return { left: a.x - d.hw, right: a.x + d.hw, top: a.y - d.hh, bottom: a.y + d.hh, hw: d.hw };
   }
 
   // Detect if mouse is in the resize handle zone (outer 15px of left/right edge)
