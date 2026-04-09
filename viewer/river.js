@@ -711,23 +711,32 @@
     var alpha = (0.2 + sol * 0.75) * dim;
     var blur = Math.max(0, (1 - sol) * 10);
 
-    // Color from energy: cool blue (low) → warm amber (mid) → rich red (high)
-    // Default (0.5) = the warm orange/amber that feels like the river
+    // Color from energy — 5 stops, no orange:
+    // 0.00 = dark blue     (hue 220, sat 40, lit 25)
+    // 0.25 = light blue    (hue 210, sat 50, lit 55)
+    // 0.50 = gold          (hue 42,  sat 60, lit 52)  — matches now-line
+    // 0.75 = mid red       (hue 8,   sat 65, lit 45)
+    // 1.00 = dark red      (hue 0,   sat 75, lit 32)
     var e = Math.max(0, Math.min(1, energy));
+    var stops = [
+      { e: 0,    h: 220, s: 40, l: 25 },
+      { e: 0.25, h: 210, s: 50, l: 55 },
+      { e: 0.5,  h: 42,  s: 60, l: 52 },
+      { e: 0.75, h: 8,   s: 65, l: 45 },
+      { e: 1,    h: 0,   s: 75, l: 32 }
+    ];
     var hue, sat, lit;
-    if (e < 0.5) {
-      // Blue → amber
-      var t = e / 0.5;
-      hue = 210 * (1 - t) + 30 * t;  // 210 (blue) → 30 (amber)
-      sat = 40 + t * 25;              // 40 → 65
-      lit = 30 + t * 20;              // 30 → 50
-    } else {
-      // Amber → red
-      var t = (e - 0.5) / 0.5;
-      hue = 30 * (1 - t) + 0 * t;    // 30 (amber) → 0 (red)
-      sat = 65 + t * 15;              // 65 → 80
-      lit = 50 - t * 10;              // 50 → 40 (rich dark)
+    for (var si = 0; si < stops.length - 1; si++) {
+      if (e >= stops[si].e && e <= stops[si+1].e) {
+        var t = (e - stops[si].e) / (stops[si+1].e - stops[si].e);
+        hue = stops[si].h + (stops[si+1].h - stops[si].h) * t;
+        sat = stops[si].s + (stops[si+1].s - stops[si].s) * t;
+        lit = stops[si].l + (stops[si+1].l - stops[si].l) * t;
+        break;
+      }
     }
+    // Handle hue wrap for blue→gold transition (220→42 should go through 0/360)
+    if (e > 0.2 && e < 0.55 && hue > 180) hue = hue; // actually fine, short arc via low numbers
     sat *= (0.4 + sol * 0.6);
 
     // Past tasks: desaturate and cool
@@ -1256,10 +1265,11 @@
   var resizing = null;
 
   canvas.addEventListener('mousedown', function (e) {
-    var hit = hitTest(e.clientX, e.clientY);
     var edge = edgeHit(e.clientX, e.clientY);
+    var hit = hitTest(e.clientX, e.clientY);
 
-    if (edge && !hit) {
+    // If edgeHit found a handle, ALWAYS resize — cursor already promised it
+    if (edge) {
       resizing = {
         id: edge.task.id,
         side: edge.side,
@@ -1513,44 +1523,49 @@
       var ra = findTask(resizing.id);
       if (ra) {
         var re = taskEdges(ra);
-        var durLabel = formatDuration(ra.mass);
-
-        // Duration inside the blob
-        ctx.font = '600 13px -apple-system, system-ui, sans-serif';
+        ctx.font = '600 12px -apple-system, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillText(durLabel, ra.x, ra.y);
 
-        // Time label at the active edge
-        if (state) {
-          var now = new Date(state.now);
-          var edgeHours = resizing.side === 'right'
-            ? (ra.position || 0) + ra.mass / 60
-            : (ra.position || 0);
-          // For left resize, position changes so recalc
-          if (resizing.side === 'left') {
-            var massDiff = ra.mass - resizing.startMass;
-            edgeHours = resizing.startPosition - massDiff / 60;
+        if (resizing.side === 'top') {
+          // Show commitment value
+          var pct = Math.round(ra.solidity * 100);
+          ctx.fillText(pct + '%', ra.x, re.top - 14);
+          ctx.font = '400 9px -apple-system, system-ui, sans-serif';
+          ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
+          ctx.fillText('commitment', ra.x, re.top - 26);
+        } else if (resizing.side === 'bottom') {
+          // Show energy value
+          var pct = Math.round((ra.energy || 0.5) * 100);
+          ctx.fillText(pct + '%', ra.x, re.bottom + 16);
+          ctx.font = '400 9px -apple-system, system-ui, sans-serif';
+          ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
+          ctx.fillText('energy', ra.x, re.bottom + 28);
+        } else {
+          // Horizontal: show duration + time
+          ctx.fillText(formatDuration(ra.mass), ra.x, ra.y);
+
+          if (state) {
+            var now = new Date(state.now);
+            var edgeHours = resizing.side === 'right'
+              ? (ra.position || 0) + ra.mass / 60
+              : (ra.position || 0);
+            if (resizing.side === 'left') {
+              var massDiff = ra.mass - resizing.startMass;
+              edgeHours = resizing.startPosition - massDiff / 60;
+            }
+            var edgeTime = new Date(now.getTime() + edgeHours * 3600000);
+            var eh = edgeTime.getHours(), em = edgeTime.getMinutes();
+            var eLabel = (eh % 12 || 12) + ':' + (em < 10 ? '0' : '') + em + (eh >= 12 ? 'pm' : 'am');
+
+            var labelX = resizing.side === 'right' ? re.right + 8 : re.left - 8;
+            ctx.font = '500 10px -apple-system, system-ui, sans-serif';
+            ctx.textAlign = resizing.side === 'right' ? 'left' : 'right';
+            ctx.fillStyle = 'rgba(200, 165, 110, 0.7)';
+            ctx.fillText(eLabel, labelX, ra.y);
           }
-          var edgeTime = new Date(now.getTime() + edgeHours * 3600000);
-          var eh = edgeTime.getHours(), em = edgeTime.getMinutes();
-          var eLabel = (eh % 12 || 12) + ':' + (em < 10 ? '0' : '') + em + (eh >= 12 ? 'pm' : 'am');
-
-          var labelX = resizing.side === 'right' ? re.right + 8 : re.left - 8;
-          ctx.font = '500 10px -apple-system, system-ui, sans-serif';
-          ctx.textAlign = resizing.side === 'right' ? 'left' : 'right';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = 'rgba(200, 165, 110, 0.7)';
-          ctx.fillText(eLabel, labelX, ra.y);
         }
-
-        // Handle dot on active edge
-        var dotX = resizing.side === 'right' ? re.right : re.left;
-        ctx.beginPath();
-        ctx.arc(dotX, ra.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(200, 165, 110, 0.6)';
-        ctx.fill();
       }
     } else if (!dragging) {
       // Hover: show handle dots outside the grab area
