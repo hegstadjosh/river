@@ -453,69 +453,107 @@
     // Pick major/minor intervals based on frame
     var majorMs, minorMs, labelFn;
 
-    if (horizonHours <= 6) {
-      majorMs = 3600000;           // 1h
-      minorMs = 1800000;           // 30min
-      labelFn = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
-    } else if (horizonHours <= 24) {
-      majorMs = 6 * 3600000;       // 6h
-      minorMs = 3 * 3600000;       // 3h
-      labelFn = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
-    } else if (horizonHours <= 96) {
-      majorMs = 24 * 3600000;      // 1 day
-      minorMs = 12 * 3600000;      // noon
-      labelFn = function(d) { return DAYS[d.getDay()] + ' ' + (d.getMonth()+1) + '/' + d.getDate(); };
-    } else if (horizonHours <= 168) {
-      majorMs = 24 * 3600000;      // 1 day
-      minorMs = 12 * 3600000;      // noon
-      labelFn = function(d) { return DAYS[d.getDay()] + ' ' + d.getDate(); };
-    } else if (horizonHours <= 720) {
-      majorMs = 7 * 24 * 3600000;  // 1 week (Mondays)
-      minorMs = 24 * 3600000;      // 1 day
-      labelFn = function(d) { return MONTHS[d.getMonth()] + ' ' + d.getDate(); };
-    } else if (horizonHours <= 2160) {
-      // Quarter: major = 1st of month, minor = ~2 weeks
-      majorMs = 0; // special: month boundaries
-      minorMs = 14 * 24 * 3600000;
-      labelFn = function(d) { return MONTHS[d.getMonth()]; };
-    } else {
-      // Year: major = quarter starts, minor = months
-      majorMs = 0; // special: quarter boundaries
-      minorMs = 0; // special: month boundaries
-      labelFn = function(d) { return MONTHS[d.getMonth()] + ' \u2019' + (d.getFullYear()%100); };
+    // ── Helper: find local-time boundaries in visible range ──
+    function localMidnights(startMs, endMs) {
+      var times = [];
+      var d = new Date(startMs);
+      d.setHours(0,0,0,0); // snap to local midnight
+      if (d.getTime() < startMs) d.setDate(d.getDate() + 1);
+      while (d.getTime() <= endMs) {
+        times.push(d.getTime());
+        d.setDate(d.getDate() + 1);
+      }
+      return times;
     }
 
-    // ── Draw major lines ──
-    var majorTimes = [];
-    if (majorMs > 0) {
-      // Regular interval — snap to clean boundaries
-      var start = Math.floor(viewLeftMs / majorMs) * majorMs;
-      for (var ms = start; ms <= viewRightMs; ms += majorMs) {
-        majorTimes.push(ms);
+    function localHourBoundaries(startMs, endMs, intervalH) {
+      var times = [];
+      var d = new Date(startMs);
+      d.setMinutes(0,0,0);
+      d.setHours(Math.floor(d.getHours() / intervalH) * intervalH);
+      if (d.getTime() < startMs) d.setHours(d.getHours() + intervalH);
+      while (d.getTime() <= endMs) {
+        times.push(d.getTime());
+        d.setHours(d.getHours() + intervalH);
       }
-      // For month view, snap to Mondays
-      if (horizonHours > 168 && horizonHours <= 720) {
-        majorTimes = [];
-        var d = new Date(viewLeftMs);
-        d.setHours(0,0,0,0);
-        d.setDate(d.getDate() - d.getDay() + 1); // prev Monday
-        while (d.getTime() <= viewRightMs) {
-          if (d.getTime() >= viewLeftMs) majorTimes.push(d.getTime());
-          d.setDate(d.getDate() + 7);
-        }
+      return times;
+    }
+
+    function localMondays(startMs, endMs) {
+      var times = [];
+      var d = new Date(startMs);
+      d.setHours(0,0,0,0);
+      var dayOfWeek = d.getDay();
+      var daysToMon = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+      d.setDate(d.getDate() + daysToMon);
+      while (d.getTime() <= endMs) {
+        if (d.getTime() >= startMs) times.push(d.getTime());
+        d.setDate(d.getDate() + 7);
       }
-    } else {
-      // Special: month or quarter boundaries
-      var d = new Date(viewLeftMs);
+      return times;
+    }
+
+    function localMonthStarts(startMs, endMs, step) {
+      var times = [];
+      var d = new Date(startMs);
       d.setDate(1); d.setHours(0,0,0,0);
-      var step = horizonHours > 2160 ? 3 : 1; // quarter: every 3 months, else every month
-      while (d.getTime() <= viewRightMs) {
-        if (d.getTime() >= viewLeftMs) majorTimes.push(d.getTime());
+      if (step > 1) d.setMonth(Math.floor(d.getMonth() / step) * step);
+      while (d.getTime() <= endMs) {
+        if (d.getTime() >= startMs) times.push(d.getTime());
         d.setMonth(d.getMonth() + step);
       }
+      return times;
     }
 
-    // Draw majors
+    // ── Build major + minor lists based on frame ──
+    var majorTimes, minorTimes, majorLabel, minorLabel;
+
+    if (horizonHours <= 6) {
+      majorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 1);
+      minorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 0.5);
+      majorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
+      minorLabel = majorLabel;
+    } else if (horizonHours <= 24) {
+      majorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 6);
+      minorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 3);
+      majorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
+      minorLabel = majorLabel;
+    } else if (horizonHours <= 96) {
+      majorTimes = localMidnights(viewLeftMs, viewRightMs);
+      minorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 12);
+      majorLabel = function(d) { return DAYS[d.getDay()] + ' ' + (d.getMonth()+1) + '/' + d.getDate(); };
+      minorLabel = function(d) { return d.getHours() === 12 ? 'noon' : ''; };
+    } else if (horizonHours <= 168) {
+      majorTimes = localMidnights(viewLeftMs, viewRightMs);
+      minorTimes = []; // no half-lines in week view
+      majorLabel = function(d) { return DAYS[d.getDay()] + ' ' + d.getDate(); };
+      minorLabel = null;
+    } else if (horizonHours <= 720) {
+      majorTimes = localMondays(viewLeftMs, viewRightMs);
+      minorTimes = localMidnights(viewLeftMs, viewRightMs);
+      majorLabel = function(d) { return MONTHS[d.getMonth()] + ' ' + d.getDate(); };
+      minorLabel = function(d) { return d.getDate(); };
+    } else if (horizonHours <= 2160) {
+      majorTimes = localMonthStarts(viewLeftMs, viewRightMs, 1);
+      minorTimes = localMondays(viewLeftMs, viewRightMs);
+      majorLabel = function(d) { return MONTHS[d.getMonth()]; };
+      minorLabel = function(d) { return d.getDate(); };
+    } else {
+      majorTimes = localMonthStarts(viewLeftMs, viewRightMs, 3);
+      minorTimes = localMonthStarts(viewLeftMs, viewRightMs, 1);
+      majorLabel = function(d) { return MONTHS[d.getMonth()] + ' \u2019' + (d.getFullYear()%100); };
+      minorLabel = function(d) { return MONTHS[d.getMonth()].slice(0,3); };
+    }
+
+    // Filter minors that overlap with majors
+    var majorSet = {};
+    for (var mi = 0; mi < majorTimes.length; mi++) majorSet[majorTimes[mi]] = true;
+    minorTimes = minorTimes.filter(function(t) {
+      for (var k in majorSet) { if (Math.abs(t - Number(k)) < 1800000) return false; }
+      return true;
+    });
+
+    // ── Draw major lines — full river height ──
     ctx.font = '500 12px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     for (var i = 0; i < majorTimes.length; i++) {
@@ -523,7 +561,6 @@
       var x = hoursToX(hrs);
       if (x < 5 || x > W - 5) continue;
 
-      // Full-height line
       ctx.beginPath();
       ctx.moveTo(x, sY + 10);
       ctx.lineTo(x, H);
@@ -531,54 +568,31 @@
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Label
       ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
-      ctx.fillText(labelFn(new Date(majorTimes[i])), x, H - 14);
+      ctx.fillText(majorLabel(new Date(majorTimes[i])), x, H - 14);
     }
 
-    // ── Draw minor lines (half-height, lighter) ──
-    var minorTimes = [];
-    if (minorMs > 0) {
-      var start2 = Math.floor(viewLeftMs / minorMs) * minorMs;
-      for (var ms2 = start2; ms2 <= viewRightMs; ms2 += minorMs) {
-        // Skip if it's also a major line
-        var isMajor = false;
-        for (var mi = 0; mi < majorTimes.length; mi++) {
-          if (Math.abs(ms2 - majorTimes[mi]) < minorMs * 0.1) { isMajor = true; break; }
+    // ── Draw minor lines — 20% river height from bottom, lighter ──
+    if (minorTimes.length > 0 && minorLabel) {
+      var minorH = riverH * 0.2;
+      ctx.font = '400 10px -apple-system, system-ui, sans-serif';
+      for (var j = 0; j < minorTimes.length; j++) {
+        var hrs2 = (minorTimes[j] - now.getTime()) / 3600000;
+        var x2 = hoursToX(hrs2);
+        if (x2 < 5 || x2 > W - 5) continue;
+
+        ctx.beginPath();
+        ctx.moveTo(x2, H - minorH);
+        ctx.lineTo(x2, H);
+        ctx.strokeStyle = 'rgba(200, 165, 110, 0.06)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        var ml = minorLabel(new Date(minorTimes[j]));
+        if (ml) {
+          ctx.fillStyle = 'rgba(200, 165, 110, 0.2)';
+          ctx.fillText(ml, x2, H - 8);
         }
-        if (!isMajor) minorTimes.push(ms2);
-      }
-    } else if (horizonHours > 2160) {
-      // Year view: minor = every month (majors are quarters)
-      var dm = new Date(viewLeftMs);
-      dm.setDate(1); dm.setHours(0,0,0,0);
-      while (dm.getTime() <= viewRightMs) {
-        var isQ = dm.getMonth() % 3 === 0;
-        if (!isQ && dm.getTime() >= viewLeftMs) minorTimes.push(dm.getTime());
-        dm.setMonth(dm.getMonth() + 1);
-      }
-    }
-
-    var minorH = riverH * 0.2; // 20% of river height
-    ctx.font = '400 10px -apple-system, system-ui, sans-serif';
-    for (var j = 0; j < minorTimes.length; j++) {
-      var hrs2 = (minorTimes[j] - now.getTime()) / 3600000;
-      var x2 = hoursToX(hrs2);
-      if (x2 < 5 || x2 > W - 5) continue;
-
-      // Short line from bottom
-      ctx.beginPath();
-      ctx.moveTo(x2, H - minorH);
-      ctx.lineTo(x2, H);
-      ctx.strokeStyle = 'rgba(200, 165, 110, 0.06)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Small label
-      if (minorMs * PIXELS_PER_HOUR / 3600000 > 25) {
-        var minorLabel = labelFn(new Date(minorTimes[j]));
-        ctx.fillStyle = 'rgba(200, 165, 110, 0.2)';
-        ctx.fillText(minorLabel, x2, H - 8);
       }
     }
   }
