@@ -36,9 +36,22 @@ async function main() {
   const viewerDir = join(__dirname, '..', 'viewer');
   const httpServer = createHttpServer(state, viewerDir);
 
-  httpServer.listen(HTTP_PORT, () => {
-    // Use stderr — stdout is reserved for MCP protocol
-    console.error(`River viewer: http://localhost:${HTTP_PORT}`);
+  // Try the default port, fall back to next available if busy
+  await new Promise<void>((resolve) => {
+    httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        const nextPort = (httpServer.address() as any)?.port || HTTP_PORT + 1;
+        console.error(`Port ${HTTP_PORT} in use, trying ${HTTP_PORT + 1}...`);
+        httpServer.listen(HTTP_PORT + 1, () => {
+          console.error(`River viewer: http://localhost:${HTTP_PORT + 1}`);
+          resolve();
+        });
+      }
+    });
+    httpServer.listen(HTTP_PORT, () => {
+      console.error(`River viewer: http://localhost:${HTTP_PORT}`);
+      resolve();
+    });
   });
 
   // Connect MCP server via stdio
