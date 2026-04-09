@@ -711,32 +711,38 @@
     var alpha = (0.2 + sol * 0.75) * dim;
     var blur = Math.max(0, (1 - sol) * 10);
 
-    // Color from energy — 5 stops, no orange:
-    // 0.00 = dark blue     (hue 220, sat 40, lit 25)
-    // 0.25 = light blue    (hue 210, sat 50, lit 55)
-    // 0.50 = gold          (hue 42,  sat 60, lit 52)  — matches now-line
-    // 0.75 = mid red       (hue 8,   sat 65, lit 45)
-    // 1.00 = dark red      (hue 0,   sat 75, lit 32)
+    // Color from energy — blue to gold to red, NO GREEN.
+    // Blue→gold goes through desaturation (avoids hue wheel green).
+    // Gold→red is a clean hue rotation.
     var e = Math.max(0, Math.min(1, energy));
-    var stops = [
-      { e: 0,    h: 220, s: 40, l: 25 },
-      { e: 0.25, h: 210, s: 50, l: 55 },
-      { e: 0.5,  h: 42,  s: 60, l: 52 },
-      { e: 0.75, h: 8,   s: 65, l: 45 },
-      { e: 1,    h: 0,   s: 75, l: 32 }
-    ];
     var hue, sat, lit;
-    for (var si = 0; si < stops.length - 1; si++) {
-      if (e >= stops[si].e && e <= stops[si+1].e) {
-        var t = (e - stops[si].e) / (stops[si+1].e - stops[si].e);
-        hue = stops[si].h + (stops[si+1].h - stops[si].h) * t;
-        sat = stops[si].s + (stops[si+1].s - stops[si].s) * t;
-        lit = stops[si].l + (stops[si+1].l - stops[si].l) * t;
-        break;
-      }
+
+    if (e < 0.25) {
+      // Dark blue → light blue
+      var t = e / 0.25;
+      hue = 220; sat = 35 + t * 20; lit = 25 + t * 30;
+    } else if (e < 0.5) {
+      // Light blue → gold: desaturate through neutral, then re-saturate at gold hue
+      // This avoids going through green on the hue wheel
+      var t = (e - 0.25) / 0.25;
+      // Hue: jump from blue to gold at the midpoint via low saturation
+      hue = t < 0.5 ? 220 : 42;
+      sat = 55 * (1 - 4 * Math.pow(t - 0.5, 2)); // dips to ~0 at t=0.5, back to 55 at edges
+      sat = Math.max(10, sat); // don't go fully gray
+      lit = 55 + t * 0; // stays ~55
+    } else if (e < 0.75) {
+      // Gold → mid red
+      var t = (e - 0.5) / 0.25;
+      hue = 42 - t * 34;  // 42 → 8
+      sat = 60 + t * 10;  // 60 → 70
+      lit = 52 - t * 7;   // 52 → 45
+    } else {
+      // Mid red → dark red
+      var t = (e - 0.75) / 0.25;
+      hue = 8 - t * 8;    // 8 → 0
+      sat = 70 + t * 10;  // 70 → 80
+      lit = 45 - t * 13;  // 45 → 32
     }
-    // Handle hue wrap for blue→gold transition (220→42 should go through 0/360)
-    if (e > 0.2 && e < 0.55 && hue > 180) hue = hue; // actually fine, short arc via low numbers
     sat *= (0.4 + sol * 0.6);
 
     // Past tasks: desaturate and cool
@@ -1307,16 +1313,20 @@
       if (!a) return;
 
       if (resizing.side === 'top') {
-        // Drag up = more commitment, drag down = less
-        var deltaY = resizing.startMY - e.clientY; // positive = up = more
-        var newSol = Math.max(0, Math.min(1, resizing.startSolidity + deltaY / 150));
-        a.solidity = newSol;
+        // Top = energy. Drag up = more energy.
+        var deltaY = resizing.startMY - e.clientY;
+        var newEnergy = Math.max(0, Math.min(1, resizing.startEnergy + deltaY / 80));
+        a.energy = newEnergy;
+        // Update panel if open
+        var pe = document.getElementById('panel-energy');
+        if (pe && selectedId === a.id) pe.value = Math.round(newEnergy * 100);
         canvas.style.cursor = 'ns-resize';
       } else if (resizing.side === 'bottom') {
-        // Drag down = more energy, drag up = less
-        var deltaY = e.clientY - resizing.startMY; // positive = down = more
-        var newEnergy = Math.max(0, Math.min(1, resizing.startEnergy + deltaY / 150));
-        a.energy = newEnergy;
+        // Bottom = commitment. Drag down = more committed ("weighing it down").
+        var deltaY = e.clientY - resizing.startMY;
+        var newSol = Math.max(0, Math.min(1, resizing.startSolidity + deltaY / 80));
+        a.solidity = newSol;
+        if (selectedId === a.id) panelSolidity.value = Math.round(newSol * 100);
         canvas.style.cursor = 'ns-resize';
       } else {
         // Horizontal: snap the dragged edge to grid
@@ -1335,6 +1345,8 @@
           a.x = rightEdgeX - newWidthPx / 2;
           a.tx = a.x;
         }
+        // Sync panel
+        if (selectedId === a.id) panelDurInput.value = formatDuration(a.mass);
         canvas.style.cursor = 'ew-resize';
       }
       return;
@@ -1373,9 +1385,9 @@
       var a = findTask(resizing.id);
       if (a) {
         if (resizing.side === 'top') {
-          post('put', { id: resizing.id, solidity: a.solidity });
-        } else if (resizing.side === 'bottom') {
           post('put', { id: resizing.id, energy: a.energy });
+        } else if (resizing.side === 'bottom') {
+          post('put', { id: resizing.id, solidity: a.solidity });
         } else {
           var newMass = a.mass;
           var massDiffHours = (newMass - resizing.startMass) / 60;
@@ -1529,19 +1541,19 @@
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
 
         if (resizing.side === 'top') {
-          // Show commitment value
-          var pct = Math.round(ra.solidity * 100);
+          // Top = energy
+          var pct = Math.round((ra.energy || 0.5) * 100);
           ctx.fillText(pct + '%', ra.x, re.top - 14);
           ctx.font = '400 9px -apple-system, system-ui, sans-serif';
           ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
-          ctx.fillText('commitment', ra.x, re.top - 26);
+          ctx.fillText('energy', ra.x, re.top - 26);
         } else if (resizing.side === 'bottom') {
-          // Show energy value
-          var pct = Math.round((ra.energy || 0.5) * 100);
+          // Bottom = commitment
+          var pct = Math.round(ra.solidity * 100);
           ctx.fillText(pct + '%', ra.x, re.bottom + 16);
           ctx.font = '400 9px -apple-system, system-ui, sans-serif';
           ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
-          ctx.fillText('energy', ra.x, re.bottom + 28);
+          ctx.fillText('commitment', ra.x, re.bottom + 28);
         } else {
           // Horizontal: show duration + time
           ctx.fillText(formatDuration(ra.mass), ra.x, ra.y);
