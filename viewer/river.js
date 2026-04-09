@@ -26,9 +26,35 @@
   var DAMPING = 0.78;           // spring damping (higher = more viscous)
   var DRAG_THRESHOLD = 5;
 
-  // Tag → hue (warm palette, earth tones)
-  var TAG_HUES = { work: 28, school: 28, personal: 205, health: 145, creative: 275 };
-  var DEFAULT_HUE = 32;
+  // Energy → color. 0 = low energy (cool blue), 1 = high energy (rich red)
+  // Gradient: dark blue → light blue → warm amber → rich dark red
+  function energyColor(energy, sol, alpha) {
+    // energy 0-1, sol affects saturation
+    var e = Math.max(0, Math.min(1, energy || 0));
+    var hue, sat, lit;
+    if (e < 0.33) {
+      // Dark blue → light blue
+      var t = e / 0.33;
+      hue = 220 - t * 10;  // 220 → 210
+      sat = 30 + t * 20;    // 30 → 50
+      lit = 25 + t * 25;    // 25 → 50
+    } else if (e < 0.66) {
+      // Light blue → warm amber
+      var t = (e - 0.33) / 0.33;
+      hue = 210 - t * 180;  // 210 → 30
+      sat = 50 + t * 15;    // 50 → 65
+      lit = 50 + t * 5;     // 50 → 55
+    } else {
+      // Warm amber → rich dark red
+      var t = (e - 0.66) / 0.34;
+      hue = 30 - t * 25;    // 30 → 5
+      sat = 65 + t * 15;    // 65 → 80
+      lit = 55 - t * 15;    // 55 → 40
+    }
+    // Solidity affects saturation — wisps are desaturated
+    sat *= (0.4 + sol * 0.6);
+    return 'hsla(' + hue + ',' + sat + '%,' + lit + '%,' + alpha + ')';
+  }
 
   // ── Palette ─────────────────────────────────────────────────────────
   // The world has two zones: sky (cloud) and water (river).
@@ -289,14 +315,14 @@
       if (existing[t.id] !== undefined) {
         var a = animTasks[existing[t.id]];
         a.name = t.name; a.mass = t.mass; a.solidity = t.solidity;
-        a.fixed = t.fixed; a.alive = t.alive; a.tags = t.tags;
+        a.fixed = t.fixed; a.alive = t.alive; a.tags = t.tags; a.energy = t.energy;
         a.position = t.position; a.anchor = t.anchor;
         a.tx = tgt.x;
         a.ty = (a.customY !== undefined) ? a.customY : tgt.y;
       } else {
         animTasks.push({
           id: t.id, name: t.name, mass: t.mass, solidity: t.solidity,
-          fixed: t.fixed, alive: t.alive, tags: t.tags,
+          fixed: t.fixed, alive: t.alive, tags: t.tags, energy: t.energy,
           position: t.position, anchor: t.anchor,
           x: tgt.x, y: tgt.y, tx: tgt.x, ty: tgt.y, vx: 0, vy: 0
         });
@@ -606,17 +632,7 @@
     // Snap targets = visible lines + sub-grid for finer snapping
     snapTimesMs = majorTimes.concat(minorTimes);
 
-    // Sub-grid: invisible snap points at intuitive intervals
-    var subMs = 0;
-    if (horizonHours <= 6) subMs = 15 * 60000;         // 15min
-    else if (horizonHours <= 24) subMs = 3600000;       // 1hr
-    else if (horizonHours <= 96) subMs = 6 * 3600000;   // 6hr
-    else if (horizonHours <= 168) subMs = 12 * 3600000;  // 12hr
-
-    if (subMs > 0) {
-      var ss = Math.floor(viewLeftMs / subMs) * subMs;
-      for (; ss <= viewRightMs; ss += subMs) snapTimesMs.push(ss);
-    }
+    // Snap only to visible lines. No invisible sub-grid.
   }
 
   // Sticky snap — binary, not gradient.
@@ -666,7 +682,7 @@
   // "Fixed" just means pinned to a time. Not a different shape.
 
   function drawBlob(a, t) {
-    var hue = tagHue(a.tags);
+    var energy = (a.energy !== undefined && a.energy !== null) ? a.energy : 0.5;
     var sol = a.solidity;
     var x = a.x, y = a.y;
 
@@ -691,13 +707,30 @@
       hw = 18; hh = 18;
     }
 
-    // ── Visual parameters from solidity ──
+    // ── Visual parameters ──
     var alpha = (0.2 + sol * 0.75) * dim;
     var blur = Math.max(0, (1 - sol) * 10);
-    var sat = 30 + sol * 45;
-    var lit = 40 + sol * 18;
 
-    // Past tasks: desaturate
+    // Color from energy: cool blue (low) → warm amber (mid) → rich red (high)
+    // Default (0.5) = the warm orange/amber that feels like the river
+    var e = Math.max(0, Math.min(1, energy));
+    var hue, sat, lit;
+    if (e < 0.5) {
+      // Blue → amber
+      var t = e / 0.5;
+      hue = 210 * (1 - t) + 30 * t;  // 210 (blue) → 30 (amber)
+      sat = 40 + t * 25;              // 40 → 65
+      lit = 30 + t * 20;              // 30 → 50
+    } else {
+      // Amber → red
+      var t = (e - 0.5) / 0.5;
+      hue = 30 * (1 - t) + 0 * t;    // 30 (amber) → 0 (red)
+      sat = 65 + t * 15;              // 65 → 80
+      lit = 50 - t * 10;              // 50 → 40 (rich dark)
+    }
+    sat *= (0.4 + sol * 0.6);
+
+    // Past tasks: desaturate and cool
     if (a.position !== null && a.position < 0) {
       sat *= 0.4;
       hue = hue * 0.5 + 210 * 0.5;
@@ -1024,6 +1057,8 @@
     panelDurInput.value = formatDuration(a.mass);
     renderPresetButtons(a.mass);
     panelSolidity.value = Math.round(a.solidity * 100);
+    var panelEnergy = document.getElementById('panel-energy');
+    panelEnergy.value = Math.round((a.energy || 0.5) * 100);
     panelFixed.checked = a.fixed;
 
     // Show start/end for river tasks
@@ -1160,6 +1195,10 @@
     renderPresetButtons(newMass);
   });
 
+  document.getElementById('panel-energy').addEventListener('input', function () {
+    if (!selectedId) return;
+    post('put', { id: selectedId, energy: Number(this.value) / 100 });
+  });
   panelFixed.addEventListener('change', function () {
     if (!selectedId) return;
     post('put', { id: selectedId, fixed: panelFixed.checked });
@@ -1185,43 +1224,54 @@
 
   // Detect if mouse is in the resize handle zone.
   // Handles are OUTSIDE the grab area — they extend beyond the task edges.
+  // 4 handles: left/right = duration, top = commitment, bottom = energy
   var HANDLE_ZONE = 14;
   function edgeHit(mx, my) {
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
-      if (a.position === null || a.position === undefined) continue;
       var d = taskStretch(a);
-      // Compute the outer edge of the grab area (whichever is bigger: task or MIN_HIT)
       var grabHW = Math.max(MIN_HIT, d.hw);
       var grabHH = Math.max(MIN_HIT, d.hh);
-      if (my < a.y - grabHH - 5 || my > a.y + grabHH + 5) continue;
-      // Handles sit OUTSIDE the grab area
+
+      // Check vertical handles (top/bottom) — always available, even cloud tasks
+      var tEdge = a.y - grabHH;
+      var bEdge = a.y + grabHH;
+      if (Math.abs(mx - a.x) <= grabHW) {
+        if (my >= tEdge - HANDLE_ZONE && my <= tEdge + 2) return { task: a, side: 'top' };
+        if (my >= bEdge - 2 && my <= bEdge + HANDLE_ZONE) return { task: a, side: 'bottom' };
+      }
+
+      // Check horizontal handles (left/right) — only river tasks
+      if (a.position === null || a.position === undefined) continue;
       var rEdge = a.x + grabHW;
       var lEdge = a.x - grabHW;
-      if (mx >= rEdge - 2 && mx <= rEdge + HANDLE_ZONE) return { task: a, side: 'right' };
-      if (mx >= lEdge - HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
+      if (Math.abs(my - a.y) <= grabHH + 5) {
+        if (mx >= rEdge - 2 && mx <= rEdge + HANDLE_ZONE) return { task: a, side: 'right' };
+        if (mx >= lEdge - HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
+      }
     }
     return null;
   }
 
-  var resizing = null; // { id, side, startMass, startPosition, startMX }
+  var resizing = null;
 
   canvas.addEventListener('mousedown', function (e) {
-    // Grab always wins inside the task. Resize only on outer handles.
     var hit = hitTest(e.clientX, e.clientY);
     var edge = edgeHit(e.clientX, e.clientY);
 
-    // Resize only if we're NOT inside the grab area, OR the task is big
     if (edge && !hit) {
       resizing = {
         id: edge.task.id,
         side: edge.side,
         startMass: edge.task.mass,
         startPosition: edge.task.position,
+        startSolidity: edge.task.solidity,
+        startEnergy: edge.task.energy || 0.5,
         startMX: e.clientX,
+        startMY: e.clientY,
         startX: edge.task.x
       };
-      canvas.style.cursor = 'ew-resize';
+      canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       return;
     }
 
@@ -1241,33 +1291,42 @@
   canvas.addEventListener('mousemove', function (e) {
     mouseX = e.clientX; mouseY = e.clientY;
 
-    // Resizing
+    // Resizing (horizontal or vertical)
     if (resizing) {
-      var deltaPx = e.clientX - resizing.startMX;
-      var deltaMins = (deltaPx / PIXELS_PER_HOUR) * 60;
       var a = findTask(resizing.id);
       if (!a) return;
 
-      // Snap the dragged edge to grid
-      var rawEdgeX = e.clientX;
-      var snappedEdge = snapX(rawEdgeX);
-
-      if (resizing.side === 'right') {
-        // Left edge is pinned. Right edge = snapped position.
-        var leftEdgeX = resizing.startX - (resizing.startMass / 60) * PIXELS_PER_HOUR / 2;
-        var newWidthPx = Math.max(8, snappedEdge - leftEdgeX);
-        a.mass = Math.max(5, Math.round((newWidthPx / PIXELS_PER_HOUR) * 60));
-        a.x = leftEdgeX + newWidthPx / 2;
-        a.tx = a.x;
+      if (resizing.side === 'top') {
+        // Drag up = more commitment, drag down = less
+        var deltaY = resizing.startMY - e.clientY; // positive = up = more
+        var newSol = Math.max(0, Math.min(1, resizing.startSolidity + deltaY / 150));
+        a.solidity = newSol;
+        canvas.style.cursor = 'ns-resize';
+      } else if (resizing.side === 'bottom') {
+        // Drag down = more energy, drag up = less
+        var deltaY = e.clientY - resizing.startMY; // positive = down = more
+        var newEnergy = Math.max(0, Math.min(1, resizing.startEnergy + deltaY / 150));
+        a.energy = newEnergy;
+        canvas.style.cursor = 'ns-resize';
       } else {
-        // Right edge is pinned. Left edge = snapped position.
-        var rightEdgeX = resizing.startX + (resizing.startMass / 60) * PIXELS_PER_HOUR / 2;
-        var newWidthPx = Math.max(8, rightEdgeX - snappedEdge);
-        a.mass = Math.max(5, Math.round((newWidthPx / PIXELS_PER_HOUR) * 60));
-        a.x = rightEdgeX - newWidthPx / 2;
-        a.tx = a.x;
+        // Horizontal: snap the dragged edge to grid
+        var snappedEdge = snapX(e.clientX);
+
+        if (resizing.side === 'right') {
+          var leftEdgeX = resizing.startX - (resizing.startMass / 60) * PIXELS_PER_HOUR / 2;
+          var newWidthPx = Math.max(8, snappedEdge - leftEdgeX);
+          a.mass = Math.max(5, Math.round((newWidthPx / PIXELS_PER_HOUR) * 60));
+          a.x = leftEdgeX + newWidthPx / 2;
+          a.tx = a.x;
+        } else {
+          var rightEdgeX = resizing.startX + (resizing.startMass / 60) * PIXELS_PER_HOUR / 2;
+          var newWidthPx = Math.max(8, rightEdgeX - snappedEdge);
+          a.mass = Math.max(5, Math.round((newWidthPx / PIXELS_PER_HOUR) * 60));
+          a.x = rightEdgeX - newWidthPx / 2;
+          a.tx = a.x;
+        }
+        canvas.style.cursor = 'ew-resize';
       }
-      canvas.style.cursor = 'ew-resize';
       return;
     }
 
@@ -1275,7 +1334,7 @@
       // Cursor: resize handles take priority
       var edge = edgeHit(e.clientX, e.clientY);
       if (edge) {
-        canvas.style.cursor = 'ew-resize';
+        canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       } else {
         canvas.style.cursor = hitTest(e.clientX, e.clientY) ? 'grab' : 'default';
       }
@@ -1303,20 +1362,21 @@
     if (resizing) {
       var a = findTask(resizing.id);
       if (a) {
-        var newMass = a.mass;
-        var massDiffHours = (newMass - resizing.startMass) / 60;
-        var updates = { id: resizing.id, mass: newMass };
-
-        // Position = center point. To keep an edge fixed when mass changes,
-        // we must shift the center by half the mass delta.
-        if (resizing.side === 'right') {
-          // Keep LEFT edge fixed: center shifts right by half the growth
-          updates.position = resizing.startPosition + massDiffHours / 2;
+        if (resizing.side === 'top') {
+          post('put', { id: resizing.id, solidity: a.solidity });
+        } else if (resizing.side === 'bottom') {
+          post('put', { id: resizing.id, energy: a.energy });
         } else {
-          // Keep RIGHT edge fixed: center shifts left by half the growth
-          updates.position = resizing.startPosition - massDiffHours / 2;
+          var newMass = a.mass;
+          var massDiffHours = (newMass - resizing.startMass) / 60;
+          var updates = { id: resizing.id, mass: newMass };
+          if (resizing.side === 'right') {
+            updates.position = resizing.startPosition + massDiffHours / 2;
+          } else {
+            updates.position = resizing.startPosition - massDiffHours / 2;
+          }
+          post('put', updates);
         }
-        post('put', updates);
       }
       resizing = null;
       canvas.style.cursor = 'default';
@@ -1496,20 +1556,38 @@
       // Hover: show handle dots outside the grab area
       var hoverEdge = edgeHit(mouseX, mouseY);
       if (hoverEdge) {
-        var hd = taskStretch(hoverEdge.task);
+        var ht = hoverEdge.task;
+        var hd = taskStretch(ht);
         var grabHW = Math.max(MIN_HIT, hd.hw);
-        var dotX = hoverEdge.side === 'right' ? hoverEdge.task.x + grabHW : hoverEdge.task.x - grabHW;
+        var grabHH = Math.max(MIN_HIT, hd.hh);
+        var dotX, dotY;
+
+        if (hoverEdge.side === 'right' || hoverEdge.side === 'left') {
+          dotX = hoverEdge.side === 'right' ? ht.x + grabHW : ht.x - grabHW;
+          dotY = ht.y;
+          // Vertical grip line
+          ctx.beginPath();
+          ctx.moveTo(dotX, dotY - 8);
+          ctx.lineTo(dotX, dotY + 8);
+          ctx.strokeStyle = 'rgba(200, 165, 110, 0.3)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        } else {
+          dotX = ht.x;
+          dotY = hoverEdge.side === 'top' ? ht.y - grabHH : ht.y + grabHH;
+          // Horizontal grip line
+          ctx.beginPath();
+          ctx.moveTo(dotX - 8, dotY);
+          ctx.lineTo(dotX + 8, dotY);
+          ctx.strokeStyle = 'rgba(200, 165, 110, 0.3)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+
         ctx.beginPath();
-        ctx.arc(dotX, hoverEdge.task.y, 3.5, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
         ctx.fill();
-        // Small vertical line as grip indicator
-        ctx.beginPath();
-        ctx.moveTo(dotX, hoverEdge.task.y - 8);
-        ctx.lineTo(dotX, hoverEdge.task.y + 8);
-        ctx.strokeStyle = 'rgba(200, 165, 110, 0.3)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
       }
     }
 

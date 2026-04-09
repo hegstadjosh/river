@@ -30,6 +30,7 @@ export function registerPut(server: McpServer, state: RiverState): void {
           .max(1)
           .optional()
           .describe('Commitment gradient 0-1 (default 0.1)'),
+        energy: z.number().min(0).max(1).optional().describe('Cognitive energy required 0-1 (0=autopilot, 1=deep focus). Affects color: blue(low) → amber(mid) → red(high)'),
         fixed: z.boolean().optional().describe('If true, task never recirculates'),
         alive: z.boolean().optional().describe('Mark as the currently active task'),
         tags: z.array(z.string()).optional().describe('Freeform tags'),

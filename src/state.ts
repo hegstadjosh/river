@@ -27,6 +27,7 @@ interface TaskRow {
   mass: number;
   anchor: string | null;
   solidity: number;
+  energy: number;
   fixed: number;
   alive: number;
   tags: string;
@@ -40,6 +41,7 @@ function rowToTask(row: TaskRow): Task {
     mass: row.mass,
     anchor: row.anchor,
     solidity: row.solidity,
+    energy: row.energy,
     fixed: row.fixed === 1,
     alive: row.alive === 1,
     tags: JSON.parse(row.tags),
@@ -81,6 +83,7 @@ export class RiverState {
         mass REAL NOT NULL DEFAULT ${DEFAULT_MASS},
         anchor TEXT,
         solidity REAL NOT NULL DEFAULT ${DEFAULT_SOLIDITY},
+        energy REAL NOT NULL DEFAULT 0.5,
         fixed INTEGER NOT NULL DEFAULT 0,
         alive INTEGER NOT NULL DEFAULT 0,
         tags TEXT NOT NULL DEFAULT '[]',
@@ -187,6 +190,7 @@ export class RiverState {
       if (input.mass !== undefined) { updates.push('mass = @mass_val'); values.mass_val = input.mass; }
       if (anchor !== undefined) { updates.push('anchor = @anchor_val'); values.anchor_val = anchor; }
       if (input.solidity !== undefined) { updates.push('solidity = @sol_val'); values.sol_val = input.solidity; }
+      if (input.energy !== undefined) { updates.push('energy = @energy_val'); values.energy_val = input.energy; }
       if (input.fixed !== undefined) { updates.push('fixed = @fixed_val'); values.fixed_val = input.fixed ? 1 : 0; }
       if (input.alive !== undefined) { updates.push('alive = @alive_val'); values.alive_val = input.alive ? 1 : 0; }
       if (input.tags !== undefined) { updates.push('tags = @tags_val'); values.tags_val = JSON.stringify(input.tags); }
@@ -219,6 +223,7 @@ export class RiverState {
         mass: input.mass ?? DEFAULT_MASS,
         anchor: anchor ?? null,
         solidity: input.solidity ?? DEFAULT_SOLIDITY,
+        energy: input.energy ?? 0.5,
         fixed: (input.fixed ?? false) ? 1 : 0,
         alive: (input.alive ?? false) ? 1 : 0,
         tags: JSON.stringify(input.tags ?? []),
@@ -227,8 +232,8 @@ export class RiverState {
 
       this.db
         .prepare(
-          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, fixed, alive, tags, created)
-           VALUES (@id, @timeline_id, @name, @mass, @anchor, @solidity, @fixed, @alive, @tags, @created)`
+          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+           VALUES (@id, @timeline_id, @name, @mass, @anchor, @solidity, @energy, @fixed, @alive, @tags, @created)`
         )
         .run(task);
 
@@ -426,8 +431,8 @@ export class RiverState {
         .all(currentId) as TaskRow[];
 
       const insert = this.db.prepare(
-        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, fixed, alive, tags, created)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       for (const task of tasks) {
@@ -438,6 +443,7 @@ export class RiverState {
           task.mass,
           task.anchor,
           task.solidity,
+          task.energy,
           task.fixed,
           task.alive,
           task.tags,

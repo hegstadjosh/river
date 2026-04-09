@@ -8,6 +8,7 @@ export interface Task {
   mass: number;
   anchor: string | null; // ISO timestamp or null (cloud)
   solidity: number;
+  energy: number;
   fixed: boolean;
   alive: boolean;
   tags: string[];
@@ -72,6 +73,7 @@ export const PutSingleSchema = z.object({
   mass: z.number().positive().optional(),
   position: z.number().nullable().optional(),
   solidity: z.number().min(0).max(1).optional(),
+  energy: z.number().min(0).max(1).optional(),
   fixed: z.boolean().optional(),
   alive: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
