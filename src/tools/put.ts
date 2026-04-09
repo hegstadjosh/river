@@ -10,7 +10,10 @@ export function registerPut(server: McpServer, state: RiverState): void {
       description:
         'Create or update tasks. Pass a single task inline, or a `tasks` array for batch operations. ' +
         'Omit `id` to create; include `id` to update. ' +
-        'Position is hours from now (null = cloud, unscheduled).',
+        'Position is hours from now (null = cloud, unscheduled). ' +
+        'Tasks can overlap in time — small tasks or multitaskable things (listening to a podcast while cooking) ' +
+        'can share the same time slot. Leave breathing room between focused tasks. ' +
+        'Ask the user what they\'re considering before arranging — don\'t assume they\'ve listed everything.',
       inputSchema: {
         // Single-task fields (flat)
         id: z.string().optional().describe('Task ID — omit to create, include to update'),
