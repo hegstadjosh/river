@@ -188,6 +188,36 @@ canvas {
   border-color: rgba(212, 170, 110, 0.4);
 }
 
+.panel-durations {
+  display: flex;
+  gap: 4px;
+}
+
+.dur-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 165, 110, 0.1);
+  border-radius: 5px;
+  color: rgba(200, 165, 110, 0.4);
+  font-size: 11px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-weight: 500;
+  padding: 5px 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dur-btn:hover {
+  background: rgba(200, 165, 110, 0.08);
+  color: rgba(200, 165, 110, 0.7);
+}
+
+.dur-btn.active {
+  background: rgba(200, 165, 110, 0.14);
+  border-color: rgba(200, 165, 110, 0.3);
+  color: rgba(200, 165, 110, 0.9);
+}
+
 .panel-slider {
   -webkit-appearance: none;
   appearance: none;

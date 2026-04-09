@@ -33,10 +33,15 @@
       Name
       <input type="text" id="panel-name" class="panel-input" spellcheck="false">
     </label>
-    <label class="panel-label">
-      Size
-      <input type="range" id="panel-mass" min="5" max="240" value="30" class="panel-slider">
-    </label>
+    <div class="panel-label">
+      Duration
+      <div class="panel-durations" id="panel-durations">
+        <button class="dur-btn" data-mass="10">10m</button>
+        <button class="dur-btn active" data-mass="30">30m</button>
+        <button class="dur-btn" data-mass="90">90m</button>
+        <button class="dur-btn" data-mass="180">3h</button>
+      </div>
+    </div>
     <label class="panel-label">
       Commitment
       <input type="range" id="panel-solidity" min="0" max="100" value="10" class="panel-slider">

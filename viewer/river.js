@@ -769,8 +769,8 @@
 
   var panel = document.getElementById('panel');
   var panelName = document.getElementById('panel-name');
-  var panelMass = document.getElementById('panel-mass');
-  var panelMassVal = document.getElementById('panel-mass-val');
+  var panelDurations = document.getElementById('panel-durations');
+  var durBtns = document.querySelectorAll('.dur-btn');
   var panelSolidity = document.getElementById('panel-solidity');
   var panelFixed = document.getElementById('panel-fixed');
   var panelDissolve = document.getElementById('panel-dissolve');
@@ -778,8 +778,10 @@
   function showPanel(a, sx, sy) {
     selectedId = a.id;
     panelName.value = a.name;
-    panelMass.value = a.mass;
-    if (panelMassVal) panelMassVal.textContent = a.mass + 'm';
+    // Highlight matching duration button
+    durBtns.forEach(function (b) {
+      b.classList.toggle('active', Number(b.dataset.mass) === a.mass);
+    });
     panelSolidity.value = Math.round(a.solidity * 100);
     panelFixed.checked = a.fixed;
 
@@ -805,10 +807,13 @@
       post('put', { id: selectedId, name: panelName.value });
     }, 300);
   });
-  panelMass.addEventListener('input', function () {
-    if (!selectedId) return;
-    if (panelMassVal) panelMassVal.textContent = panelMass.value + 'm';
-    post('put', { id: selectedId, mass: Number(panelMass.value) });
+  durBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!selectedId) return;
+      durBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      post('put', { id: selectedId, mass: Number(btn.dataset.mass) });
+    });
   });
   panelSolidity.addEventListener('input', function () {
     if (!selectedId) return;
