@@ -168,13 +168,13 @@
   hzPrev.addEventListener('click', function () {
     scrollHours -= horizonHours * 0.75;
     scrollVel = 0;
-    sync(); updateFrameLabel();
+    updateFrameLabel();
   });
 
   hzNext.addEventListener('click', function () {
     scrollHours += horizonHours * 0.75;
     scrollVel = 0;
-    sync(); updateFrameLabel();
+    updateFrameLabel();
   });
 
   // ── Scroll / Trackpad ──────────────────────────────────────────────
@@ -187,8 +187,7 @@
     // Convert pixels to hours
     var hoursPerPx = 1 / PIXELS_PER_HOUR;
     scrollHours += delta * hoursPerPx * 1.2;
-    scrollVel = 0; // kill momentum on direct input
-    sync();
+    scrollVel = 0;
     updateFrameLabel();
   }, { passive: false });
 
@@ -200,8 +199,10 @@
 
   // Convert hours-from-now to screen X, accounting for scroll
   function hoursToX(h) { return W * NOW_X + (h - scrollHours) * PIXELS_PER_HOUR; }
-  // The now-line's screen position (moves when scrolling)
+  // The now-line's screen position
   function nx() { return hoursToX(0); }
+  // World X for a task (no scroll — used for target positions)
+  function worldX(h) { return W * NOW_X + h * PIXELS_PER_HOUR; }
 
   // Deterministic scatter from ID
   function hashFrac(id, seed) {
@@ -221,7 +222,8 @@
   }
 
   function riverPos(task) {
-    var x = hoursToX(task.position || 0);
+    // World-space X — scroll offset applied only during render
+    var x = worldX(task.position || 0);
     var top = surfaceY() + 30;
     var bot = H - 50;
     var mid = (top + bot) / 2;
@@ -791,13 +793,16 @@
   // ── Hit Testing ─────────────────────────────────────────────────────
 
   function hitTest(mx, my) {
+    var scrollPx = scrollHours * PIXELS_PER_HOUR;
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
       var dims = blobDims(a.mass, a.solidity);
       var scale = a.alive ? 1.3 : 1.0;
-      var hw = dims.w / 2 * scale + 5; // 5px padding for easier clicking
+      var hw = dims.w / 2 * scale + 5;
       var hh = dims.h / 2 * scale + 5;
-      if (Math.abs(mx - a.x) <= hw && Math.abs(my - a.y) <= hh) return a;
+      // Compare in screen space
+      var screenX = (a.position !== null && a.position !== undefined) ? a.x - scrollPx : a.x;
+      if (Math.abs(mx - screenX) <= hw && Math.abs(my - a.y) <= hh) return a;
     }
     return null;
   }
@@ -877,9 +882,11 @@
   canvas.addEventListener('mousedown', function (e) {
     var hit = hitTest(e.clientX, e.clientY);
     if (hit) {
+      var scrollPx = scrollHours * PIXELS_PER_HOUR;
+      var screenX = (hit.position !== null && hit.position !== undefined) ? hit.x - scrollPx : hit.x;
       dragging = {
         id: hit.id,
-        sx: hit.x, sy: hit.y,
+        sx: screenX, sy: hit.y,
         mx: e.clientX, my: e.clientY,
         moved: false,
         zone: (hit.position !== null && hit.position !== undefined) ? 'river' : 'cloud'
@@ -898,8 +905,8 @@
     if (!dragging.moved && Math.sqrt(dx*dx + dy*dy) < DRAG_THRESHOLD) return;
     dragging.moved = true;
     canvas.style.cursor = 'grabbing';
-    var a = findTask(dragging.id);
-    if (a) { a.x = dragging.sx + dx; a.y = dragging.sy + dy; a.tx = a.x; a.ty = a.y; }
+    dragging.curScreenX = dragging.sx + dx;
+    dragging.curScreenY = dragging.sy + dy;
   });
 
   canvas.addEventListener('mouseup', function (e) {
@@ -915,24 +922,25 @@
     var a = findTask(d.id);
     if (!a) return;
     var boundary = surfaceY();
+    var dropScreenX = d.curScreenX || d.sx;
+    var dropScreenY = d.curScreenY || d.sy;
 
-    // Convert screen X to hours-from-now: invert hoursToX
-    var dropHours = (a.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
-    if (d.zone === 'cloud' && a.y > boundary) {
-      a.customY = a.y; // persist vertical position
+    // Convert screen X to hours-from-now
+    var dropHours = (dropScreenX - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
+
+    if (d.zone === 'cloud' && dropScreenY > boundary) {
+      a.customY = dropScreenY;
       post('move', { id: d.id, position: dropHours });
-    } else if (d.zone === 'river' && a.y < boundary) {
-      a.customY = a.y; // persist in cloud too
+    } else if (d.zone === 'river' && dropScreenY < boundary) {
+      a.customY = dropScreenY;
       post('move', { id: d.id, position: null });
     } else if (d.zone === 'river') {
-      a.customY = a.y; // persist vertical position
+      a.customY = dropScreenY;
       post('move', { id: d.id, position: dropHours });
     } else {
-      // Cloud → Cloud: just persist the Y
-      a.customY = a.y;
+      a.customY = dropScreenY;
     }
-    // Update target to where it was dropped (keep Y, let X snap to data)
-    a.ty = a.y;
+    a.ty = dropScreenY;
   });
 
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
@@ -985,6 +993,8 @@
     dt = Math.min(dt, 0.1);
     lastTime = t;
 
+    var scrollPx = scrollHours * PIXELS_PER_HOUR;
+
     // Spring physics — fluid, damped, organic
     for (var i = 0; i < animTasks.length; i++) {
       var a = animTasks[i];
@@ -997,7 +1007,7 @@
       a.y += a.vy;
     }
 
-    // Draw the world
+    // Draw the world (background doesn't scroll)
     drawWorld(t);
     drawStreaks(dt);
     drawNowLine(t);
@@ -1012,13 +1022,32 @@
 
     for (var j = 0; j < sorted.length; j++) {
       var task = sorted[j];
-      // Viewport culling — skip river tasks far off-screen
-      if (task.position !== null && task.position !== undefined) {
-        var screenX = hoursToX(task.position);
+      var isBeingDragged = dragging && dragging.id === task.id && dragging.moved;
+
+      // Compute screen X
+      var screenX;
+      if (isBeingDragged) {
+        screenX = dragging.curScreenX || dragging.sx;
+      } else if (task.position !== null && task.position !== undefined) {
+        screenX = task.x - scrollPx;
+      } else {
+        screenX = task.x; // cloud tasks don't scroll
+      }
+
+      // Viewport culling
+      if (!isBeingDragged && task.position !== null && task.position !== undefined) {
         var cullW = blobDims(task.mass, task.solidity).w + 50;
         if (screenX + cullW < 0 || screenX - cullW > W) continue;
       }
+
+      // Draw at screen position
+      var worldXSave = task.x;
+      var worldYSave = task.y;
+      task.x = screenX;
+      if (isBeingDragged) task.y = dragging.curScreenY || dragging.sy;
       drawBlob(task, t);
+      task.x = worldXSave;
+      task.y = worldYSave;
     }
 
     drawPastFade();
