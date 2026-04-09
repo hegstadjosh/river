@@ -849,7 +849,49 @@
     return null;
   }
 
+  // Get the screen-space edges of a task for resize handle detection
+  function taskEdges(a) {
+    var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
+    var s = 1;
+    if (a.position !== null && a.position !== undefined) {
+      var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
+      s = Math.max(1, dpx / (r * 2));
+      if (!a.fixed && a.solidity <= 0.3) s = 1;
+    }
+    return { left: a.x - r * s, right: a.x + r * s, top: a.y - r * 0.85, bottom: a.y + r * 0.85, hw: r * s };
+  }
+
+  // Detect if mouse is in the resize handle zone (outer 15px of left/right edge)
+  var HANDLE_ZONE = 15;
+  function edgeHit(mx, my) {
+    for (var i = animTasks.length - 1; i >= 0; i--) {
+      var a = animTasks[i];
+      if (a.position === null || a.position === undefined) continue; // cloud tasks can't resize
+      var e = taskEdges(a);
+      if (my < e.top - 5 || my > e.bottom + 5) continue;
+      if (mx >= e.right - HANDLE_ZONE && mx <= e.right + 5) return { task: a, side: 'right' };
+      if (mx >= e.left - 5 && mx <= e.left + HANDLE_ZONE) return { task: a, side: 'left' };
+    }
+    return null;
+  }
+
+  var resizing = null; // { id, side, startMass, startPosition, startMX }
+
   canvas.addEventListener('mousedown', function (e) {
+    // Check for resize handle first
+    var edge = edgeHit(e.clientX, e.clientY);
+    if (edge) {
+      resizing = {
+        id: edge.task.id,
+        side: edge.side,
+        startMass: edge.task.mass,
+        startPosition: edge.task.position,
+        startMX: e.clientX
+      };
+      canvas.style.cursor = 'ew-resize';
+      return;
+    }
+
     var hit = hitTest(e.clientX, e.clientY);
     if (hit) {
       dragging = {
@@ -865,8 +907,40 @@
   });
 
   canvas.addEventListener('mousemove', function (e) {
+    // Resizing
+    if (resizing) {
+      var deltaPx = e.clientX - resizing.startMX;
+      var deltaHours = deltaPx / PIXELS_PER_HOUR;
+      var deltaMins = deltaHours * 60;
+
+      if (resizing.side === 'right') {
+        // Stretch right: increase duration, keep start time fixed
+        var newMass = Math.max(5, Math.round(resizing.startMass + deltaMins));
+        var a = findTask(resizing.id);
+        if (a) a.mass = newMass; // live visual update
+      } else {
+        // Stretch left: increase duration AND shift start earlier
+        var newMass = Math.max(5, Math.round(resizing.startMass - deltaMins));
+        var a = findTask(resizing.id);
+        if (a) {
+          a.mass = newMass;
+          // Shift position to keep the right edge fixed
+          var massDiff = newMass - resizing.startMass;
+          a.position = resizing.startPosition - massDiff / 60;
+        }
+      }
+      canvas.style.cursor = 'ew-resize';
+      return;
+    }
+
     if (!dragging) {
-      canvas.style.cursor = hitTest(e.clientX, e.clientY) ? 'grab' : 'default';
+      // Cursor: resize handles take priority
+      var edge = edgeHit(e.clientX, e.clientY);
+      if (edge) {
+        canvas.style.cursor = 'ew-resize';
+      } else {
+        canvas.style.cursor = hitTest(e.clientX, e.clientY) ? 'grab' : 'default';
+      }
       return;
     }
     var dx = e.clientX - dragging.mx, dy = e.clientY - dragging.my;
@@ -878,6 +952,30 @@
   });
 
   canvas.addEventListener('mouseup', function (e) {
+    // Finish resize
+    if (resizing) {
+      var a = findTask(resizing.id);
+      if (a) {
+        // Snap to nearest preset: 10, 30, 90, 180
+        var presets = [10, 30, 90, 180];
+        var best = presets[0];
+        for (var p = 1; p < presets.length; p++) {
+          if (Math.abs(a.mass - presets[p]) < Math.abs(a.mass - best)) best = presets[p];
+        }
+        // Commit — send both new mass and new position
+        var updates = { id: resizing.id, mass: best };
+        if (resizing.side === 'left') {
+          // Recalculate position for the snapped mass
+          var massDiff = best - resizing.startMass;
+          updates.position = resizing.startPosition - massDiff / 60;
+        }
+        post('put', updates);
+      }
+      resizing = null;
+      canvas.style.cursor = 'default';
+      return;
+    }
+
     if (!dragging) return;
     var d = dragging; dragging = null; canvas.style.cursor = 'default';
 
@@ -894,19 +992,17 @@
     // Convert screen X to hours-from-now: invert hoursToX
     var dropHours = (a.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
     if (d.zone === 'cloud' && a.y > boundary) {
-      a.customY = a.y; // persist vertical position
+      a.customY = a.y;
       post('move', { id: d.id, position: dropHours });
     } else if (d.zone === 'river' && a.y < boundary) {
-      a.customY = a.y; // persist in cloud too
+      a.customY = a.y;
       post('move', { id: d.id, position: null });
     } else if (d.zone === 'river') {
-      a.customY = a.y; // persist vertical position
+      a.customY = a.y;
       post('move', { id: d.id, position: dropHours });
     } else {
-      // Cloud → Cloud: just persist the Y
       a.customY = a.y;
     }
-    // Update target to where it was dropped (keep Y, let X snap to data)
     a.ty = a.y;
   });
 
