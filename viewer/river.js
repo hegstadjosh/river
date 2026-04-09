@@ -645,7 +645,9 @@
 
     ctx.restore();
 
-    // Label — always legible, positioned inside or below depending on size
+    // Label — hide during resize (duration overlay replaces it)
+    if (resizing && resizing.id === a.id) return;
+
     var fontSize = Math.max(11, Math.min(14, r * 0.4));
     var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
@@ -730,6 +732,7 @@
 
     ctx.restore();
 
+    if (resizing && resizing.id === a.id) { ctx.restore(); return; }
     // Label — always crisp on rocks
     var fontSize = Math.max(11, Math.min(14, r * 0.32));
     ctx.fillStyle = 'rgba(235, 225, 210, ' + (0.9 * dim) + ')';
