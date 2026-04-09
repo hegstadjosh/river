@@ -554,9 +554,19 @@
     // Alive: grow, intensify
     if (a.alive) r *= 1.35;
 
-    // Fixed tasks → rock
+    // Duration-based horizontal stretch for river tasks
+    // At low solidity: circular (stretch = 1). At high: width = actual duration.
+    var stretch = 1;
+    if (a.position !== null && a.position !== undefined && sol > 0.3) {
+      var durationPx = (a.mass / 60) * PIXELS_PER_HOUR;
+      var targetStretch = Math.max(1, durationPx / (r * 2));
+      stretch = 1 + (targetStretch - 1) * Math.min(1, (sol - 0.3) / 0.6);
+    }
+
+    // Fixed tasks → rock (always show full duration)
     if (a.fixed) {
-      drawRock(x, y, r, a, dim, t);
+      var rockStretch = Math.max(1, ((a.mass / 60) * PIXELS_PER_HOUR) / (r * 2));
+      drawRock(x, y, r, rockStretch, a, dim, t);
       return;
     }
 
@@ -593,11 +603,12 @@
     if (blur > 1.5) ctx.filter = 'blur(' + blur.toFixed(1) + 'px)';
 
     // The blob: 3 overlapping ellipses, slightly offset
-    // Each has its own radial gradient — this creates the organic, cell-like form
+    // `stretch` widens them horizontally as solidity increases (blob → time block)
+    var scatter = Math.max(0, 1 - sol * 1.2); // organic scatter decreases with solidity
     var layers = [
-      { dx: 0,          dy: 0,          rx: r,        ry: r * 0.85, rot: 0,      a: alpha },
-      { dx: r * 0.1,    dy: -r * 0.07,  rx: r * 0.9,  ry: r * 0.92, rot: 0.15,  a: alpha * 0.65 },
-      { dx: -r * 0.07,  dy: r * 0.09,   rx: r * 0.82, ry: r * 0.78, rot: -0.1,  a: alpha * 0.45 }
+      { dx: 0,                     dy: 0,                     rx: r * stretch,        ry: r * 0.85, rot: 0,                a: alpha },
+      { dx: r * 0.1 * scatter,     dy: -r * 0.07 * scatter,   rx: r * 0.9 * stretch,  ry: r * 0.92, rot: 0.15 * scatter,  a: alpha * 0.65 },
+      { dx: -r * 0.07 * scatter,   dy: r * 0.09 * scatter,    rx: r * 0.82 * stretch, ry: r * 0.78, rot: -0.1 * scatter,  a: alpha * 0.45 }
     ];
 
     for (var li = 0; li < layers.length; li++) {
@@ -623,7 +634,7 @@
     // Selection indicator — soft dashed ring
     if (selectedId === a.id) {
       ctx.beginPath();
-      ctx.ellipse(x, y, r + 6, r * 0.85 + 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y, r * stretch + 6, r * 0.85 + 6, 0, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(200, 165, 110, 0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
@@ -643,10 +654,9 @@
 
     // For small blobs, render label below instead of inside
     var nameW = ctx.measureText(a.name).width;
-    if (nameW < r * 2.2) {
+    if (nameW < r * stretch * 2) {
       ctx.fillText(a.name, x, y);
     } else {
-      // Label below the blob
       ctx.fillText(a.name, x, y + r + fontSize + 2);
     }
   }
@@ -656,8 +666,8 @@
   // Rounded rectangles with a stone texture — warm grays, subtle bevel.
   // The river flows around them; they don't flow with it.
 
-  function drawRock(x, y, r, a, dim, t) {
-    var w = r * 2.0;
+  function drawRock(x, y, r, rockStretch, a, dim, t) {
+    var w = r * 2.0 * rockStretch;
     var h = r * 1.3;
     var cr = 8;
     var alpha = 0.9 * dim;
@@ -754,13 +764,15 @@
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
       var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
-      if (a.fixed) {
-        var hw = r * 1.0, hh = r * 0.65;
-        if (Math.abs(mx - a.x) <= hw && Math.abs(my - a.y) <= hh) return a;
-      } else {
-        var dx = mx - a.x, dy = my - a.y;
-        if (dx * dx + dy * dy <= r * r) return a;
+      // Account for horizontal stretch
+      var s = 1;
+      if (a.position !== null && a.position !== undefined) {
+        var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
+        s = Math.max(1, dpx / (r * 2));
+        if (!a.fixed && a.solidity <= 0.3) s = 1;
       }
+      var hw = r * s + 5, hh = r * 0.85 + 5;
+      if (Math.abs(mx - a.x) <= hw && Math.abs(my - a.y) <= hh) return a;
     }
     return null;
   }
