@@ -603,23 +603,8 @@
       }
     }
 
-    // Store snap targets: grid lines + sub-grid for finer snapping
+    // Snap targets = only visible lines (major + minor). Nothing invisible.
     snapTimesMs = majorTimes.concat(minorTimes);
-
-    // Add sub-grid snap points (not drawn, just for snapping)
-    // 6h: every 15min. Day: every hour. 4d: every 6h. Week: every 6h. Month+: already fine.
-    var subSnapMs = 0;
-    if (horizonHours <= 6) subSnapMs = 15 * 60000;          // 15min
-    else if (horizonHours <= 24) subSnapMs = 3600000;        // 1hr
-    else if (horizonHours <= 96) subSnapMs = 6 * 3600000;    // 6hr
-    else if (horizonHours <= 168) subSnapMs = 6 * 3600000;   // 6hr
-
-    if (subSnapMs > 0) {
-      var subStart = Math.floor(viewLeftMs / subSnapMs) * subSnapMs;
-      for (var ss = subStart; ss <= viewRightMs; ss += subSnapMs) {
-        snapTimesMs.push(ss);
-      }
-    }
   }
 
   // Sticky snap — binary, not gradient.
