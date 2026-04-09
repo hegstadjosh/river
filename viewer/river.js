@@ -622,20 +622,37 @@
     }
   }
 
-  // Snap a screen X to the nearest grid line. Returns snapped X or original if nothing close.
-  var SNAP_PX = 10;
+  // Snap gravity — pulls toward grid lines but you can overpower it.
+  // Within SNAP_RADIUS, the cursor gets "slowed down" near the line.
+  // At 0px from line: full snap (output = line position)
+  // At SNAP_RADIUS: no effect (output = input)
+  // In between: smooth cubic ease — feels like bending spacetime.
+  var SNAP_RADIUS = 18;
+  var SNAP_STRENGTH = 0.75; // 0 = no snap, 1 = hard snap
+
   function snapX(screenX) {
     if (!state || snapTimesMs.length === 0) return screenX;
     var now = new Date(state.now);
-    var best = screenX;
-    var bestDist = SNAP_PX + 1;
+
+    // Find nearest grid line
+    var nearestX = screenX;
+    var nearestDist = SNAP_RADIUS + 1;
     for (var i = 0; i < snapTimesMs.length; i++) {
       var hrs = (snapTimesMs[i] - now.getTime()) / 3600000;
       var gx = hoursToX(hrs);
       var dist = Math.abs(screenX - gx);
-      if (dist < bestDist) { bestDist = dist; best = gx; }
+      if (dist < nearestDist) { nearestDist = dist; nearestX = gx; }
     }
-    return best;
+
+    if (nearestDist > SNAP_RADIUS) return screenX;
+
+    // Gravity well: cubic ease toward the line
+    // t=0 at the line, t=1 at SNAP_RADIUS edge
+    var t = nearestDist / SNAP_RADIUS;
+    // Cubic: near the line (t→0) movement is compressed, far away (t→1) it's normal
+    var pull = 1 - SNAP_STRENGTH * (1 - t * t * t);
+    // Lerp between line position and raw position
+    return nearestX + (screenX - nearestX) * pull;
   }
 
   // Convert screen X to hours-from-now with snapping
