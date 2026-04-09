@@ -105,6 +105,34 @@ canvas {
   user-select: none;
 }
 
+/* ── Quick Add ──────────────────────────────────────── */
+
+.quick-add {
+  position: absolute;
+  z-index: 15;
+  width: 200px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(25, 21, 18, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(200, 165, 110, 0.25);
+  color: #d4c4b0;
+  font-size: 13px;
+  font-family: -apple-system, system-ui, sans-serif;
+  outline: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.15s ease;
+}
+
+.quick-add.hidden {
+  display: none;
+}
+
+.quick-add::placeholder {
+  color: rgba(200, 165, 110, 0.3);
+}
+
 /* ── Click Panel ─────────────────────────────────────── */
 
 .panel {

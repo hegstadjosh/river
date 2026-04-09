@@ -142,10 +142,26 @@
     }
   }
 
+  function getCalendarHorizon(nominal) {
+    // "day" = rest of today (hours until midnight, min 4h)
+    // Others are fixed durations
+    if (nominal === 24 && state) {
+      var now = new Date(state.now);
+      var midnight = new Date(now);
+      midnight.setHours(23, 59, 59, 999);
+      var remaining = (midnight.getTime() - now.getTime()) / 3600000;
+      return Math.max(4, remaining);
+    }
+    return nominal;
+  }
+
   hzBtns.forEach(function (btn) {
     btn.addEventListener('click', function () {
       scrollHours = 0; scrollVel = 0;
-      setHorizon(Number(btn.dataset.hours));
+      var nominal = Number(btn.dataset.hours);
+      setHorizon(getCalendarHorizon(nominal));
+      // Store nominal so we know which button is active
+      btn._nominal = nominal;
     });
   });
 
@@ -878,6 +894,44 @@
   });
 
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // ── Quick Add (double-click) ────────────────────────────────────────
+  // Double-click empty space → input appears → type name → task created
+  // In cloud zone: creates a cloud task. In river zone: creates at that time position.
+
+  var quickAdd = document.getElementById('quick-add');
+  var quickAddPos = null; // null = cloud, number = hours from now
+
+  canvas.addEventListener('dblclick', function (e) {
+    if (hitTest(e.clientX, e.clientY)) return; // double-clicked a task, ignore
+
+    var sY = surfaceY();
+    quickAddPos = (e.clientY > sY)
+      ? (e.clientX - W * NOW_X) / PIXELS_PER_HOUR + scrollHours
+      : null;
+
+    quickAdd.style.left = (e.clientX - 100) + 'px';
+    quickAdd.style.top = (e.clientY - 18) + 'px';
+    quickAdd.classList.remove('hidden');
+    quickAdd.value = '';
+    quickAdd.focus();
+  });
+
+  quickAdd.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && quickAdd.value.trim()) {
+      var payload = { name: quickAdd.value.trim() };
+      if (quickAddPos !== null) payload.position = quickAddPos;
+      post('put', payload);
+      quickAdd.classList.add('hidden');
+      quickAdd.value = '';
+    } else if (e.key === 'Escape') {
+      quickAdd.classList.add('hidden');
+    }
+  });
+
+  quickAdd.addEventListener('blur', function () {
+    quickAdd.classList.add('hidden');
+  });
 
   // ── The Loop ────────────────────────────────────────────────────────
   // Everything moves like it's underwater.
