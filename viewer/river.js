@@ -468,13 +468,19 @@
 
     function localHourBoundaries(startMs, endMs, intervalH) {
       var times = [];
+      var intervalMs = intervalH * 3600000;
       var d = new Date(startMs);
       d.setMinutes(0,0,0);
-      d.setHours(Math.floor(d.getHours() / intervalH) * intervalH);
-      if (d.getTime() < startMs) d.setHours(d.getHours() + intervalH);
+      // Snap to nearest interval boundary
+      var hourMs = d.getTime();
+      var dayStart = new Date(d); dayStart.setHours(0,0,0,0);
+      var msSinceMidnight = hourMs - dayStart.getTime();
+      var snapped = Math.floor(msSinceMidnight / intervalMs) * intervalMs;
+      d = new Date(dayStart.getTime() + snapped);
+      if (d.getTime() < startMs) d = new Date(d.getTime() + intervalMs);
       while (d.getTime() <= endMs) {
         times.push(d.getTime());
-        d.setHours(d.getHours() + intervalH);
+        d = new Date(d.getTime() + intervalMs);
       }
       return times;
     }
