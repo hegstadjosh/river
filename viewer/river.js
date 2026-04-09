@@ -881,7 +881,14 @@
       btn.addEventListener('click', (function (mass) {
         return function () {
           if (!selectedId) return;
-          post('put', { id: selectedId, mass: mass });
+          var a = findTask(selectedId);
+          var updates = { id: selectedId, mass: mass };
+          // Keep start time fixed: shift center by half the mass delta
+          if (a && a.position !== null && a.position !== undefined) {
+            var massDiffH = (mass - a.mass) / 60;
+            updates.position = a.position + massDiffH / 2;
+          }
+          post('put', updates);
           panelDurInput.value = formatDuration(mass);
           renderPresetButtons(mass);
         };
@@ -954,26 +961,28 @@
       post('put', { id: selectedId, name: panelName.value });
     }, 300);
   });
+  function applyDuration(parsed) {
+    if (!parsed || !selectedId) return;
+    var a = findTask(selectedId);
+    var updates = { id: selectedId, mass: parsed };
+    if (a && a.position !== null && a.position !== undefined) {
+      var massDiffH = (parsed - a.mass) / 60;
+      updates.position = a.position + massDiffH / 2;
+    }
+    post('put', updates);
+    panelDurInput.value = formatDuration(parsed);
+    renderPresetButtons(parsed);
+  }
+
   panelDurInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
       e.preventDefault();
-      var parsed = parseDuration(panelDurInput.value);
-      if (parsed && selectedId) {
-        post('put', { id: selectedId, mass: parsed });
-        panelDurInput.value = formatDuration(parsed);
-        renderPresetButtons(parsed);
-      }
+      applyDuration(parseDuration(panelDurInput.value));
       panelDurInput.blur();
     }
   });
   panelDurInput.addEventListener('blur', function () {
-    // Reformat on blur
-    var parsed = parseDuration(panelDurInput.value);
-    if (parsed && selectedId) {
-      post('put', { id: selectedId, mass: parsed });
-      panelDurInput.value = formatDuration(parsed);
-      renderPresetButtons(parsed);
-    }
+    applyDuration(parseDuration(panelDurInput.value));
   });
   panelSolidity.addEventListener('input', function () {
     if (!selectedId) return;
