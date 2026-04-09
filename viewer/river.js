@@ -1095,21 +1095,33 @@
       panelTimes.style.display = 'none';
     }
 
-    var pw = 200, ph = 220;
-    // Position to the right of the task, offset by its width so it doesn't overlap
+    panel.classList.remove('hidden');
+    positionPanel(a);
+  }
+
+  function positionPanel(a) {
+    if (!a) return;
+    var pw = 200, ph = panel.offsetHeight || 220;
     var d = taskStretch(a);
-    var taskRight = a.x + Math.max(MIN_HIT, d.hw);
-    var taskLeft = a.x - Math.max(MIN_HIT, d.hw);
+    // For river tasks, account for scroll offset
+    var screenX = (a.position !== null && a.position !== undefined)
+      ? a.x - scrollHours * PIXELS_PER_HOUR
+      : a.x;
+    var grabHW = Math.max(MIN_HIT, d.hw);
+    var taskRight = screenX + grabHW;
+    var taskLeft = screenX - grabHW;
+
     var px = taskRight + 12;
     var py = a.y - ph / 2;
-    // If it would go off-screen right, flip to left side
+
+    // Flip to left if off-screen right
     if (px + pw > W - 10) px = taskLeft - pw - 12;
-    if (py < 10) py = 10;
-    if (py + ph > H - 10) py = H - ph - 10;
+    // Clamp to viewport
+    px = Math.max(10, Math.min(px, W - pw - 10));
+    py = Math.max(10, Math.min(py, H - ph - 10));
 
     panel.style.left = px + 'px';
     panel.style.top = py + 'px';
-    panel.classList.remove('hidden');
   }
 
   function hidePanel() { panel.classList.add('hidden'); selectedId = null; }
@@ -1533,6 +1545,12 @@
     }
 
     drawPastFade();
+
+    // ── Keep panel attached to selected task ──
+    if (selectedId && !panel.classList.contains('hidden')) {
+      var selTask = findTask(selectedId);
+      if (selTask) positionPanel(selTask);
+    }
 
     // ── Resize indicators ──────────────────────────────────────────
     // Hover: show handle dots on edges. Resizing: show duration + time.
