@@ -603,8 +603,20 @@
       }
     }
 
-    // Snap targets = only visible lines (major + minor). Nothing invisible.
+    // Snap targets = visible lines + sub-grid for finer snapping
     snapTimesMs = majorTimes.concat(minorTimes);
+
+    // Sub-grid: invisible snap points at intuitive intervals
+    var subMs = 0;
+    if (horizonHours <= 6) subMs = 15 * 60000;         // 15min
+    else if (horizonHours <= 24) subMs = 3600000;       // 1hr
+    else if (horizonHours <= 96) subMs = 6 * 3600000;   // 6hr
+    else if (horizonHours <= 168) subMs = 12 * 3600000;  // 12hr
+
+    if (subMs > 0) {
+      var ss = Math.floor(viewLeftMs / subMs) * subMs;
+      for (; ss <= viewRightMs; ss += subMs) snapTimesMs.push(ss);
+    }
   }
 
   // Sticky snap — binary, not gradient.
@@ -1026,9 +1038,15 @@
       panelTimes.style.display = 'none';
     }
 
-    var pw = 220, ph = 200;
-    var px = sx + 20, py = sy - ph / 2;
-    if (px + pw > W - 10) px = sx - pw - 20;
+    var pw = 200, ph = 220;
+    // Position to the right of the task, offset by its width so it doesn't overlap
+    var d = taskStretch(a);
+    var taskRight = a.x + Math.max(MIN_HIT, d.hw);
+    var taskLeft = a.x - Math.max(MIN_HIT, d.hw);
+    var px = taskRight + 12;
+    var py = a.y - ph / 2;
+    // If it would go off-screen right, flip to left side
+    if (px + pw > W - 10) px = taskLeft - pw - 12;
     if (py < 10) py = 10;
     if (py + ph > H - 10) py = H - ph - 10;
 

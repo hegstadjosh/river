@@ -174,8 +174,8 @@ canvas {
 .panel {
   position: absolute;
   z-index: 10;
-  min-width: 200px;
-  padding: 14px 16px;
+  width: 200px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: rgba(30, 24, 20, 0.82);
   backdrop-filter: blur(16px);
