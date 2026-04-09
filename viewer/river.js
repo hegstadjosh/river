@@ -444,12 +444,24 @@
     var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-    // ── 4 evenly-spaced division lines across the visible viewport ──
-    var viewLeftHours = scrollHours - (W * NOW_X / PIXELS_PER_HOUR); // hours at left edge
-    var viewSpanHours = W / PIXELS_PER_HOUR; // total hours visible
+    // ── 4 evenly-spaced division lines ──
+    // When the now-line is visible, divide the space to its right into 4.
+    // When scrolled past now, divide the full viewport into 5.
+    var nowScreenX = hoursToX(0);
+    var divStart, divSpan;
+    if (nowScreenX >= 0 && nowScreenX < W) {
+      // Now-line is visible — divisions go from now-line to right edge
+      divStart = nowScreenX;
+      divSpan = W - nowScreenX;
+    } else {
+      // Scrolled past now — divide full viewport
+      divStart = 0;
+      divSpan = W;
+    }
     for (var q = 1; q <= 4; q++) {
-      var divHours = viewLeftHours + viewSpanHours * q / 5;
-      var divX = hoursToX(divHours);
+      var divScreenX = divStart + divSpan * q / 5;
+      var divHours = (divScreenX - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
+      var divX = divScreenX;
       var divTime = new Date(now.getTime() + divHours * 3600000);
       if (divX < 5 || divX > W - 5) continue;
 
@@ -496,7 +508,7 @@
       // Skip if too close to a division line
       var nearDiv = false;
       for (var dq = 1; dq <= 4; dq++) {
-        if (Math.abs(x - hoursToX(viewLeftHours + viewSpanHours * dq / 5)) < 25) {
+        if (Math.abs(x - (divStart + divSpan * dq / 5)) < 25) {
           nearDiv = true; break;
         }
       }
