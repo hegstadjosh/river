@@ -89,7 +89,7 @@
   var hzNext = document.getElementById('hz-next');
 
   var FRAME_LABELS = {
-    6: '6 hours', 24: 'day', 72: '3 days',
+    6: '6 hours', 24: 'day', 96: '4 days',
     168: 'week', 720: 'month', 2160: 'quarter', 8760: 'year'
   };
 
@@ -124,7 +124,7 @@
     var center = new Date(now.getTime() + (scrollHours + horizonHours / 2) * 3600000);
 
     if (Math.abs(scrollHours) < horizonHours * 0.1) {
-      if (horizonHours <= 72) hzLabel.textContent = 'next 3 days';
+      if (horizonHours <= 96) hzLabel.textContent = 'next 4 days';
       else if (horizonHours <= 168) hzLabel.textContent = 'this week';
       else if (horizonHours <= 720) hzLabel.textContent = months[now.getMonth()];
       else if (horizonHours <= 2160) hzLabel.textContent = 'Q' + (Math.floor(now.getMonth()/3)+1) + ' \u2019' + (now.getFullYear()%100);
@@ -144,16 +144,7 @@
   }
 
   function getCalendarHorizon(nominal) {
-    // "day" = rest of today (hours until midnight, min 4h)
-    // Others are fixed durations
-    if (nominal === 24 && state) {
-      var now = new Date(state.now);
-      var midnight = new Date(now);
-      midnight.setHours(23, 59, 59, 999);
-      var remaining = (midnight.getTime() - now.getTime()) / 3600000;
-      return Math.max(4, remaining);
-    }
-    return nominal;
+    return nominal; // all frames are fixed durations
   }
 
   hzBtns.forEach(function (btn) {
@@ -166,15 +157,14 @@
     });
   });
 
-  // Step size = 1 unit of the frame (1 day for day view, 1 week for week, etc.)
   function frameStep() {
-    if (horizonHours <= 6) return 6;       // 6 hours
+    if (horizonHours <= 6) return 6;
     if (horizonHours <= 24) return 24;      // 1 day
-    if (horizonHours <= 72) return 24;      // 1 day
+    if (horizonHours <= 96) return 24;      // 4d: iterate 1 day
     if (horizonHours <= 168) return 168;    // 1 week
     if (horizonHours <= 720) return 720;    // 1 month
     if (horizonHours <= 2160) return 2160;  // 1 quarter
-    return 8760;                             // 1 year
+    return 8760;
   }
 
   hzPrev.addEventListener('click', function () {
@@ -432,129 +422,164 @@
     ctx.fillText('now', x, sY + 18);
   }
 
-  // ── Drawing: Time Markers + Division Lines ──────────────────────────
-  // Always exactly 3 division lines to the right of now, evenly splitting
-  // the horizon into quarters. Labels adapt to the timescale.
+  // ── Drawing: Time Grid ──────────────────────────────────────────────
+  // Major lines snap to intuitive time boundaries.
+  // Minor lines (half-height) fill in between.
+  //
+  // Frame    Major interval    Minor interval
+  // 6h       1h                30min
+  // day      6h                3h
+  // 4d       1 day (midnight)  12h (noon)
+  // week     1 day (midnight)  12h
+  // month    Monday            1 day
+  // quarter  1st of month      ~2 weeks
+  // year     quarter start     1 month
+
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   function drawTimeMarkers() {
     if (!state) return;
     var now = new Date(state.now);
     var sY = surfaceY();
-    var futureW = W * (1 - NOW_X) - 30;
-    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var riverH = H - sY;
 
-    // ── 4 evenly-spaced division lines ──
-    // When the now-line is visible, divide the space to its right into 4.
-    // When scrolled past now, divide the full viewport into 5.
-    var nowScreenX = hoursToX(0);
-    var divStart, divSpan;
-    if (nowScreenX >= 0 && nowScreenX < W) {
-      // Now-line is visible — divisions go from now-line to right edge
-      divStart = nowScreenX;
-      divSpan = W - nowScreenX;
+    // Visible time range
+    var viewLeftH = scrollHours - (W * NOW_X) / PIXELS_PER_HOUR;
+    var viewRightH = viewLeftH + W / PIXELS_PER_HOUR;
+    var viewLeftMs = now.getTime() + viewLeftH * 3600000;
+    var viewRightMs = now.getTime() + viewRightH * 3600000;
+
+    // Pick major/minor intervals based on frame
+    var majorMs, minorMs, labelFn;
+
+    if (horizonHours <= 6) {
+      majorMs = 3600000;           // 1h
+      minorMs = 1800000;           // 30min
+      labelFn = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
+    } else if (horizonHours <= 24) {
+      majorMs = 6 * 3600000;       // 6h
+      minorMs = 3 * 3600000;       // 3h
+      labelFn = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
+    } else if (horizonHours <= 96) {
+      majorMs = 24 * 3600000;      // 1 day
+      minorMs = 12 * 3600000;      // noon
+      labelFn = function(d) { return DAYS[d.getDay()] + ' ' + (d.getMonth()+1) + '/' + d.getDate(); };
+    } else if (horizonHours <= 168) {
+      majorMs = 24 * 3600000;      // 1 day
+      minorMs = 12 * 3600000;      // noon
+      labelFn = function(d) { return DAYS[d.getDay()] + ' ' + d.getDate(); };
+    } else if (horizonHours <= 720) {
+      majorMs = 7 * 24 * 3600000;  // 1 week (Mondays)
+      minorMs = 24 * 3600000;      // 1 day
+      labelFn = function(d) { return MONTHS[d.getMonth()] + ' ' + d.getDate(); };
+    } else if (horizonHours <= 2160) {
+      // Quarter: major = 1st of month, minor = ~2 weeks
+      majorMs = 0; // special: month boundaries
+      minorMs = 14 * 24 * 3600000;
+      labelFn = function(d) { return MONTHS[d.getMonth()]; };
     } else {
-      // Scrolled past now — divide full viewport
-      divStart = 0;
-      divSpan = W;
-    }
-    for (var q = 1; q <= 4; q++) {
-      var divScreenX = divStart + divSpan * q / 5;
-      var divHours = (divScreenX - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
-      var divX = divScreenX;
-      var divTime = new Date(now.getTime() + divHours * 3600000);
-      if (divX < 5 || divX > W - 5) continue;
-
-      // Vertical line — thinner and fainter than now-line
-      ctx.beginPath();
-      ctx.moveTo(divX, sY + 10);
-      ctx.lineTo(divX, H);
-      ctx.strokeStyle = 'rgba(200, 165, 110, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Label for this division
-      var label = formatTime(divTime, divHours);
-      ctx.font = '500 12px -apple-system, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
-      ctx.fillText(label, divX, H - 14);
+      // Year: major = quarter starts, minor = months
+      majorMs = 0; // special: quarter boundaries
+      minorMs = 0; // special: month boundaries
+      labelFn = function(d) { return MONTHS[d.getMonth()] + ' \u2019' + (d.getFullYear()%100); };
     }
 
-    // ── Finer tick marks between divisions ──
-    // Pick a sub-step that gives ~4-8 ticks per quarter
-    var quarterHours = horizonHours / 4;
-    var subStepCandidates = [0.5, 1, 2, 3, 4, 6, 12, 24, 48, 168, 720];
-    var subStep = 1;
-    for (var c = 0; c < subStepCandidates.length; c++) {
-      subStep = subStepCandidates[c];
-      var ticksPerQuarter = quarterHours / subStep;
-      if (ticksPerQuarter <= 8) break;
+    // ── Draw major lines ──
+    var majorTimes = [];
+    if (majorMs > 0) {
+      // Regular interval — snap to clean boundaries
+      var start = Math.floor(viewLeftMs / majorMs) * majorMs;
+      for (var ms = start; ms <= viewRightMs; ms += majorMs) {
+        majorTimes.push(ms);
+      }
+      // For month view, snap to Mondays
+      if (horizonHours > 168 && horizonHours <= 720) {
+        majorTimes = [];
+        var d = new Date(viewLeftMs);
+        d.setHours(0,0,0,0);
+        d.setDate(d.getDate() - d.getDay() + 1); // prev Monday
+        while (d.getTime() <= viewRightMs) {
+          if (d.getTime() >= viewLeftMs) majorTimes.push(d.getTime());
+          d.setDate(d.getDate() + 7);
+        }
+      }
+    } else {
+      // Special: month or quarter boundaries
+      var d = new Date(viewLeftMs);
+      d.setDate(1); d.setHours(0,0,0,0);
+      var step = horizonHours > 2160 ? 3 : 1; // quarter: every 3 months, else every month
+      while (d.getTime() <= viewRightMs) {
+        if (d.getTime() >= viewLeftMs) majorTimes.push(d.getTime());
+        d.setMonth(d.getMonth() + step);
+      }
     }
 
-    var subStepMs = subStep * 3600000;
-    var viewStartMs = now.getTime() + scrollHours * 3600000;
-    var viewEndMs = now.getTime() + (scrollHours + horizonHours) * 3600000;
-    var startMs = Math.floor(viewStartMs / subStepMs) * subStepMs - subStepMs;
-
-    ctx.font = '400 11px -apple-system, system-ui, sans-serif';
+    // Draw majors
+    ctx.font = '500 12px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
-
-    for (var ms = startMs; ms < viewEndMs + subStepMs; ms += subStepMs) {
-      var hrs = (ms - now.getTime()) / 3600000;
+    for (var i = 0; i < majorTimes.length; i++) {
+      var hrs = (majorTimes[i] - now.getTime()) / 3600000;
       var x = hoursToX(hrs);
       if (x < 5 || x > W - 5) continue;
 
-      // Skip if too close to a division line
-      var nearDiv = false;
-      for (var dq = 1; dq <= 4; dq++) {
-        if (Math.abs(x - (divStart + divSpan * dq / 5)) < 25) {
-          nearDiv = true; break;
-        }
-      }
-      if (nearDiv) continue;
-
-      // Small tick
+      // Full-height line
       ctx.beginPath();
-      ctx.moveTo(x, H - 6);
+      ctx.moveTo(x, sY + 10);
       ctx.lineTo(x, H);
       ctx.strokeStyle = 'rgba(200, 165, 110, 0.1)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Sub-label (only if there's room — skip if PIXELS_PER_HOUR is tiny)
-      if (subStep * PIXELS_PER_HOUR > 30) {
-        var st = new Date(ms);
-        var subLabel = formatTime(st, hrs);
-        ctx.fillStyle = 'rgba(200, 165, 110, 0.22)';
-        ctx.fillText(subLabel, x, H - 12);
+      // Label
+      ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
+      ctx.fillText(labelFn(new Date(majorTimes[i])), x, H - 14);
+    }
+
+    // ── Draw minor lines (half-height, lighter) ──
+    var minorTimes = [];
+    if (minorMs > 0) {
+      var start2 = Math.floor(viewLeftMs / minorMs) * minorMs;
+      for (var ms2 = start2; ms2 <= viewRightMs; ms2 += minorMs) {
+        // Skip if it's also a major line
+        var isMajor = false;
+        for (var mi = 0; mi < majorTimes.length; mi++) {
+          if (Math.abs(ms2 - majorTimes[mi]) < minorMs * 0.1) { isMajor = true; break; }
+        }
+        if (!isMajor) minorTimes.push(ms2);
+      }
+    } else if (horizonHours > 2160) {
+      // Year view: minor = every month (majors are quarters)
+      var dm = new Date(viewLeftMs);
+      dm.setDate(1); dm.setHours(0,0,0,0);
+      while (dm.getTime() <= viewRightMs) {
+        var isQ = dm.getMonth() % 3 === 0;
+        if (!isQ && dm.getTime() >= viewLeftMs) minorTimes.push(dm.getTime());
+        dm.setMonth(dm.getMonth() + 1);
       }
     }
-  }
 
-  // Format a date for display — always clean, never "11:21pm"
-  function formatTime(date) {
-    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    var h = date.getHours(), m = date.getMinutes();
-    var ampm = h >= 12 ? 'pm' : 'am';
-    var dh = h % 12 || 12;
+    var minorH = riverH * 0.2; // 20% of river height
+    ctx.font = '400 10px -apple-system, system-ui, sans-serif';
+    for (var j = 0; j < minorTimes.length; j++) {
+      var hrs2 = (minorTimes[j] - now.getTime()) / 3600000;
+      var x2 = hoursToX(hrs2);
+      if (x2 < 5 || x2 > W - 5) continue;
 
-    if (horizonHours <= 6) {
-      // "2pm", "2:30pm" — show :30 but not :21
-      if (m === 0) return dh + ampm;
-      if (m === 30) return dh + ':30' + ampm;
-      return dh + ':' + (m < 10 ? '0' : '') + m + ampm;
-    } else if (horizonHours <= 24) {
-      return dh + ampm;
-    } else if (horizonHours <= 168) {
-      // "Wed", "Thu 9", showing day name
-      if (h === 0 && m === 0) return days[date.getDay()];
-      return days[date.getDay()] + ' ' + dh + (ampm === 'am' ? 'a' : 'p');
-    } else if (horizonHours <= 2160) {
-      return months[date.getMonth()] + ' ' + date.getDate();
-    } else {
-      return months[date.getMonth()] + ' \u2019' + (date.getFullYear() % 100);
+      // Short line from bottom
+      ctx.beginPath();
+      ctx.moveTo(x2, H - minorH);
+      ctx.lineTo(x2, H);
+      ctx.strokeStyle = 'rgba(200, 165, 110, 0.06)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Small label
+      if (minorMs * PIXELS_PER_HOUR / 3600000 > 25) {
+        var minorLabel = labelFn(new Date(minorTimes[j]));
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.2)';
+        ctx.fillText(minorLabel, x2, H - 8);
+      }
     }
   }
 
@@ -808,7 +833,7 @@
   var DURATION_PRESETS = {
     6:    [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
     24:   [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
-    72:   [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
+    96:   [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
     168:  [{ m: 90, l: '90m' }, { m: 180, l: '3h' }, { m: 1440, l: '1d' }, { m: 4320, l: '3d' }],
     720:  [{ m: 10080, l: '1w' }, { m: 20160, l: '2w' }, { m: 30240, l: '3w' }, { m: 40320, l: '4w' }],
     2160: [{ m: 10080, l: '1w' }, { m: 20160, l: '2w' }, { m: 43200, l: '1mo' }, { m: 86400, l: '2mo' }],
@@ -817,7 +842,7 @@
 
   function getPresets() {
     // Find closest matching preset set
-    var keys = [6, 24, 72, 168, 720, 2160, 8760];
+    var keys = [6, 24, 96, 168, 720, 2160, 8760];
     var best = 24;
     for (var i = 0; i < keys.length; i++) {
       if (Math.abs(keys[i] - horizonHours) < Math.abs(best - horizonHours)) best = keys[i];
@@ -959,19 +984,21 @@
 
   // Detect if mouse is in the resize handle zone.
   // Handles are OUTSIDE the grab area — they extend beyond the task edges.
-  var HANDLE_ZONE = 12;
+  var HANDLE_ZONE = 14;
   function edgeHit(mx, my) {
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
       if (a.position === null || a.position === undefined) continue;
       var d = taskStretch(a);
-      // Only show resize handles on tasks wide enough to have distinct edges
-      if (d.hw < 20) continue;
-      var e = taskEdges(a);
-      if (my < e.top - 8 || my > e.bottom + 8) continue;
-      // Handles are on the OUTER side of the edge
-      if (mx >= e.right - 4 && mx <= e.right + HANDLE_ZONE) return { task: a, side: 'right' };
-      if (mx >= e.left - HANDLE_ZONE && mx <= e.left + 4) return { task: a, side: 'left' };
+      // Compute the outer edge of the grab area (whichever is bigger: task or MIN_HIT)
+      var grabHW = Math.max(MIN_HIT, d.hw);
+      var grabHH = Math.max(MIN_HIT, d.hh);
+      if (my < a.y - grabHH - 5 || my > a.y + grabHH + 5) continue;
+      // Handles sit OUTSIDE the grab area
+      var rEdge = a.x + grabHW;
+      var lEdge = a.x - grabHW;
+      if (mx >= rEdge - 2 && mx <= rEdge + HANDLE_ZONE) return { task: a, side: 'right' };
+      if (mx >= lEdge - HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
     }
     return null;
   }
@@ -1248,11 +1275,12 @@
         ctx.fill();
       }
     } else if (!dragging) {
-      // Hover: show handle dots when near edges
+      // Hover: show handle dots outside the grab area
       var hoverEdge = edgeHit(mouseX, mouseY);
       if (hoverEdge) {
-        var he = taskEdges(hoverEdge.task);
-        var dotX = hoverEdge.side === 'right' ? he.right : he.left;
+        var hd = taskStretch(hoverEdge.task);
+        var grabHW = Math.max(MIN_HIT, hd.hw);
+        var dotX = hoverEdge.side === 'right' ? hoverEdge.task.x + grabHW : hoverEdge.task.x - grabHW;
         ctx.beginPath();
         ctx.arc(dotX, hoverEdge.task.y, 3.5, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
