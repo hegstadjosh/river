@@ -1329,7 +1329,13 @@
 
         function fmtDragTime(d) {
           var h = d.getHours(), m = d.getMinutes();
-          return (h%12||12) + ':' + (m<10?'0':'') + m + (h>=12?'pm':'am');
+          var time = (h%12||12) + ':' + (m<10?'0':'') + m + (h>=12?'pm':'am');
+          if (horizonHours >= 720) {
+            return MONTHS[d.getMonth()] + ' ' + d.getDate();
+          } else if (horizonHours >= 96) {
+            return DAYS[d.getDay()] + ' ' + (d.getMonth()+1) + '/' + d.getDate() + ' ' + time;
+          }
+          return time;
         }
 
         ctx.font = '500 11px -apple-system, system-ui, sans-serif';
