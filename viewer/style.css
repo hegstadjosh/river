@@ -133,6 +133,17 @@ canvas {
   color: rgba(200, 165, 110, 0.3);
 }
 
+.panel-times {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(200, 165, 110, 0.7);
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
 /* ── Click Panel ─────────────────────────────────────── */
 
 .panel {

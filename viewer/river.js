@@ -989,6 +989,21 @@
     return total > 0 ? Math.round(total) : null;
   }
 
+  var panelTimes = document.getElementById('panel-times');
+  var panelStart = document.getElementById('panel-start');
+  var panelEnd = document.getElementById('panel-end');
+
+  function fmtPanelTime(d) {
+    var h = d.getHours(), m = d.getMinutes();
+    var time = (h%12||12) + ':' + (m<10?'0':'') + m + (h>=12?'pm':'am');
+    // Include date if not today
+    var today = new Date();
+    if (d.getDate() !== today.getDate() || d.getMonth() !== today.getMonth()) {
+      return DAYS[d.getDay()] + ' ' + MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + time;
+    }
+    return time;
+  }
+
   function showPanel(a, sx, sy) {
     selectedId = a.id;
     panelName.value = a.name;
@@ -996,6 +1011,18 @@
     renderPresetButtons(a.mass);
     panelSolidity.value = Math.round(a.solidity * 100);
     panelFixed.checked = a.fixed;
+
+    // Show start/end for river tasks
+    if (a.position !== null && a.position !== undefined && state) {
+      var now = new Date(state.now);
+      var centerMs = now.getTime() + a.position * 3600000;
+      var halfDurMs = a.mass * 30000; // half duration in ms
+      panelStart.textContent = fmtPanelTime(new Date(centerMs - halfDurMs));
+      panelEnd.textContent = fmtPanelTime(new Date(centerMs + halfDurMs));
+      panelTimes.style.display = '';
+    } else {
+      panelTimes.style.display = 'none';
+    }
 
     var pw = 220, ph = 200;
     var px = sx + 20, py = sy - ph / 2;
