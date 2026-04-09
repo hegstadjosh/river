@@ -1320,20 +1320,19 @@
       if (!a) return;
 
       if (resizing.side === 'top') {
-        // Top = energy. Drag up = more energy.
+        // Top = commitment. Drag up = more committed.
         var deltaY = resizing.startMY - e.clientY;
-        var newEnergy = Math.max(0, Math.min(1, resizing.startEnergy + deltaY / 80));
-        a.energy = newEnergy;
-        // Update panel if open
-        var pe = document.getElementById('panel-energy');
-        if (pe && selectedId === a.id) pe.value = Math.round(newEnergy * 100);
-        canvas.style.cursor = 'ns-resize';
-      } else if (resizing.side === 'bottom') {
-        // Bottom = commitment. Drag down = more committed ("weighing it down").
-        var deltaY = e.clientY - resizing.startMY;
         var newSol = Math.max(0, Math.min(1, resizing.startSolidity + deltaY / 80));
         a.solidity = newSol;
         if (selectedId === a.id) panelSolidity.value = Math.round(newSol * 100);
+        canvas.style.cursor = 'ns-resize';
+      } else if (resizing.side === 'bottom') {
+        // Bottom = energy. Drag up = more energy.
+        var deltaY = resizing.startMY - e.clientY;
+        var newEnergy = Math.max(0, Math.min(1, resizing.startEnergy + deltaY / 80));
+        a.energy = newEnergy;
+        var pe = document.getElementById('panel-energy');
+        if (pe && selectedId === a.id) pe.value = Math.round(newEnergy * 100);
         canvas.style.cursor = 'ns-resize';
       } else {
         // Horizontal: snap the dragged edge to grid
@@ -1392,9 +1391,9 @@
       var a = findTask(resizing.id);
       if (a) {
         if (resizing.side === 'top') {
-          post('put', { id: resizing.id, energy: a.energy });
-        } else if (resizing.side === 'bottom') {
           post('put', { id: resizing.id, solidity: a.solidity });
+        } else if (resizing.side === 'bottom') {
+          post('put', { id: resizing.id, energy: a.energy });
         } else {
           var newMass = a.mass;
           var massDiffHours = (newMass - resizing.startMass) / 60;
@@ -1548,19 +1547,19 @@
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
 
         if (resizing.side === 'top') {
-          // Top = energy
-          var pct = Math.round((ra.energy !== undefined ? ra.energy : 0.5) * 100);
+          // Top = commitment
+          var pct = Math.round(ra.solidity * 100);
           ctx.fillText(pct + '%', ra.x, re.top - 14);
           ctx.font = '400 9px -apple-system, system-ui, sans-serif';
           ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
-          ctx.fillText('energy', ra.x, re.top - 26);
+          ctx.fillText('commitment', ra.x, re.top - 26);
         } else if (resizing.side === 'bottom') {
-          // Bottom = commitment
-          var pct = Math.round(ra.solidity * 100);
+          // Bottom = energy
+          var pct = Math.round((ra.energy !== undefined ? ra.energy : 0.5) * 100);
           ctx.fillText(pct + '%', ra.x, re.bottom + 16);
           ctx.font = '400 9px -apple-system, system-ui, sans-serif';
           ctx.fillStyle = 'rgba(200, 165, 110, 0.5)';
-          ctx.fillText('commitment', ra.x, re.bottom + 28);
+          ctx.fillText('energy', ra.x, re.bottom + 28);
         } else {
           // Horizontal: show duration + time
           ctx.fillText(formatDuration(ra.mass), ra.x, ra.y);
