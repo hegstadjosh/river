@@ -1028,11 +1028,17 @@
       var a = findTask(resizing.id);
       if (a) {
         var newMass = a.mass;
+        var massDiffHours = (newMass - resizing.startMass) / 60;
         var updates = { id: resizing.id, mass: newMass };
-        if (resizing.side === 'left') {
-          // Left edge moved: position changes to keep right edge fixed
-          var massDiff = newMass - resizing.startMass;
-          updates.position = resizing.startPosition - massDiff / 60;
+
+        // Position = center point. To keep an edge fixed when mass changes,
+        // we must shift the center by half the mass delta.
+        if (resizing.side === 'right') {
+          // Keep LEFT edge fixed: center shifts right by half the growth
+          updates.position = resizing.startPosition + massDiffHours / 2;
+        } else {
+          // Keep RIGHT edge fixed: center shifts left by half the growth
+          updates.position = resizing.startPosition - massDiffHours / 2;
         }
         post('put', updates);
       }
