@@ -47,6 +47,7 @@
   var selectedId = null;
   var dragging = null;
   var lastTime = 0;
+  var mouseX = 0, mouseY = 0;
 
   // Flow streaks — the river's current
   var streaks = [];
@@ -886,7 +887,8 @@
         side: edge.side,
         startMass: edge.task.mass,
         startPosition: edge.task.position,
-        startMX: e.clientX
+        startMX: e.clientX,
+        startX: edge.task.x
       };
       canvas.style.cursor = 'ew-resize';
       return;
@@ -907,27 +909,30 @@
   });
 
   canvas.addEventListener('mousemove', function (e) {
+    mouseX = e.clientX; mouseY = e.clientY;
+
     // Resizing
     if (resizing) {
       var deltaPx = e.clientX - resizing.startMX;
-      var deltaHours = deltaPx / PIXELS_PER_HOUR;
-      var deltaMins = deltaHours * 60;
+      var deltaMins = (deltaPx / PIXELS_PER_HOUR) * 60;
+      var a = findTask(resizing.id);
+      if (!a) return;
 
       if (resizing.side === 'right') {
-        // Stretch right: increase duration, keep start time fixed
-        var newMass = Math.max(5, Math.round(resizing.startMass + deltaMins));
-        var a = findTask(resizing.id);
-        if (a) a.mass = newMass; // live visual update
+        // Stretch right: keep left edge fixed, grow rightward
+        a.mass = Math.max(5, Math.round(resizing.startMass + deltaMins));
+        // Shift visual center rightward to keep left edge pinned
+        var massDelta = a.mass - resizing.startMass;
+        var pxDelta = (massDelta / 60) * PIXELS_PER_HOUR / 2;
+        a.x = resizing.startX + pxDelta;
+        a.tx = a.x;
       } else {
-        // Stretch left: increase duration AND shift start earlier
-        var newMass = Math.max(5, Math.round(resizing.startMass - deltaMins));
-        var a = findTask(resizing.id);
-        if (a) {
-          a.mass = newMass;
-          // Shift position to keep the right edge fixed
-          var massDiff = newMass - resizing.startMass;
-          a.position = resizing.startPosition - massDiff / 60;
-        }
+        // Stretch left: keep right edge fixed, grow leftward
+        a.mass = Math.max(5, Math.round(resizing.startMass - deltaMins));
+        var massDelta = a.mass - resizing.startMass;
+        var pxDelta = (massDelta / 60) * PIXELS_PER_HOUR / 2;
+        a.x = resizing.startX - pxDelta;
+        a.tx = a.x;
       }
       canvas.style.cursor = 'ew-resize';
       return;
@@ -956,17 +961,11 @@
     if (resizing) {
       var a = findTask(resizing.id);
       if (a) {
-        // Snap to nearest preset: 10, 30, 90, 180
-        var presets = [10, 30, 90, 180];
-        var best = presets[0];
-        for (var p = 1; p < presets.length; p++) {
-          if (Math.abs(a.mass - presets[p]) < Math.abs(a.mass - best)) best = presets[p];
-        }
-        // Commit — send both new mass and new position
-        var updates = { id: resizing.id, mass: best };
+        var newMass = a.mass;
+        var updates = { id: resizing.id, mass: newMass };
         if (resizing.side === 'left') {
-          // Recalculate position for the snapped mass
-          var massDiff = best - resizing.startMass;
+          // Left edge moved: position changes to keep right edge fixed
+          var massDiff = newMass - resizing.startMass;
           updates.position = resizing.startPosition - massDiff / 60;
         }
         post('put', updates);
@@ -1093,6 +1092,75 @@
     }
 
     drawPastFade();
+
+    // ── Resize indicators ──────────────────────────────────────────
+    // Hover: show handle dots on edges. Resizing: show duration + time.
+
+    if (resizing) {
+      var ra = findTask(resizing.id);
+      if (ra) {
+        var re = taskEdges(ra);
+        var mins = ra.mass;
+        var hrs = Math.floor(mins / 60);
+        var m = Math.round(mins % 60);
+        var durLabel = hrs > 0 ? hrs + 'h' + (m > 0 ? ' ' + m + 'm' : '') : m + 'm';
+
+        // Duration inside the blob
+        ctx.font = '600 13px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillText(durLabel, ra.x, ra.y);
+
+        // Time label at the active edge
+        if (state) {
+          var now = new Date(state.now);
+          var edgeHours = resizing.side === 'right'
+            ? (ra.position || 0) + ra.mass / 60
+            : (ra.position || 0);
+          // For left resize, position changes so recalc
+          if (resizing.side === 'left') {
+            var massDiff = ra.mass - resizing.startMass;
+            edgeHours = resizing.startPosition - massDiff / 60;
+          }
+          var edgeTime = new Date(now.getTime() + edgeHours * 3600000);
+          var eh = edgeTime.getHours(), em = edgeTime.getMinutes();
+          var eLabel = (eh % 12 || 12) + ':' + (em < 10 ? '0' : '') + em + (eh >= 12 ? 'pm' : 'am');
+
+          var labelX = resizing.side === 'right' ? re.right + 8 : re.left - 8;
+          ctx.font = '500 10px -apple-system, system-ui, sans-serif';
+          ctx.textAlign = resizing.side === 'right' ? 'left' : 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = 'rgba(200, 165, 110, 0.7)';
+          ctx.fillText(eLabel, labelX, ra.y);
+        }
+
+        // Handle dot on active edge
+        var dotX = resizing.side === 'right' ? re.right : re.left;
+        ctx.beginPath();
+        ctx.arc(dotX, ra.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.6)';
+        ctx.fill();
+      }
+    } else if (!dragging) {
+      // Hover: show handle dots when near edges
+      var hoverEdge = edgeHit(mouseX, mouseY);
+      if (hoverEdge) {
+        var he = taskEdges(hoverEdge.task);
+        var dotX = hoverEdge.side === 'right' ? he.right : he.left;
+        ctx.beginPath();
+        ctx.arc(dotX, hoverEdge.task.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.4)';
+        ctx.fill();
+        // Small vertical line as grip indicator
+        ctx.beginPath();
+        ctx.moveTo(dotX, hoverEdge.task.y - 8);
+        ctx.lineTo(dotX, hoverEdge.task.y + 8);
+        ctx.strokeStyle = 'rgba(200, 165, 110, 0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
   }
 
   requestAnimationFrame(frame);
