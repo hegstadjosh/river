@@ -579,19 +579,15 @@
     if (a.alive) r *= 1.35;
 
     // ── Dimensions ──
-    // Width = duration in pixels (horizontal only, scales with timeline)
-    // Height = fixed visual presence (does NOT scale with duration)
+    // Width = ALWAYS exact duration in pixels. 3h at year view = tiny. Truth.
+    // Height = visual presence, independent of timeline zoom.
     var hh = r * 0.85;
     var hw;
     if (a.position !== null && a.position !== undefined) {
       var durationPx = (a.mass / 60) * PIXELS_PER_HOUR;
-      var minHW = r; // at minimum, a circle
-      // Lerp from circle to full duration width based on solidity
-      hw = a.fixed
-        ? Math.max(minHW, durationPx / 2)
-        : minHW + (Math.max(0, durationPx / 2 - minHW)) * Math.min(1, sol / 0.8);
+      hw = Math.max(3, durationPx / 2); // min 3px so it's at least clickable
     } else {
-      hw = r; // cloud tasks are circular
+      hw = r; // cloud tasks use radius (no time dimension)
     }
 
     // ── Visual parameters from solidity ──
@@ -758,11 +754,7 @@
     var hh = r * 0.85;
     var hw;
     if (a.position !== null && a.position !== undefined) {
-      var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
-      var minHW = r;
-      hw = a.fixed
-        ? Math.max(minHW, dpx / 2)
-        : minHW + (Math.max(0, dpx / 2 - minHW)) * Math.min(1, a.solidity / 0.8);
+      hw = Math.max(3, (a.mass / 60) * PIXELS_PER_HOUR / 2);
     } else {
       hw = r;
     }
