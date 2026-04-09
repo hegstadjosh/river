@@ -512,12 +512,12 @@
       majorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 1);
       minorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 0.5);
       majorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
-      minorLabel = majorLabel;
+      minorLabel = function(d) { var m=d.getMinutes(); return m ? ':' + (m<10?'0':'') + m : ''; };
     } else if (horizonHours <= 24) {
       majorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 6);
       minorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 3);
       majorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
-      minorLabel = majorLabel;
+      minorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
     } else if (horizonHours <= 96) {
       majorTimes = localMidnights(viewLeftMs, viewRightMs);
       minorTimes = localHourBoundaries(viewLeftMs, viewRightMs, 12);
@@ -1306,6 +1306,37 @@
         ctx.strokeStyle = 'rgba(200, 165, 110, 0.3)';
         ctx.lineWidth = 1.5;
         ctx.stroke();
+      }
+    }
+
+    // ── Drag overlay: show start/end times while moving ──
+    if (dragging && dragging.moved) {
+      var da = findTask(dragging.id);
+      if (da && da.position !== null && da.position !== undefined && state) {
+        var dnow = new Date(state.now);
+        var dd = taskStretch(da);
+        var startHours = (da.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
+        var endHours = startHours + da.mass / 60;
+
+        var startTime = new Date(dnow.getTime() + startHours * 3600000);
+        var endTime = new Date(dnow.getTime() + endHours * 3600000);
+
+        function fmtDragTime(d) {
+          var h = d.getHours(), m = d.getMinutes();
+          return (h%12||12) + ':' + (m<10?'0':'') + m + (h>=12?'pm':'am');
+        }
+
+        ctx.font = '500 11px -apple-system, system-ui, sans-serif';
+        ctx.textBaseline = 'middle';
+
+        // Start time to the left
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.7)';
+        ctx.fillText(fmtDragTime(startTime), da.x - dd.hw - 8, da.y);
+
+        // End time to the right
+        ctx.textAlign = 'left';
+        ctx.fillText(fmtDragTime(endTime), da.x + dd.hw + 8, da.y);
       }
     }
   }
