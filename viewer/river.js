@@ -231,7 +231,10 @@
     return { x: x, y: y };
   }
 
-  function blobR(mass) { return Math.sqrt(mass) * BLOB_SCALE; }
+  // Base radius — capped so long tasks don't become vertically huge
+  // Vertical size represents "weight/presence", NOT duration
+  var MAX_BLOB_R = 30;
+  function blobR(mass) { return Math.min(MAX_BLOB_R, Math.sqrt(mass) * BLOB_SCALE); }
 
   function tagHue(tags) {
     if (!tags || !tags.length) return DEFAULT_HUE;
@@ -562,17 +565,21 @@
 
     if (a.alive) r *= 1.35;
 
-    // ── Dimensions: circle → duration rectangle ──
-    var stretch = 1;
+    // ── Dimensions ──
+    // Width = duration in pixels (horizontal only, scales with timeline)
+    // Height = fixed visual presence (does NOT scale with duration)
+    var hh = r * 0.85;
+    var hw;
     if (a.position !== null && a.position !== undefined) {
       var durationPx = (a.mass / 60) * PIXELS_PER_HOUR;
-      var targetStretch = Math.max(1, durationPx / (r * 2));
-      // Fixed tasks always show full duration. Others lerp with solidity.
-      stretch = a.fixed ? targetStretch : 1 + (targetStretch - 1) * Math.min(1, sol / 0.8);
+      var minHW = r; // at minimum, a circle
+      // Lerp from circle to full duration width based on solidity
+      hw = a.fixed
+        ? Math.max(minHW, durationPx / 2)
+        : minHW + (Math.max(0, durationPx / 2 - minHW)) * Math.min(1, sol / 0.8);
+    } else {
+      hw = r; // cloud tasks are circular
     }
-
-    var hw = r * stretch;  // half-width
-    var hh = r * 0.85;     // half-height (slightly squished)
 
     // ── Visual parameters from solidity ──
     var alpha = (0.2 + sol * 0.75) * dim;
@@ -735,13 +742,18 @@
 
   function taskStretch(a) {
     var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
-    var s = 1;
+    var hh = r * 0.85;
+    var hw;
     if (a.position !== null && a.position !== undefined) {
       var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
-      var target = Math.max(1, dpx / (r * 2));
-      s = a.fixed ? target : 1 + (target - 1) * Math.min(1, a.solidity / 0.8);
+      var minHW = r;
+      hw = a.fixed
+        ? Math.max(minHW, dpx / 2)
+        : minHW + (Math.max(0, dpx / 2 - minHW)) * Math.min(1, a.solidity / 0.8);
+    } else {
+      hw = r;
     }
-    return { r: r, hw: r * s, hh: r * 0.85 };
+    return { r: r, hw: hw, hh: hh };
   }
 
   function hitTest(mx, my) {
