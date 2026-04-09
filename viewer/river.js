@@ -968,15 +968,42 @@
   var panelStart = document.getElementById('panel-start');
   var panelEnd = document.getElementById('panel-end');
 
-  function fmtPanelTime(d) {
+  function fmtCompact(d) {
     var h = d.getHours(), m = d.getMinutes();
-    var time = (h%12||12) + ':' + (m<10?'0':'') + m + (h>=12?'pm':'am');
-    // Include date if not today
+    var time = (h%12||12) + (m ? ':' + (m<10?'0':'') + m : '') + (h>=12?'pm':'am');
     var today = new Date();
-    if (d.getDate() !== today.getDate() || d.getMonth() !== today.getMonth()) {
-      return DAYS[d.getDay()] + ' ' + MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + time;
+    if (d.toDateString() === today.toDateString()) return time;
+    return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + time;
+  }
+
+  function parseCompactTime(str) {
+    // Try parsing things like "3pm", "3:30pm", "Apr 10, 3pm", "4/10 3:30pm"
+    str = str.trim().toLowerCase();
+    var now = new Date();
+    var dateMatch = str.match(/^([a-z]+)\s+(\d+),?\s*/);
+    var slashMatch = str.match(/^(\d+)\/(\d+),?\s*/);
+    var day = now.getDate(), month = now.getMonth(), year = now.getFullYear();
+
+    if (dateMatch) {
+      var mi = MONTHS.findIndex(function(m) { return m.toLowerCase().startsWith(dateMatch[1]); });
+      if (mi >= 0) month = mi;
+      day = parseInt(dateMatch[2]);
+      str = str.slice(dateMatch[0].length);
+    } else if (slashMatch) {
+      month = parseInt(slashMatch[1]) - 1;
+      day = parseInt(slashMatch[2]);
+      str = str.slice(slashMatch[0].length);
     }
-    return time;
+
+    var timeMatch = str.match(/(\d+)(?::(\d+))?\s*(am|pm)?/);
+    if (!timeMatch) return null;
+    var h = parseInt(timeMatch[1]);
+    var m = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+    var ampm = timeMatch[3];
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+
+    return new Date(year, month, day, h, m);
   }
 
   function showPanel(a, sx, sy) {
@@ -991,9 +1018,9 @@
     if (a.position !== null && a.position !== undefined && state) {
       var now = new Date(state.now);
       var centerMs = now.getTime() + a.position * 3600000;
-      var halfDurMs = a.mass * 30000; // half duration in ms
-      panelStart.textContent = fmtPanelTime(new Date(centerMs - halfDurMs));
-      panelEnd.textContent = fmtPanelTime(new Date(centerMs + halfDurMs));
+      var halfDurMs = a.mass * 30000;
+      panelStart.value = fmtCompact(new Date(centerMs - halfDurMs));
+      panelEnd.value = fmtCompact(new Date(centerMs + halfDurMs));
       panelTimes.style.display = '';
     } else {
       panelTimes.style.display = 'none';
@@ -1048,6 +1075,39 @@
     if (!selectedId) return;
     post('put', { id: selectedId, solidity: Number(panelSolidity.value) / 100 });
   });
+  // Start changed: keep duration, move task
+  panelStart.addEventListener('keydown', function(e) { if (e.key === 'Enter') { panelStart.blur(); } });
+  panelStart.addEventListener('blur', function () {
+    if (!selectedId || !state) return;
+    var a = findTask(selectedId);
+    if (!a) return;
+    var parsed = parseCompactTime(panelStart.value);
+    if (!parsed) return;
+    var nowMs = new Date(state.now).getTime();
+    var newCenterH = (parsed.getTime() - nowMs) / 3600000 + a.mass / 120;
+    post('put', { id: selectedId, position: newCenterH });
+    panelStart.value = fmtCompact(parsed);
+    panelEnd.value = fmtCompact(new Date(parsed.getTime() + a.mass * 60000));
+  });
+
+  // End changed: keep start, change duration
+  panelEnd.addEventListener('keydown', function(e) { if (e.key === 'Enter') { panelEnd.blur(); } });
+  panelEnd.addEventListener('blur', function () {
+    if (!selectedId || !state) return;
+    var a = findTask(selectedId);
+    if (!a) return;
+    var startParsed = parseCompactTime(panelStart.value);
+    var endParsed = parseCompactTime(panelEnd.value);
+    if (!startParsed || !endParsed) return;
+    var newMass = Math.max(5, Math.round((endParsed.getTime() - startParsed.getTime()) / 60000));
+    var nowMs = new Date(state.now).getTime();
+    var newCenterH = (startParsed.getTime() - nowMs) / 3600000 + newMass / 120;
+    post('put', { id: selectedId, mass: newMass, position: newCenterH });
+    panelDurInput.value = formatDuration(newMass);
+    panelEnd.value = fmtCompact(endParsed);
+    renderPresetButtons(newMass);
+  });
+
   panelFixed.addEventListener('change', function () {
     if (!selectedId) return;
     post('put', { id: selectedId, fixed: panelFixed.checked });
