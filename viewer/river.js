@@ -168,13 +168,13 @@
   hzPrev.addEventListener('click', function () {
     scrollHours -= horizonHours * 0.75;
     scrollVel = 0;
-    updateFrameLabel();
+    sync(); updateFrameLabel();
   });
 
   hzNext.addEventListener('click', function () {
     scrollHours += horizonHours * 0.75;
     scrollVel = 0;
-    updateFrameLabel();
+    sync(); updateFrameLabel();
   });
 
   // ── Scroll / Trackpad ──────────────────────────────────────────────
@@ -187,7 +187,8 @@
     // Convert pixels to hours
     var hoursPerPx = 1 / PIXELS_PER_HOUR;
     scrollHours += delta * hoursPerPx * 1.2;
-    scrollVel = 0;
+    scrollVel = 0; // kill momentum on direct input
+    sync();
     updateFrameLabel();
   }, { passive: false });
 
@@ -199,10 +200,8 @@
 
   // Convert hours-from-now to screen X, accounting for scroll
   function hoursToX(h) { return W * NOW_X + (h - scrollHours) * PIXELS_PER_HOUR; }
-  // The now-line's screen position
+  // The now-line's screen position (moves when scrolling)
   function nx() { return hoursToX(0); }
-  // World X for a task (no scroll — used for target positions)
-  function worldX(h) { return W * NOW_X + h * PIXELS_PER_HOUR; }
 
   // Deterministic scatter from ID
   function hashFrac(id, seed) {
@@ -222,8 +221,7 @@
   }
 
   function riverPos(task) {
-    // World-space X — scroll offset applied only during render
-    var x = worldX(task.position || 0);
+    var x = hoursToX(task.position || 0);
     var top = surfaceY() + 30;
     var bot = H - 50;
     var mid = (top + bot) / 2;
@@ -232,18 +230,7 @@
     return { x: x, y: y };
   }
 
-  // Blob dimensions — width is duration-based, height is sqrt-scaled
-  // At low solidity: roughly circular (width ≈ height)
-  // At high solidity: width stretches to actual duration in pixels
-  function blobDims(mass, solidity) {
-    var baseR = Math.sqrt(mass) * BLOB_SCALE;
-    var durationW = (mass / 60) * PIXELS_PER_HOUR; // actual time width
-    var minW = baseR * 2; // at sol=0, it's a circle
-    // Lerp from circular to duration-width as solidity increases
-    var w = minW + (Math.max(durationW, minW) - minW) * solidity;
-    var h = baseR * 2 * (1 - solidity * 0.3); // gets shorter as it firms up
-    return { w: Math.max(w, 20), h: Math.max(h, 16), r: baseR };
-  }
+  function blobR(mass) { return Math.sqrt(mass) * BLOB_SCALE; }
 
   function tagHue(tags) {
     if (!tags || !tags.length) return DEFAULT_HUE;
@@ -552,11 +539,10 @@
   //   0.1  → a wisp, barely there, bleeding edges, suggestion of a thought
 
   function drawBlob(a, t) {
-    var dims = blobDims(a.mass, a.solidity);
+    var r = blobR(a.mass);
     var hue = tagHue(a.tags);
     var sol = a.solidity;
     var x = a.x, y = a.y;
-    var hw = dims.w / 2, hh = dims.h / 2; // half-width, half-height
 
     // Is anything alive? If so, non-alive tasks dim.
     var anyAlive = false;
@@ -565,107 +551,79 @@
     }
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
-    // Alive: grow
-    if (a.alive) { hw *= 1.3; hh *= 1.3; }
+    // Alive: grow, intensify
+    if (a.alive) r *= 1.35;
 
-    // Fixed tasks → rock (always a crisp rectangle)
+    // Fixed tasks → rock
     if (a.fixed) {
-      drawRock(x, y, hw, hh, a, dim, t);
+      drawRock(x, y, r, a, dim, t);
       return;
     }
 
     // Solidity → visual parameters
-    var alpha = (0.2 + sol * 0.75) * dim;
-    var blur = Math.max(0, (1 - sol) * 10);
-    var sat = 30 + sol * 45;
-    var lit = 40 + sol * 18;
+    var alpha = (0.2 + sol * 0.75) * dim;          // 0.2 – 0.95
+    var blur = Math.max(0, (1 - sol) * 10);         // 0 – 10px
+    var sat = 30 + sol * 45;                         // 30 – 75%
+    var lit = 40 + sol * 18;                         // 40 – 58%
 
-    // Past tasks: desaturate and cool
-    if (a.position !== null && a.position < 0) {
+    // For past tasks (position < 0), desaturate and cool
+    var isPast = (a.position !== null && a.position < 0);
+    if (isPast) {
       sat *= 0.4;
-      hue = hue * 0.5 + 210 * 0.5;
-      alpha *= Math.max(0.1, 1 + a.position * 0.3);
+      hue = hue * 0.5 + 210 * 0.5; // shift toward blue-gray
+      alpha *= Math.max(0.1, 1 + a.position * 0.3); // fade over ~3 hours
     }
-
-    // Corner radius: 50% at sol=0 (ellipse), 8px at sol=1 (rectangle)
-    var maxCorner = Math.min(hw, hh);
-    var cornerR = maxCorner - (maxCorner - 8) * sol;
 
     ctx.save();
 
-    // Alive glow
+    // Alive glow — pulses with the now-line
     if (a.alive) {
       var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
-      var glowHW = hw * 1.6 + breath * hw * 0.2;
-      var glowHH = hh * 1.6 + breath * hh * 0.2;
-      var gg = ctx.createRadialGradient(x, y, Math.min(hw, hh) * 0.5, x, y, Math.max(glowHW, glowHH));
+      var gr = r * 2.0 + breath * r * 0.4;
+      var gg = ctx.createRadialGradient(x, y, r * 0.5, x, y, gr);
       gg.addColorStop(0, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0.18)');
       gg.addColorStop(1, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
       ctx.fillStyle = gg;
       ctx.beginPath();
-      ctx.ellipse(x, y, glowHW, glowHH, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y, gr, gr * 0.85, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
+    // Apply blur for softer blobs
     if (blur > 1.5) ctx.filter = 'blur(' + blur.toFixed(1) + 'px)';
 
-    // ── The shape morph ──────────────────────────────────
-    // Low solidity: 3 overlapping organic ellipses (wispy, cell-like)
-    // High solidity: single crisp rounded rectangle (time block)
-    // The transition is continuous.
+    // The blob: 3 overlapping ellipses, slightly offset
+    // Each has its own radial gradient — this creates the organic, cell-like form
+    var layers = [
+      { dx: 0,          dy: 0,          rx: r,        ry: r * 0.85, rot: 0,      a: alpha },
+      { dx: r * 0.1,    dy: -r * 0.07,  rx: r * 0.9,  ry: r * 0.92, rot: 0.15,  a: alpha * 0.65 },
+      { dx: -r * 0.07,  dy: r * 0.09,   rx: r * 0.82, ry: r * 0.78, rot: -0.1,  a: alpha * 0.45 }
+    ];
 
-    if (sol < 0.6) {
-      // Organic mode: overlapping ellipses with radial gradients
-      // Offset amount decreases as solidity increases (tightening into form)
-      var scatter = (1 - sol / 0.6); // 1 at sol=0, 0 at sol=0.6
-      var layers = [
-        { dx: 0,                   dy: 0,                  rx: hw,        ry: hh,        a: alpha },
-        { dx: hw * 0.1 * scatter,  dy: -hh * 0.1 * scatter, rx: hw * 0.9, ry: hh * 0.92, a: alpha * 0.6 },
-        { dx: -hw * 0.08 * scatter, dy: hh * 0.1 * scatter,  rx: hw * 0.85, ry: hh * 0.8,  a: alpha * 0.4 }
-      ];
+    for (var li = 0; li < layers.length; li++) {
+      var L = layers[li];
+      var cx = x + L.dx, cy = y + L.dy;
+      var maxR = Math.max(L.rx, L.ry);
+      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
 
-      for (var li = 0; li < layers.length; li++) {
-        var L = layers[li];
-        var cx = x + L.dx, cy = y + L.dy;
-        var maxR = Math.max(L.rx, L.ry);
-        var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
-        g.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,' + L.a + ')');
-        g.addColorStop(0.5, 'hsla(' + hue + ',' + (sat*0.8) + '%,' + (lit*0.9) + '%,' + (L.a*0.6) + ')');
-        g.addColorStop(0.8, 'hsla(' + hue + ',' + (sat*0.6) + '%,' + (lit*0.8) + '%,' + (L.a*0.2) + ')');
-        g.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, L.rx, L.ry, 0.05 * (li - 1) * scatter, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else {
-      // Forming/solid mode: single rounded rect with gradient fill
-      // The shape is a roundRect that gets crisper as solidity → 1
-      var g = ctx.createLinearGradient(x - hw, y, x + hw, y);
-      g.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + alpha + ')');
-      g.addColorStop(0.5, 'hsla(' + hue + ',' + (sat + 5) + '%,' + lit + '%,' + alpha + ')');
-      g.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + (alpha * 0.9) + ')');
+      // Inner: warm and present. Outer: fades to nothing.
+      g.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,' + L.a + ')');
+      g.addColorStop(0.5, 'hsla(' + hue + ',' + (sat * 0.8) + '%,' + (lit * 0.9) + '%,' + (L.a * 0.6) + ')');
+      g.addColorStop(0.8, 'hsla(' + hue + ',' + (sat * 0.6) + '%,' + (lit * 0.8) + '%,' + (L.a * 0.2) + ')');
+      g.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
+
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.roundRect(x - hw, y - hh, hw * 2, hh * 2, cornerR);
-      ctx.fill();
-
-      // Subtle inner glow for warmth
-      var ig = ctx.createRadialGradient(x, y, 0, x, y, Math.max(hw, hh));
-      ig.addColorStop(0, 'hsla(' + hue + ',' + sat + '%,' + (lit + 10) + '%,' + (alpha * 0.15) + ')');
-      ig.addColorStop(1, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
-      ctx.fillStyle = ig;
-      ctx.beginPath();
-      ctx.roundRect(x - hw, y - hh, hw * 2, hh * 2, cornerR);
+      ctx.ellipse(cx, cy, L.rx, L.ry, L.rot, 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.filter = 'none';
 
-    // Selection ring
+    // Selection indicator — soft dashed ring
     if (selectedId === a.id) {
       ctx.beginPath();
-      ctx.roundRect(x - hw - 5, y - hh - 5, hw * 2 + 10, hh * 2 + 10, cornerR + 3);
+      ctx.ellipse(x, y, r + 6, r * 0.85 + 6, 0, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(200, 165, 110, 0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
@@ -675,19 +633,21 @@
 
     ctx.restore();
 
-    // Label
-    var fontSize = Math.max(11, Math.min(14, Math.min(hw * 0.4, hh * 0.7)));
+    // Label — always legible, positioned inside or below depending on size
+    var fontSize = Math.max(11, Math.min(14, r * 0.4));
     var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
 
+    // For small blobs, render label below instead of inside
     var nameW = ctx.measureText(a.name).width;
-    if (nameW < hw * 1.8) {
+    if (nameW < r * 2.2) {
       ctx.fillText(a.name, x, y);
     } else {
-      ctx.fillText(a.name, x, y + hh + fontSize + 2);
+      // Label below the blob
+      ctx.fillText(a.name, x, y + r + fontSize + 2);
     }
   }
 
@@ -696,11 +656,9 @@
   // Rounded rectangles with a stone texture — warm grays, subtle bevel.
   // The river flows around them; they don't flow with it.
 
-  function drawRock(x, y, hw, hh, a, dim, t) {
-    // Rocks always show full duration width
-    var durationW = (a.mass / 60) * PIXELS_PER_HOUR;
-    var w = Math.max(durationW, hw * 2);
-    var h = hh * 1.6;
+  function drawRock(x, y, r, a, dim, t) {
+    var w = r * 2.0;
+    var h = r * 1.3;
     var cr = 8;
     var alpha = 0.9 * dim;
 
@@ -793,16 +751,16 @@
   // ── Hit Testing ─────────────────────────────────────────────────────
 
   function hitTest(mx, my) {
-    var scrollPx = scrollHours * PIXELS_PER_HOUR;
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
-      var dims = blobDims(a.mass, a.solidity);
-      var scale = a.alive ? 1.3 : 1.0;
-      var hw = dims.w / 2 * scale + 5;
-      var hh = dims.h / 2 * scale + 5;
-      // Compare in screen space
-      var screenX = (a.position !== null && a.position !== undefined) ? a.x - scrollPx : a.x;
-      if (Math.abs(mx - screenX) <= hw && Math.abs(my - a.y) <= hh) return a;
+      var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
+      if (a.fixed) {
+        var hw = r * 1.0, hh = r * 0.65;
+        if (Math.abs(mx - a.x) <= hw && Math.abs(my - a.y) <= hh) return a;
+      } else {
+        var dx = mx - a.x, dy = my - a.y;
+        if (dx * dx + dy * dy <= r * r) return a;
+      }
     }
     return null;
   }
@@ -882,11 +840,9 @@
   canvas.addEventListener('mousedown', function (e) {
     var hit = hitTest(e.clientX, e.clientY);
     if (hit) {
-      var scrollPx = scrollHours * PIXELS_PER_HOUR;
-      var screenX = (hit.position !== null && hit.position !== undefined) ? hit.x - scrollPx : hit.x;
       dragging = {
         id: hit.id,
-        sx: screenX, sy: hit.y,
+        sx: hit.x, sy: hit.y,
         mx: e.clientX, my: e.clientY,
         moved: false,
         zone: (hit.position !== null && hit.position !== undefined) ? 'river' : 'cloud'
@@ -905,8 +861,8 @@
     if (!dragging.moved && Math.sqrt(dx*dx + dy*dy) < DRAG_THRESHOLD) return;
     dragging.moved = true;
     canvas.style.cursor = 'grabbing';
-    dragging.curScreenX = dragging.sx + dx;
-    dragging.curScreenY = dragging.sy + dy;
+    var a = findTask(dragging.id);
+    if (a) { a.x = dragging.sx + dx; a.y = dragging.sy + dy; a.tx = a.x; a.ty = a.y; }
   });
 
   canvas.addEventListener('mouseup', function (e) {
@@ -922,25 +878,24 @@
     var a = findTask(d.id);
     if (!a) return;
     var boundary = surfaceY();
-    var dropScreenX = d.curScreenX || d.sx;
-    var dropScreenY = d.curScreenY || d.sy;
 
-    // Convert screen X to hours-from-now
-    var dropHours = (dropScreenX - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
-
-    if (d.zone === 'cloud' && dropScreenY > boundary) {
-      a.customY = dropScreenY;
+    // Convert screen X to hours-from-now: invert hoursToX
+    var dropHours = (a.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
+    if (d.zone === 'cloud' && a.y > boundary) {
+      a.customY = a.y; // persist vertical position
       post('move', { id: d.id, position: dropHours });
-    } else if (d.zone === 'river' && dropScreenY < boundary) {
-      a.customY = dropScreenY;
+    } else if (d.zone === 'river' && a.y < boundary) {
+      a.customY = a.y; // persist in cloud too
       post('move', { id: d.id, position: null });
     } else if (d.zone === 'river') {
-      a.customY = dropScreenY;
+      a.customY = a.y; // persist vertical position
       post('move', { id: d.id, position: dropHours });
     } else {
-      a.customY = dropScreenY;
+      // Cloud → Cloud: just persist the Y
+      a.customY = a.y;
     }
-    a.ty = dropScreenY;
+    // Update target to where it was dropped (keep Y, let X snap to data)
+    a.ty = a.y;
   });
 
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
@@ -993,8 +948,6 @@
     dt = Math.min(dt, 0.1);
     lastTime = t;
 
-    var scrollPx = scrollHours * PIXELS_PER_HOUR;
-
     // Spring physics — fluid, damped, organic
     for (var i = 0; i < animTasks.length; i++) {
       var a = animTasks[i];
@@ -1007,7 +960,7 @@
       a.y += a.vy;
     }
 
-    // Draw the world (background doesn't scroll)
+    // Draw the world
     drawWorld(t);
     drawStreaks(dt);
     drawNowLine(t);
@@ -1022,32 +975,13 @@
 
     for (var j = 0; j < sorted.length; j++) {
       var task = sorted[j];
-      var isBeingDragged = dragging && dragging.id === task.id && dragging.moved;
-
-      // Compute screen X
-      var screenX;
-      if (isBeingDragged) {
-        screenX = dragging.curScreenX || dragging.sx;
-      } else if (task.position !== null && task.position !== undefined) {
-        screenX = task.x - scrollPx;
-      } else {
-        screenX = task.x; // cloud tasks don't scroll
+      // Viewport culling — skip river tasks far off-screen
+      if (task.position !== null && task.position !== undefined) {
+        var screenX = hoursToX(task.position);
+        var r = blobR(task.mass) * 2;
+        if (screenX + r < -50 || screenX - r > W + 50) continue;
       }
-
-      // Viewport culling
-      if (!isBeingDragged && task.position !== null && task.position !== undefined) {
-        var cullW = blobDims(task.mass, task.solidity).w + 50;
-        if (screenX + cullW < 0 || screenX - cullW > W) continue;
-      }
-
-      // Draw at screen position
-      var worldXSave = task.x;
-      var worldYSave = task.y;
-      task.x = screenX;
-      if (isBeingDragged) task.y = dragging.curScreenY || dragging.sy;
       drawBlob(task, t);
-      task.x = worldXSave;
-      task.y = worldYSave;
     }
 
     drawPastFade();
