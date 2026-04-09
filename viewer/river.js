@@ -564,7 +564,6 @@
   // "Fixed" just means pinned to a time. Not a different shape.
 
   function drawBlob(a, t) {
-    var r = blobR(a.mass);
     var hue = tagHue(a.tags);
     var sol = a.solidity;
     var x = a.x, y = a.y;
@@ -576,18 +575,18 @@
     }
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
-    if (a.alive) r *= 1.35;
-
     // ── Dimensions ──
-    // Width = ALWAYS exact duration in pixels. 3h at year view = tiny. Truth.
-    // Height = visual presence, independent of timeline zoom.
-    var hh = r * 0.85;
-    var hw;
+    // Width = exact duration in pixels. Always.
+    // Height = proportional to width, clamped. Never more oblong than ~3:1.
+    var hw, hh;
     if (a.position !== null && a.position !== undefined) {
       var durationPx = (a.mass / 60) * PIXELS_PER_HOUR;
-      hw = Math.max(3, durationPx / 2); // min 3px so it's at least clickable
+      hw = Math.max(8, durationPx / 2); // min 8px so it's grabbable
+      hh = Math.min(hw, Math.max(14, hw * 0.6)); // proportional, max ratio ~1.7:1
+      hh = Math.min(hh, 60); // absolute max height
     } else {
-      hw = r; // cloud tasks use radius (no time dimension)
+      // Cloud: circle based on a modest fixed size
+      hw = 18; hh = 18;
     }
 
     // ── Visual parameters from solidity ──
@@ -611,9 +610,10 @@
 
     // ── Alive glow ──
     if (a.alive) {
+      hw *= 1.3; hh *= 1.3;
       var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
-      var glowR = Math.max(hw, hh) * 2.0 + breath * r * 0.4;
-      var gg = ctx.createRadialGradient(x, y, r * 0.5, x, y, glowR);
+      var glowR = Math.max(hw, hh) * 2.0 + breath * 10;
+      var gg = ctx.createRadialGradient(x, y, Math.min(hw, hh) * 0.5, x, y, glowR);
       gg.addColorStop(0, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0.18)');
       gg.addColorStop(1, 'hsla(' + hue + ',' + sat + '%,' + lit + '%,0)');
       ctx.fillStyle = gg;
@@ -635,10 +635,11 @@
       // Organic layers — fade out as rectness increases
       var organicAlpha = alpha * (1 - rectness * 0.7);
       var scatter = Math.max(0, 1 - sol * 1.2);
+      var sc = Math.min(hw, hh) * 0.12 * scatter; // scatter distance
       var layers = [
-        { dx: 0,                   dy: 0,                   rx: hw,        ry: hh,        a: organicAlpha },
-        { dx: r * 0.1 * scatter,   dy: -r * 0.07 * scatter, rx: hw * 0.9,  ry: hh * 1.05, a: organicAlpha * 0.6 },
-        { dx: -r * 0.07 * scatter, dy: r * 0.09 * scatter,  rx: hw * 0.85, ry: hh * 0.9,  a: organicAlpha * 0.4 }
+        { dx: 0,     dy: 0,     rx: hw,        ry: hh,        a: organicAlpha },
+        { dx: sc,    dy: -sc*0.7, rx: hw * 0.9,  ry: hh * 1.05, a: organicAlpha * 0.6 },
+        { dx: -sc*0.7, dy: sc,   rx: hw * 0.85, ry: hh * 0.9,  a: organicAlpha * 0.4 }
       ];
 
       for (var li = 0; li < layers.length; li++) {
@@ -712,7 +713,7 @@
     // Label — hide during resize
     if (resizing && resizing.id === a.id) return;
 
-    var fontSize = Math.max(11, Math.min(14, Math.min(hw * 0.35, hh * 0.7)));
+    var fontSize = Math.max(10, Math.min(14, hh * 0.65));
     var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -750,22 +751,27 @@
   // ── Hit Testing ─────────────────────────────────────────────────────
 
   function taskStretch(a) {
-    var r = blobR(a.mass) * (a.alive ? 1.35 : 1.0);
-    var hh = r * 0.85;
-    var hw;
+    var hw, hh;
     if (a.position !== null && a.position !== undefined) {
-      hw = Math.max(3, (a.mass / 60) * PIXELS_PER_HOUR / 2);
+      var dpx = (a.mass / 60) * PIXELS_PER_HOUR;
+      hw = Math.max(8, dpx / 2);
+      hh = Math.min(hw, Math.max(14, hw * 0.6));
+      hh = Math.min(hh, 60);
     } else {
-      hw = r;
+      hw = 18; hh = 18;
     }
-    return { r: r, hw: hw, hh: hh };
+    if (a.alive) { hw *= 1.3; hh *= 1.3; }
+    return { r: Math.max(hw, hh), hw: hw, hh: hh };
   }
 
+  var MIN_HIT = 15; // minimum grab area radius
   function hitTest(mx, my) {
     for (var i = animTasks.length - 1; i >= 0; i--) {
       var a = animTasks[i];
       var d = taskStretch(a);
-      if (Math.abs(mx - a.x) <= d.hw + 5 && Math.abs(my - a.y) <= d.hh + 5) return a;
+      var hitHW = Math.max(MIN_HIT, d.hw + 5);
+      var hitHH = Math.max(MIN_HIT, d.hh + 5);
+      if (Math.abs(mx - a.x) <= hitHW && Math.abs(my - a.y) <= hitHH) return a;
     }
     return null;
   }
@@ -956,9 +962,12 @@
   var resizing = null; // { id, side, startMass, startPosition, startMX }
 
   canvas.addEventListener('mousedown', function (e) {
-    // Check for resize handle first
+    // For small tasks, grab takes priority over resize
+    var hit = hitTest(e.clientX, e.clientY);
     var edge = edgeHit(e.clientX, e.clientY);
-    if (edge) {
+
+    // Only use resize if the task is wide enough to have distinct edges
+    if (edge && (!hit || taskStretch(edge.task).hw > 20)) {
       resizing = {
         id: edge.task.id,
         side: edge.side,
@@ -971,7 +980,6 @@
       return;
     }
 
-    var hit = hitTest(e.clientX, e.clientY);
     if (hit) {
       dragging = {
         id: hit.id,
@@ -1168,8 +1176,8 @@
       // Viewport culling — skip river tasks far off-screen
       if (task.position !== null && task.position !== undefined) {
         var screenX = hoursToX(task.position);
-        var r = blobR(task.mass) * 2;
-        if (screenX + r < -50 || screenX - r > W + 50) continue;
+        var cullHW = taskStretch(task).hw + 50;
+        if (screenX + cullHW < 0 || screenX - cullHW > W) continue;
       }
       drawBlob(task, t);
     }
