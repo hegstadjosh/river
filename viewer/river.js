@@ -166,14 +166,25 @@
     });
   });
 
+  // Step size = 1 unit of the frame (1 day for day view, 1 week for week, etc.)
+  function frameStep() {
+    if (horizonHours <= 6) return 6;       // 6 hours
+    if (horizonHours <= 24) return 24;      // 1 day
+    if (horizonHours <= 72) return 24;      // 1 day
+    if (horizonHours <= 168) return 168;    // 1 week
+    if (horizonHours <= 720) return 720;    // 1 month
+    if (horizonHours <= 2160) return 2160;  // 1 quarter
+    return 8760;                             // 1 year
+  }
+
   hzPrev.addEventListener('click', function () {
-    scrollHours -= horizonHours * 0.75;
+    scrollHours -= frameStep();
     scrollVel = 0;
     sync(); updateFrameLabel();
   });
 
   hzNext.addEventListener('click', function () {
-    scrollHours += horizonHours * 0.75;
+    scrollHours += frameStep();
     scrollVel = 0;
     sync(); updateFrameLabel();
   });
@@ -776,12 +787,18 @@
   var panelDissolve = document.getElementById('panel-dissolve');
 
   // Duration presets adapt to the current horizon
+  // Duration presets per frame. Your spec:
+  // 6h-3d: 10, 30, 90, 180 min
+  // week: add 1-3 days
+  // month: weeks
+  // quarter: 1 month
+  // year: whatever
   var DURATION_PRESETS = {
-    6:    [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 60, l: '1h' },  { m: 120, l: '2h' }],
+    6:    [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
     24:   [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
-    72:   [{ m: 30, l: '30m' }, { m: 60, l: '1h' },  { m: 180, l: '3h' }, { m: 360, l: '6h' }],
-    168:  [{ m: 60, l: '1h' },  { m: 180, l: '3h' }, { m: 1440, l: '1d' }, { m: 4320, l: '3d' }],
-    720:  [{ m: 1440, l: '1d' }, { m: 4320, l: '3d' }, { m: 10080, l: '1w' }, { m: 20160, l: '2w' }],
+    72:   [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
+    168:  [{ m: 90, l: '90m' }, { m: 180, l: '3h' }, { m: 1440, l: '1d' }, { m: 4320, l: '3d' }],
+    720:  [{ m: 10080, l: '1w' }, { m: 20160, l: '2w' }, { m: 30240, l: '3w' }, { m: 40320, l: '4w' }],
     2160: [{ m: 10080, l: '1w' }, { m: 20160, l: '2w' }, { m: 43200, l: '1mo' }, { m: 86400, l: '2mo' }],
     8760: [{ m: 43200, l: '1mo' }, { m: 129600, l: '3mo' }, { m: 259200, l: '6mo' }, { m: 525600, l: '1y' }]
   };
