@@ -1321,8 +1321,11 @@
       if (da && da.position !== null && da.position !== undefined && state) {
         var dnow = new Date(state.now);
         var dd = taskStretch(da);
-        var startHours = (da.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
-        var endHours = startHours + da.mass / 60;
+        // position = center. Start = center - half duration. End = center + half.
+        var centerHours = (da.x - W * NOW_X) / PIXELS_PER_HOUR + scrollHours;
+        var halfDurH = da.mass / 120; // half duration in hours
+        var startHours = centerHours - halfDurH;
+        var endHours = centerHours + halfDurH;
 
         var startTime = new Date(dnow.getTime() + startHours * 3600000);
         var endTime = new Date(dnow.getTime() + endHours * 3600000);
