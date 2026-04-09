@@ -783,18 +783,91 @@
   var panel = document.getElementById('panel');
   var panelName = document.getElementById('panel-name');
   var panelDurations = document.getElementById('panel-durations');
-  var durBtns = document.querySelectorAll('.dur-btn');
+  var panelDurInput = document.getElementById('panel-dur-input');
   var panelSolidity = document.getElementById('panel-solidity');
   var panelFixed = document.getElementById('panel-fixed');
   var panelDissolve = document.getElementById('panel-dissolve');
 
+  // Duration presets adapt to the current horizon
+  var DURATION_PRESETS = {
+    6:    [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 60, l: '1h' },  { m: 120, l: '2h' }],
+    24:   [{ m: 10, l: '10m' }, { m: 30, l: '30m' }, { m: 90, l: '90m' }, { m: 180, l: '3h' }],
+    72:   [{ m: 30, l: '30m' }, { m: 60, l: '1h' },  { m: 180, l: '3h' }, { m: 360, l: '6h' }],
+    168:  [{ m: 60, l: '1h' },  { m: 180, l: '3h' }, { m: 1440, l: '1d' }, { m: 4320, l: '3d' }],
+    720:  [{ m: 1440, l: '1d' }, { m: 4320, l: '3d' }, { m: 10080, l: '1w' }, { m: 20160, l: '2w' }],
+    2160: [{ m: 10080, l: '1w' }, { m: 20160, l: '2w' }, { m: 43200, l: '1mo' }, { m: 86400, l: '2mo' }],
+    8760: [{ m: 43200, l: '1mo' }, { m: 129600, l: '3mo' }, { m: 259200, l: '6mo' }, { m: 525600, l: '1y' }]
+  };
+
+  function getPresets() {
+    // Find closest matching preset set
+    var keys = [6, 24, 72, 168, 720, 2160, 8760];
+    var best = 24;
+    for (var i = 0; i < keys.length; i++) {
+      if (Math.abs(keys[i] - horizonHours) < Math.abs(best - horizonHours)) best = keys[i];
+    }
+    return DURATION_PRESETS[best];
+  }
+
+  function renderPresetButtons(currentMass) {
+    var presets = getPresets();
+    panelDurations.innerHTML = '';
+    for (var i = 0; i < presets.length; i++) {
+      var btn = document.createElement('button');
+      btn.className = 'dur-btn' + (presets[i].m === currentMass ? ' active' : '');
+      btn.dataset.mass = presets[i].m;
+      btn.textContent = presets[i].l;
+      btn.addEventListener('click', (function (mass) {
+        return function () {
+          if (!selectedId) return;
+          post('put', { id: selectedId, mass: mass });
+          panelDurInput.value = formatDuration(mass);
+          renderPresetButtons(mass);
+        };
+      })(presets[i].m));
+      panelDurations.appendChild(btn);
+    }
+  }
+
+  function formatDuration(mins) {
+    if (mins >= 525600) return Math.round(mins / 525600) + 'y';
+    if (mins >= 43200) return Math.round(mins / 43200) + 'mo';
+    if (mins >= 10080) return Math.round(mins / 10080) + 'w';
+    if (mins >= 1440) return (mins / 1440).toFixed(mins % 1440 ? 1 : 0).replace(/\.0$/, '') + 'd';
+    if (mins >= 60) {
+      var h = Math.floor(mins / 60), m = Math.round(mins % 60);
+      return m ? h + 'h ' + m + 'm' : h + 'h';
+    }
+    return Math.round(mins) + 'm';
+  }
+
+  function parseDuration(str) {
+    str = str.trim().toLowerCase();
+    var total = 0;
+    // Match patterns like "2h 30m", "90m", "1.5h", "3d", "2w", "1mo", "1y"
+    var patterns = [
+      { re: /(\d+(?:\.\d+)?)\s*y/, mult: 525600 },
+      { re: /(\d+(?:\.\d+)?)\s*mo/, mult: 43200 },
+      { re: /(\d+(?:\.\d+)?)\s*w/, mult: 10080 },
+      { re: /(\d+(?:\.\d+)?)\s*d/, mult: 1440 },
+      { re: /(\d+(?:\.\d+)?)\s*h/, mult: 60 },
+      { re: /(\d+(?:\.\d+)?)\s*m(?!o)/, mult: 1 }
+    ];
+    var matched = false;
+    for (var i = 0; i < patterns.length; i++) {
+      var match = str.match(patterns[i].re);
+      if (match) { total += parseFloat(match[1]) * patterns[i].mult; matched = true; }
+    }
+    // Plain number = minutes
+    if (!matched && /^\d+(\.\d+)?$/.test(str)) total = parseFloat(str);
+    return total > 0 ? Math.round(total) : null;
+  }
+
   function showPanel(a, sx, sy) {
     selectedId = a.id;
     panelName.value = a.name;
-    // Highlight matching duration button
-    durBtns.forEach(function (b) {
-      b.classList.toggle('active', Number(b.dataset.mass) === a.mass);
-    });
+    panelDurInput.value = formatDuration(a.mass);
+    renderPresetButtons(a.mass);
     panelSolidity.value = Math.round(a.solidity * 100);
     panelFixed.checked = a.fixed;
 
@@ -820,13 +893,26 @@
       post('put', { id: selectedId, name: panelName.value });
     }, 300);
   });
-  durBtns.forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (!selectedId) return;
-      durBtns.forEach(function (b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      post('put', { id: selectedId, mass: Number(btn.dataset.mass) });
-    });
+  panelDurInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var parsed = parseDuration(panelDurInput.value);
+      if (parsed && selectedId) {
+        post('put', { id: selectedId, mass: parsed });
+        panelDurInput.value = formatDuration(parsed);
+        renderPresetButtons(parsed);
+      }
+      panelDurInput.blur();
+    }
+  });
+  panelDurInput.addEventListener('blur', function () {
+    // Reformat on blur
+    var parsed = parseDuration(panelDurInput.value);
+    if (parsed && selectedId) {
+      post('put', { id: selectedId, mass: parsed });
+      panelDurInput.value = formatDuration(parsed);
+      renderPresetButtons(parsed);
+    }
   });
   panelSolidity.addEventListener('input', function () {
     if (!selectedId) return;
@@ -1100,10 +1186,7 @@
       var ra = findTask(resizing.id);
       if (ra) {
         var re = taskEdges(ra);
-        var mins = ra.mass;
-        var hrs = Math.floor(mins / 60);
-        var m = Math.round(mins % 60);
-        var durLabel = hrs > 0 ? hrs + 'h' + (m > 0 ? ' ' + m + 'm' : '') : m + 'm';
+        var durLabel = formatDuration(ra.mass);
 
         // Duration inside the blob
         ctx.font = '600 13px -apple-system, system-ui, sans-serif';

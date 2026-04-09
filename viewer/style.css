@@ -188,9 +188,44 @@ canvas {
   border-color: rgba(212, 170, 110, 0.4);
 }
 
+.dur-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dur-title {
+  /* inherits panel-label styling */
+}
+
+.dur-input {
+  width: 52px;
+  text-align: right;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(200, 165, 110, 0.15);
+  color: rgba(200, 165, 110, 0.8);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, system-ui, sans-serif;
+  padding: 0 0 1px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.dur-input:focus {
+  border-color: rgba(200, 165, 110, 0.5);
+  color: #d4c4b0;
+}
+
+.dur-input::placeholder {
+  color: rgba(200, 165, 110, 0.25);
+}
+
 .panel-durations {
   display: flex;
   gap: 4px;
+  margin-top: 6px;
 }
 
 .dur-btn {
