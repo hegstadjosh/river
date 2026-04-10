@@ -65,15 +65,17 @@
   // ── Zone Layout ───────────────────────────────────────────────────
 
   function computeZones(presets) {
-    // Divide the full viewport width into N equal zones
+    // Match the horizon bar's exact position and width
+    var bar = document.getElementById('horizon-bar');
+    var barRect = bar ? bar.getBoundingClientRect() : null;
+    var left = barRect ? barRect.left : R.W * 0.2;
+    var totalW = barRect ? barRect.width : R.W * 0.6;
     var n = presets.length;
-    var pad = R.W * 0.15; // 15% padding on each side
-    var usable = R.W - pad * 2;
     var zones = [];
     for (var i = 0; i < n; i++) {
       zones.push({
-        x: pad + (usable / n) * i,
-        w: usable / n,
+        x: left + (totalW / n) * i,
+        w: totalW / n,
         value: presets[i].value,
         label: presets[i].label,
         r: presets[i].r,
@@ -89,16 +91,21 @@
   var horizonBar = document.getElementById('horizon-bar');
 
   R.wizardActivate = function (taskId) {
-    var sY = R.surfaceY();
+    // Match the horizon bar's exact vertical position
+    var bar = document.getElementById('horizon-bar');
+    var barRect = bar ? bar.getBoundingClientRect() : null;
+    var barMidY = barRect ? (barRect.top + barRect.bottom) / 2 : R.surfaceY();
+    var barH = barRect ? barRect.height : FIELD_H;
+
     wiz.active = true;
     wiz.stage = 0;
     wiz.taskId = taskId;
-    wiz.fieldTop = sY - FIELD_H / 2;
-    wiz.fieldBot = sY + FIELD_H / 2;
-    wiz.fieldH = FIELD_H;
+    wiz.fieldH = barH;
+    wiz.fieldTop = barMidY - barH / 2;
+    wiz.fieldBot = barMidY + barH / 2;
     wiz.selectedIdx = -1;
     wiz.stageStartT = performance.now();
-    wiz.lastSide = 'above'; // starting from cloud = above the field
+    wiz.lastSide = 'above';
     wiz.zones = computeZones(STAGE_PRESETS[0]());
     // Hide the DOM horizon bar so the Canvas field is visible
     if (horizonBar) horizonBar.style.opacity = '0';
@@ -199,67 +206,90 @@
     return { mass: a.mass, solidity: a.solidity, energy: a.energy };
   };
 
-  // ── Rendering (called from frame loop) ────────────────────────────
-  // Flat, solid zones with hard walls between them. Clean. Game-like.
+  // ── Rendering ──────────────────────────────────────────────────────
+  // Seamless with the horizon bar: same width, same shape, dark glass background.
+  // Zones are subtle color-tinted sections with clean dividers.
+  // Active zone brightens. The whole thing feels like a facet of the same bar.
 
   R.drawWizardField = function (t) {
     if (!wiz.active || wiz.stage > 2) return;
 
     var ctx = R.ctx;
-    var fadeIn = Math.min(1, (performance.now() - wiz.stageStartT) / 120);
+    var fadeIn = Math.min(1, (performance.now() - wiz.stageStartT) / 150);
+    var z0 = wiz.zones[0];
+    var zLast = wiz.zones[wiz.zones.length - 1];
+    var totalLeft = z0.x;
+    var totalW = zLast.x + zLast.w - z0.x;
+    var cr = 8; // corner radius matching the bar
+
+    // ── Dark glass background — matches the horizon bar ──
+    ctx.fillStyle = 'rgba(20, 17, 14, ' + (0.8 * fadeIn) + ')';
+    ctx.beginPath();
+    ctx.roundRect(totalLeft, wiz.fieldTop, totalW, wiz.fieldH, cr);
+    ctx.fill();
+
+    // Outer border — warm, subtle
+    ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.12 * fadeIn) + ')';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(totalLeft, wiz.fieldTop, totalW, wiz.fieldH, cr);
+    ctx.stroke();
+
+    // ── Zones ──
+    ctx.save();
+    // Clip to the rounded bar shape
+    ctx.beginPath();
+    ctx.roundRect(totalLeft, wiz.fieldTop, totalW, wiz.fieldH, cr);
+    ctx.clip();
 
     for (var i = 0; i < wiz.zones.length; i++) {
       var z = wiz.zones[i];
       var isActive = i === wiz.selectedIdx;
 
-      // Flat solid fill — no gradient
-      var a = isActive ? 0.55 : 0.2;
-      ctx.fillStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (a * fadeIn) + ')';
+      // Zone color tint — very subtle when inactive, rich when active
+      var a = isActive ? 0.35 * fadeIn : 0.08 * fadeIn;
+      ctx.fillStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + a + ')';
       ctx.fillRect(z.x, wiz.fieldTop, z.w, wiz.fieldH);
 
-      // Hard wall on the right edge (except last zone)
+      // Active: brighter inner glow
+      if (isActive) {
+        var gx = z.x + z.w / 2;
+        var gy = wiz.fieldTop + wiz.fieldH / 2;
+        var gr = z.w / 2;
+        var ig = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+        ig.addColorStop(0, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (0.2 * fadeIn) + ')');
+        ig.addColorStop(1, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',0)');
+        ctx.fillStyle = ig;
+        ctx.fillRect(z.x, wiz.fieldTop, z.w, wiz.fieldH);
+      }
+
+      // Divider — thin warm line (except after last)
       if (i < wiz.zones.length - 1) {
         ctx.beginPath();
-        ctx.moveTo(z.x + z.w, wiz.fieldTop);
-        ctx.lineTo(z.x + z.w, wiz.fieldBot);
-        ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.15 * fadeIn) + ')';
+        ctx.moveTo(z.x + z.w, wiz.fieldTop + 4);
+        ctx.lineTo(z.x + z.w, wiz.fieldBot - 4);
+        ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.12 * fadeIn) + ')';
         ctx.lineWidth = 1;
         ctx.stroke();
       }
 
-      // Active zone: bright top/bottom border
-      if (isActive) {
-        ctx.fillStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (0.7 * fadeIn) + ')';
-        ctx.fillRect(z.x, wiz.fieldTop, z.w, 2);
-        ctx.fillRect(z.x, wiz.fieldBot - 2, z.w, 2);
-      }
-
-      // Label — crisp, centered
-      ctx.font = (isActive ? '600 ' : '500 ') + '11px -apple-system, system-ui, sans-serif';
+      // Label
+      ctx.font = (isActive ? '600 ' : '400 ') + '10px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(255, 255, 255, ' + (isActive ? 0.95 : 0.5) * fadeIn + ')';
-      ctx.fillText(z.label, z.x + z.w / 2, (wiz.fieldTop + wiz.fieldBot) / 2);
+      ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.95 : 0.4) * fadeIn + ')';
+      ctx.fillText(z.label, z.x + z.w / 2, wiz.fieldTop + wiz.fieldH / 2);
     }
 
-    // Top and bottom edges of the whole field
-    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.2 * fadeIn) + ')';
-    ctx.fillRect(wiz.zones[0].x, wiz.fieldTop, wiz.zones[wiz.zones.length-1].x + wiz.zones[wiz.zones.length-1].w - wiz.zones[0].x, 1);
-    ctx.fillRect(wiz.zones[0].x, wiz.fieldBot - 1, wiz.zones[wiz.zones.length-1].x + wiz.zones[wiz.zones.length-1].w - wiz.zones[0].x, 1);
+    ctx.restore();
 
-    // Stage label — small, above field
-    ctx.font = '500 9px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.45 * fadeIn) + ')';
-    ctx.fillText(STAGE_LABELS[wiz.stage], R.W / 2, wiz.fieldTop - 6);
-
-    // Stage dots
+    // ── Stage indicator — tiny dots below the bar ──
     for (var d = 0; d < 3; d++) {
       ctx.beginPath();
-      ctx.arc(R.W / 2 - 10 + d * 10, wiz.fieldBot + 8, 2, 0, Math.PI * 2);
+      ctx.arc(totalLeft + totalW / 2 - 8 + d * 8, wiz.fieldBot + 6, 1.5, 0, Math.PI * 2);
       ctx.fillStyle = d <= wiz.stage
-        ? 'rgba(200, 165, 110, ' + (0.6 * fadeIn) + ')'
-        : 'rgba(200, 165, 110, ' + (0.15 * fadeIn) + ')';
+        ? 'rgba(200, 165, 110, ' + (0.55 * fadeIn) + ')'
+        : 'rgba(200, 165, 110, ' + (0.12 * fadeIn) + ')';
       ctx.fill();
     }
   };
@@ -317,6 +347,10 @@
     }
 
     if (found) {
+      // Must leave and re-enter after arrow trigger
+      if (dwell.mustLeave && dwell.btnEl === found) return;
+      if (dwell.mustLeave && dwell.btnEl !== found) dwell.mustLeave = false;
+
       if (dwell.btnEl === found && !dwell.triggered) {
         var elapsed = performance.now() - dwell.startTime;
         dwell.progress = Math.min(1, elapsed / 250);
@@ -338,10 +372,8 @@
             if (found.id === 'hz-prev') R.scrollHours -= step;
             else R.scrollHours += step;
             if (R.updateFrameLabel) R.updateFrameLabel();
-            // Allow re-trigger immediately for arrows (hold to keep stepping)
-            dwell.triggered = false;
-            dwell.startTime = performance.now();
-            dwell.progress = 0;
+            // Must leave and re-enter to trigger again
+            dwell.mustLeave = true;
           } else {
             // Scale button: switch timeframe
             R.scrollHours = 0;

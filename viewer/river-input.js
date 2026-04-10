@@ -214,7 +214,9 @@
       // ── Drag Wizard ──
       // Activates whenever the cursor is in the cloud zone during any drag.
       // Works for cloud tasks AND river tasks dragged upward.
-      var inCloud = e.clientY < boundary;
+      // Wizard activates only when well into the cloud zone (30px above surface)
+      var cloudThreshold = boundary - 30;
+      var inCloud = e.clientY < cloudThreshold;
       if (!R.planMode && R.wizardActivate) {
         if (inCloud && !R.dragging.wizardStarted) {
           R.wizardActivate(R.dragging.id);
