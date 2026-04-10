@@ -414,6 +414,85 @@ input[type="checkbox"] {
   opacity: 0;
 }
 
+/* ── Wizard Field (DOM element, same style as horizon bar) ── */
+
+.wizard-field {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(35% - 18px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 10px;
+  background: rgba(20, 17, 14, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(200, 165, 110, 0.1);
+  box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
+  transition: box-shadow 0.3s ease, opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.wizard-field.hidden {
+  display: none;
+}
+
+.wizard-field-label {
+  font-size: 8px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
+  color: rgba(200, 165, 110, 0.4);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wizard-field-zones {
+  display: flex;
+  gap: 1px;
+  width: 100%;
+}
+
+.wizard-zone {
+  flex: 1;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 400;
+  font-family: -apple-system, system-ui, sans-serif;
+  color: rgba(200, 165, 110, 0.4);
+  background: transparent;
+  transition: all 0.1s ease;
+  white-space: nowrap;
+}
+
+.wizard-zone.active {
+  color: rgba(200, 165, 110, 0.95);
+  font-weight: 600;
+  background: rgba(200, 165, 110, 0.12);
+}
+
+.wizard-field-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.wizard-field-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(200, 165, 110, 0.12);
+  transition: background 0.15s ease;
+}
+
+.wizard-field-dots span.done {
+  background: rgba(200, 165, 110, 0.55);
+}
+
 /* ── Dwell Timeframe Switcher ───────────────────────── */
 
 .hz-btn-dwell {

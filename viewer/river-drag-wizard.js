@@ -65,50 +65,34 @@
   // ── Zone Layout ───────────────────────────────────────────────────
 
   function computeZones(presets) {
-    // Match the horizon bar's exact position and width
-    var bar = document.getElementById('horizon-bar');
-    var barRect = bar ? bar.getBoundingClientRect() : null;
-    var left = barRect ? barRect.left : R.W * 0.2;
-    var totalW = barRect ? barRect.width : R.W * 0.6;
-    var n = presets.length;
-    var zones = [];
-    for (var i = 0; i < n; i++) {
-      zones.push({
-        x: left + (totalW / n) * i,
-        w: totalW / n,
-        value: presets[i].value,
-        label: presets[i].label,
-        r: presets[i].r,
-        g: presets[i].g,
-        b: presets[i].b
-      });
-    }
-    return zones;
+    // Zone positions are determined by DOM layout — just store the data
+    return presets.map(function (p) {
+      return { value: p.value, label: p.label, r: p.r, g: p.g, b: p.b };
+    });
   }
 
   // ── Activation / Deactivation ─────────────────────────────────────
 
   var horizonBar = document.getElementById('horizon-bar');
+  var wizardEl = document.getElementById('wizard-field');
+  var wizardLabel = wizardEl.querySelector('.wizard-field-label');
+  var wizardZonesEl = wizardEl.querySelector('.wizard-field-zones');
+  var wizardDots = wizardEl.querySelectorAll('.wizard-field-dots span');
 
   R.wizardActivate = function (taskId) {
-    // Match the horizon bar's exact vertical position
-    var bar = document.getElementById('horizon-bar');
-    var barRect = bar ? bar.getBoundingClientRect() : null;
-    var barMidY = barRect ? (barRect.top + barRect.bottom) / 2 : R.surfaceY();
-    var barH = barRect ? barRect.height : FIELD_H;
-
     wiz.active = true;
     wiz.stage = 0;
     wiz.taskId = taskId;
-    wiz.fieldH = barH;
-    wiz.fieldTop = barMidY - barH / 2;
-    wiz.fieldBot = barMidY + barH / 2;
     wiz.selectedIdx = -1;
     wiz.stageStartT = performance.now();
     wiz.lastSide = 'above';
     wiz.zones = computeZones(STAGE_PRESETS[0]());
-    // Hide the DOM horizon bar so the Canvas field is visible
-    if (horizonBar) horizonBar.style.opacity = '0';
+
+    // Hide horizon bar, show wizard field
+    horizonBar.style.display = 'none';
+    wizardEl.classList.remove('hidden');
+    renderWizardDOM();
+    updateFieldRect();
   };
 
   R.wizardDeactivate = function () {
@@ -117,9 +101,40 @@
     wiz.taskId = null;
     wiz.zones = [];
     wiz.selectedIdx = -1;
-    // Restore the horizon bar
-    if (horizonBar) horizonBar.style.opacity = '';
+
+    wizardEl.classList.add('hidden');
+    horizonBar.style.display = '';
   };
+
+  function updateFieldRect() {
+    var rect = wizardEl.getBoundingClientRect();
+    wiz.fieldTop = rect.top;
+    wiz.fieldBot = rect.bottom;
+    wiz.fieldH = rect.height;
+  }
+
+  function renderWizardDOM() {
+    wizardLabel.textContent = STAGE_LABELS[wiz.stage];
+
+    var presets = wiz.zones;
+    wizardZonesEl.innerHTML = '';
+    for (var i = 0; i < presets.length; i++) {
+      var zone = document.createElement('div');
+      zone.className = 'wizard-zone' + (i === wiz.selectedIdx ? ' active' : '');
+      zone.textContent = presets[i].label;
+      // Tint the active zone with its color
+      if (i === wiz.selectedIdx) {
+        zone.style.background = 'rgba(' + presets[i].r + ',' + presets[i].g + ',' + presets[i].b + ',0.15)';
+        zone.style.color = 'rgb(' + presets[i].r + ',' + presets[i].g + ',' + presets[i].b + ')';
+      }
+      wizardZonesEl.appendChild(zone);
+    }
+
+    // Update dots
+    for (var d = 0; d < wizardDots.length; d++) {
+      wizardDots[d].classList.toggle('done', d <= wiz.stage);
+    }
+  }
 
   R.wizardIsActive = function () { return wiz.active && wiz.stage >= 0 && wiz.stage <= 2; };
   R.wizardIsCompleted = function () { return wiz.active && wiz.stage > 2; };
@@ -129,20 +144,23 @@
   R.wizardMouseMove = function (mx, my) {
     if (!wiz.active || wiz.stage > 2) return;
 
+    updateFieldRect();
     var inField = my >= wiz.fieldTop && my <= wiz.fieldBot;
     var above = my < wiz.fieldTop;
     var below = my > wiz.fieldBot;
 
-    // While in the field: update zone selection and transform the task
+    // While in the field: find which zone by checking DOM element positions
     if (inField) {
+      var zoneEls = wizardZonesEl.querySelectorAll('.wizard-zone');
       var newIdx = -1;
-      for (var i = 0; i < wiz.zones.length; i++) {
-        var z = wiz.zones[i];
-        if (mx >= z.x && mx < z.x + z.w) { newIdx = i; break; }
+      for (var i = 0; i < zoneEls.length; i++) {
+        var zr = zoneEls[i].getBoundingClientRect();
+        if (mx >= zr.left && mx < zr.right) { newIdx = i; break; }
       }
       if (newIdx >= 0 && newIdx !== wiz.selectedIdx) {
         wiz.selectedIdx = newIdx;
         applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
+        renderWizardDOM();
       }
     }
 
@@ -191,11 +209,12 @@
 
     if (wiz.stage <= 2) {
       wiz.zones = computeZones(STAGE_PRESETS[wiz.stage]());
-      // After stage 0 (exited below), cursor is below → lastSide = 'below'
-      // After stage 1 (exited above), cursor is above → lastSide = 'above'
-      // Stage 2 starts from above (just like stage 0)
+      renderWizardDOM();
+      updateFieldRect();
+    } else {
+      // Completed — hide the field
+      wizardEl.classList.add('hidden');
     }
-    // stage > 2 = completed
   }
 
   // ── Get Selections for POST ───────────────────────────────────────
@@ -206,93 +225,9 @@
     return { mass: a.mass, solidity: a.solidity, energy: a.energy };
   };
 
-  // ── Rendering ──────────────────────────────────────────────────────
-  // Seamless with the horizon bar: same width, same shape, dark glass background.
-  // Zones are subtle color-tinted sections with clean dividers.
-  // Active zone brightens. The whole thing feels like a facet of the same bar.
-
-  R.drawWizardField = function (t) {
-    if (!wiz.active || wiz.stage > 2) return;
-
-    var ctx = R.ctx;
-    var fadeIn = Math.min(1, (performance.now() - wiz.stageStartT) / 150);
-    var z0 = wiz.zones[0];
-    var zLast = wiz.zones[wiz.zones.length - 1];
-    var totalLeft = z0.x;
-    var totalW = zLast.x + zLast.w - z0.x;
-    var cr = 8; // corner radius matching the bar
-
-    // ── Dark glass background — matches the horizon bar ──
-    ctx.fillStyle = 'rgba(20, 17, 14, ' + (0.8 * fadeIn) + ')';
-    ctx.beginPath();
-    ctx.roundRect(totalLeft, wiz.fieldTop, totalW, wiz.fieldH, cr);
-    ctx.fill();
-
-    // Outer border — warm, subtle
-    ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.12 * fadeIn) + ')';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(totalLeft, wiz.fieldTop, totalW, wiz.fieldH, cr);
-    ctx.stroke();
-
-    // ── Zones ──
-    ctx.save();
-    // Clip to the rounded bar shape
-    ctx.beginPath();
-    ctx.roundRect(totalLeft, wiz.fieldTop, totalW, wiz.fieldH, cr);
-    ctx.clip();
-
-    for (var i = 0; i < wiz.zones.length; i++) {
-      var z = wiz.zones[i];
-      var isActive = i === wiz.selectedIdx;
-
-      // Zone color tint — very subtle when inactive, rich when active
-      var a = isActive ? 0.35 * fadeIn : 0.08 * fadeIn;
-      ctx.fillStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + a + ')';
-      ctx.fillRect(z.x, wiz.fieldTop, z.w, wiz.fieldH);
-
-      // Active: brighter inner glow
-      if (isActive) {
-        var gx = z.x + z.w / 2;
-        var gy = wiz.fieldTop + wiz.fieldH / 2;
-        var gr = z.w / 2;
-        var ig = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
-        ig.addColorStop(0, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (0.2 * fadeIn) + ')');
-        ig.addColorStop(1, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',0)');
-        ctx.fillStyle = ig;
-        ctx.fillRect(z.x, wiz.fieldTop, z.w, wiz.fieldH);
-      }
-
-      // Divider — thin warm line (except after last)
-      if (i < wiz.zones.length - 1) {
-        ctx.beginPath();
-        ctx.moveTo(z.x + z.w, wiz.fieldTop + 4);
-        ctx.lineTo(z.x + z.w, wiz.fieldBot - 4);
-        ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.12 * fadeIn) + ')';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // Label
-      ctx.font = (isActive ? '600 ' : '400 ') + '10px -apple-system, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.95 : 0.4) * fadeIn + ')';
-      ctx.fillText(z.label, z.x + z.w / 2, wiz.fieldTop + wiz.fieldH / 2);
-    }
-
-    ctx.restore();
-
-    // ── Stage indicator — tiny dots below the bar ──
-    for (var d = 0; d < 3; d++) {
-      ctx.beginPath();
-      ctx.arc(totalLeft + totalW / 2 - 8 + d * 8, wiz.fieldBot + 6, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = d <= wiz.stage
-        ? 'rgba(200, 165, 110, ' + (0.55 * fadeIn) + ')'
-        : 'rgba(200, 165, 110, ' + (0.12 * fadeIn) + ')';
-      ctx.fill();
-    }
-  };
+  // No Canvas rendering for the wizard field — it's a DOM element now.
+  // R.drawWizardField is kept as a no-op so the frame loop doesn't break.
+  R.drawWizardField = function () {};
 
   // ── Horizon Dwell Switcher ────────────────────────────────────────
   // When dragging a RIVER task, hovering over a scale button for 500ms
