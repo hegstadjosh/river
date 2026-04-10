@@ -188,12 +188,7 @@
     R.dragging.moved = true;
     R.canvas.style.cursor = 'grabbing';
     var hzBar = document.getElementById('horizon-bar');
-    if (hzBar) {
-      hzBar.style.pointerEvents = 'none';
-      hzBar.style.background = 'rgb(20, 17, 14)';
-      hzBar.style.backdropFilter = 'none';
-      hzBar.style.webkitBackdropFilter = 'none';
-    }
+    if (hzBar) hzBar.style.pointerEvents = 'none';
 
     // Plan mode drag: dragging a task from a lane or cloud into lanes
     if (R.planMode && R.dragging.zone === 'plan') {
@@ -293,12 +288,7 @@
     if (!R.dragging) return;
     var d = R.dragging; R.dragging = null; R.canvas.style.cursor = 'default';
     var hzBar = document.getElementById('horizon-bar');
-    if (hzBar) {
-      hzBar.style.pointerEvents = '';
-      hzBar.style.background = '';
-      hzBar.style.backdropFilter = '';
-      hzBar.style.webkitBackdropFilter = '';
-    }
+    if (hzBar) hzBar.style.pointerEvents = '';
 
     // ── Plan mode drop logic ──
     if (R.planMode && d.zone === 'plan') {

@@ -22,7 +22,10 @@ canvas {
 
 /* ── Horizon Bar ────────────────────────────────────── */
 
-#horizon-bar {
+/* ── Shared bar component ──────────────────────────── */
+/* Every bar in the app uses this. One source of truth. */
+
+.river-bar {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -30,13 +33,17 @@ canvas {
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   padding: 4px 6px;
   border-radius: 10px;
   background: rgba(20, 17, 14, 0.75);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(200, 165, 110, 0.1);
+}
+
+#horizon-bar {
+  gap: 12px;
 }
 
 .hz-scales {
@@ -417,21 +424,8 @@ input[type="checkbox"] {
 /* ── Wizard Field (DOM element, same style as horizon bar) ── */
 
 .wizard-field {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: calc(35% - 18px);
   z-index: 6;
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 4px;
-  border-radius: 10px;
-  background: rgba(20, 17, 14, 0.75);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(200, 165, 110, 0.1);
   box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
   transition: box-shadow 0.3s ease, opacity 0.15s ease;
   pointer-events: none;
@@ -491,6 +485,13 @@ input[type="checkbox"] {
 
 .wizard-field-dots span.done {
   background: rgba(200, 165, 110, 0.55);
+}
+
+/* ── Bar glow state ──────────────────────────────────── */
+
+.river-bar-glow {
+  box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
+  transition: box-shadow 0.3s ease;
 }
 
 /* ── Dwell Timeframe Switcher ───────────────────────── */

@@ -334,6 +334,8 @@
   R.dwellReset = function () {
     var els = document.querySelectorAll('.hz-btn, .hz-arrow');
     for (var i = 0; i < els.length; i++) els[i].classList.remove('hz-btn-preview');
+    var barEl = document.getElementById('horizon-bar');
+    if (barEl) barEl.classList.remove('river-bar-glow');
     dwell.btnEl = null;
     dwell.btnRect = null;
     dwell.progress = 0;
@@ -387,37 +389,19 @@
       }
     }
 
-    // ── Bar glow when dragging from river ──
-    // Glow surrounds the bar but does NOT cover the inside.
+    // ── Dwell glow on horizon bar (CSS box-shadow via class) ──
     if (!R.dragging || !R.dragging.moved) return;
-    if (R.dragging.zone !== 'river') return;
 
     var barEl = document.getElementById('horizon-bar');
     if (!barEl) return;
-    var barR = barEl.getBoundingClientRect();
-    var barCR = 10; // matches the bar's CSS border-radius
 
-    // Glow — drawn ONLY outside the bar. Bar is opaque during drag so
-    // we just need to not overlap it. Draw a soft amber outline.
-    var pulse = Math.sin(t / 1200 * Math.PI) * 0.5 + 0.5;
-    var glowA = 0.1 + pulse * 0.07;
-
-    ctx.strokeStyle = 'rgba(200, 165, 110, ' + glowA + ')';
-    ctx.lineWidth = 2 + pulse;
-    ctx.beginPath();
-    ctx.roundRect(barR.left - 2, barR.top - 2, barR.width + 4, barR.height + 4, barCR + 2);
-    ctx.stroke();
-
-    // Hovered button: warm border
-    if (dwell.btnEl && dwell.btnRect && !dwell.triggered) {
-      var br = dwell.btnRect;
-      var p = dwell.progress;
-      ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.3 + p * 0.5) + ')';
-      ctx.lineWidth = 1.5 + p;
-      ctx.beginPath();
-      ctx.roundRect(br.left - 1, br.top - 1, br.width + 2, br.height + 2, 5);
-      ctx.stroke();
+    // Add/remove glow class on the bar during river drag
+    if (R.dragging.zone === 'river') {
+      barEl.classList.add('river-bar-glow');
     }
+
+    // Hovered button highlight via CSS class (already handled by hz-btn-preview)
+
   };
 
 })();
