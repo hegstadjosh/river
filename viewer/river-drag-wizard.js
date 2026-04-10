@@ -277,13 +277,17 @@
   R.dwellCheckStart = function (mx, my) {
     if (wiz.active) return;
 
-    // Find which horizon button the cursor is over
+    // Find which horizon element the cursor is over (buttons OR arrows)
     var hzBtns = document.querySelectorAll('.hz-btn');
+    var hzPrev = document.getElementById('hz-prev');
+    var hzNext = document.getElementById('hz-next');
     var found = null;
     var foundRect = null;
+    var foundIsArrow = false;
+
+    // Check scale buttons
     for (var i = 0; i < hzBtns.length; i++) {
       var r = hzBtns[i].getBoundingClientRect();
-      // Expand hit area vertically since cursor might be approaching from below
       if (mx >= r.left - 5 && mx <= r.right + 5 && my >= r.top - 15 && my <= r.bottom + 15) {
         found = hzBtns[i];
         foundRect = r;
@@ -291,10 +295,25 @@
       }
     }
 
-    // Update all buttons — the one being hovered gets the active look
-    var hzBtns = document.querySelectorAll('.hz-btn');
-    for (var b = 0; b < hzBtns.length; b++) {
-      hzBtns[b].classList.toggle('hz-btn-preview', hzBtns[b] === found);
+    // Check prev/next arrows
+    if (!found) {
+      var arrows = [hzPrev, hzNext];
+      for (var a = 0; a < arrows.length; a++) {
+        if (!arrows[a]) continue;
+        var ar = arrows[a].getBoundingClientRect();
+        if (mx >= ar.left - 5 && mx <= ar.right + 5 && my >= ar.top - 15 && my <= ar.bottom + 15) {
+          found = arrows[a];
+          foundRect = ar;
+          foundIsArrow = true;
+          break;
+        }
+      }
+    }
+
+    // Update all buttons + arrows — the one being hovered gets the active look
+    var allHzEls = document.querySelectorAll('.hz-btn, .hz-arrow');
+    for (var b = 0; b < allHzEls.length; b++) {
+      allHzEls[b].classList.toggle('hz-btn-preview', allHzEls[b] === found);
     }
 
     if (found) {
@@ -306,13 +325,28 @@
           dwell.triggered = true;
           dwell.progress = 1;
           found.classList.remove('hz-btn-preview');
-          // Flash and switch simultaneously
+
+          // Flash
           dwellFlash.active = true;
           dwellFlash.cx = (foundRect.left + foundRect.right) / 2;
           dwellFlash.cy = (foundRect.top + foundRect.bottom) / 2;
           dwellFlash.startT = performance.now();
-          R.scrollHours = 0;
-          R.setHorizon(Number(found.dataset.hours));
+
+          if (foundIsArrow) {
+            // Arrow: step forward/back by one frame unit
+            var step = R.frameStep();
+            if (found.id === 'hz-prev') R.scrollHours -= step;
+            else R.scrollHours += step;
+            if (R.updateFrameLabel) R.updateFrameLabel();
+            // Allow re-trigger immediately for arrows (hold to keep stepping)
+            dwell.triggered = false;
+            dwell.startTime = performance.now();
+            dwell.progress = 0;
+          } else {
+            // Scale button: switch timeframe
+            R.scrollHours = 0;
+            R.setHorizon(Number(found.dataset.hours));
+          }
         }
       } else if (dwell.btnEl !== found) {
         dwell.btnEl = found;
@@ -331,9 +365,8 @@
   };
 
   R.dwellReset = function () {
-    // Clear all preview states
-    var btns = document.querySelectorAll('.hz-btn');
-    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('hz-btn-preview');
+    var els = document.querySelectorAll('.hz-btn, .hz-arrow');
+    for (var i = 0; i < els.length; i++) els[i].classList.remove('hz-btn-preview');
     dwell.btnEl = null;
     dwell.btnRect = null;
     dwell.progress = 0;

@@ -69,7 +69,8 @@ canvas {
   background: rgba(200, 165, 110, 0.12);
 }
 
-.hz-btn.hz-btn-preview {
+.hz-btn.hz-btn-preview,
+.hz-arrow.hz-btn-preview {
   color: rgba(200, 165, 110, 0.95);
   background: rgba(200, 165, 110, 0.18);
   box-shadow: 0 0 8px rgba(200, 165, 110, 0.2);
