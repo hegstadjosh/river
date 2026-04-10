@@ -217,19 +217,31 @@
     if (!a) return;
     var pw = 200, ph = panel.offsetHeight || 220;
     var d = R.taskStretch(a);
-    // For river tasks, account for scroll offset
     var screenX = (a.position !== null && a.position !== undefined)
       ? a.x - R.scrollHours * R.PIXELS_PER_HOUR
       : a.x;
-    var grabHW = Math.max(R.MIN_HIT, d.hw);
-    var taskRight = screenX + grabHW;
-    var taskLeft = screenX - grabHW;
+    var grabHH = Math.max(R.MIN_HIT, d.hh);
 
-    var px = taskRight + 12;
-    var py = a.y - ph / 2;
+    // Position ABOVE or BELOW the task — never overlapping it
+    var px = screenX - pw / 2; // centered horizontally on the task
+    var py;
+    var gapAbove = a.y - grabHH; // space above task
+    var gapBelow = R.H - (a.y + grabHH); // space below task
 
-    // Flip to left if off-screen right
-    if (px + pw > R.W - 10) px = taskLeft - pw - 12;
+    if (gapBelow >= ph + 12) {
+      // Below the task
+      py = a.y + grabHH + 8;
+    } else if (gapAbove >= ph + 12) {
+      // Above the task
+      py = a.y - grabHH - ph - 8;
+    } else {
+      // Not enough space above or below — put to the right
+      var grabHW = Math.max(R.MIN_HIT, d.hw);
+      px = screenX + grabHW + 12;
+      py = a.y - ph / 2;
+      if (px + pw > R.W - 10) px = screenX - grabHW - pw - 12;
+    }
+
     // Clamp to viewport
     px = Math.max(10, Math.min(px, R.W - pw - 10));
     py = Math.max(10, Math.min(py, R.H - ph - 10));

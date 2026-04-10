@@ -325,41 +325,116 @@
     dwell.triggered = false;
   };
 
-  // ── Dwell Rendering (called from frame loop) ──────────────────────
-  // Draws a growing golden ring behind the hovered button as the dwell timer fills.
+  // ── Dwell Rendering ─────────────────────────────────────────────────
+  // The bar comes alive when you drag near it. Buttons breathe, the
+  // hovered one swells, and the trigger flashes like a sunburst.
 
-  R.drawDwellIndicator = function () {
-    if (!dwell.btnEl || !dwell.btnRect || dwell.triggered) return;
+  var dwellFlash = { active: false, cx: 0, cy: 0, startT: 0 };
 
+  R.drawDwellIndicator = function (t) {
     var ctx = R.ctx;
-    var r = dwell.btnRect;
-    var cx = (r.left + r.right) / 2;
-    var cy = (r.top + r.bottom) / 2;
-    var p = dwell.progress;
 
-    // Growing ring
-    var radius = 18 + p * 12;
-    var alpha = 0.1 + p * 0.3;
+    // ── Flash effect after trigger ──
+    if (dwellFlash.active) {
+      var age = (performance.now() - dwellFlash.startT) / 400; // 0→1 over 400ms
+      if (age > 1) { dwellFlash.active = false; }
+      else {
+        var flashA = (1 - age) * 0.6;
+        var flashR = 30 + age * 80;
+        var fg = ctx.createRadialGradient(dwellFlash.cx, dwellFlash.cy, 0, dwellFlash.cx, dwellFlash.cy, flashR);
+        fg.addColorStop(0, 'rgba(255, 220, 160, ' + flashA + ')');
+        fg.addColorStop(0.4, 'rgba(200, 165, 110, ' + (flashA * 0.5) + ')');
+        fg.addColorStop(1, 'rgba(200, 165, 110, 0)');
+        ctx.fillStyle = fg;
+        ctx.fillRect(dwellFlash.cx - flashR, dwellFlash.cy - flashR, flashR * 2, flashR * 2);
+      }
+    }
 
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(200, 165, 110, ' + alpha + ')';
-    ctx.lineWidth = 2 + p * 2;
-    ctx.stroke();
+    // ── Proximity glow on all buttons when dragging near the bar ──
+    if (!R.dragging || !R.dragging.moved) return;
 
-    // Fill progress arc
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
-    ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.5 + p * 0.4) + ')';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    var hzBtns = document.querySelectorAll('.hz-btn');
+    var barEl = document.getElementById('horizon-bar');
+    if (!barEl) return;
+    var barRect = barEl.getBoundingClientRect();
+    var my = R.mouseY;
 
-    // Label below
-    if (p > 0.2) {
-      ctx.font = '500 9px -apple-system, system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(200, 165, 110, ' + (p * 0.6) + ')';
-      ctx.fillText(R.FRAME_LABELS[dwell.btnHours] || '', cx, cy + radius + 12);
+    // How close is the cursor to the bar? 0 = on it, 1 = far away
+    var distToBar = 0;
+    if (my < barRect.top) distToBar = barRect.top - my;
+    else if (my > barRect.bottom) distToBar = my - barRect.bottom;
+    var proximity = Math.max(0, 1 - distToBar / 80); // 80px range
+
+    if (proximity <= 0) return;
+
+    // All buttons get a subtle ambient glow based on proximity
+    for (var i = 0; i < hzBtns.length; i++) {
+      var br = hzBtns[i].getBoundingClientRect();
+      var bx = (br.left + br.right) / 2;
+      var by = (br.top + br.bottom) / 2;
+      var bw = br.width;
+
+      // Distance from cursor to this button's center
+      var dx = Math.abs(R.mouseX - bx);
+      var dy = Math.abs(R.mouseY - by);
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      var btnProx = Math.max(0, 1 - dist / 60); // 60px per-button range
+
+      if (btnProx <= 0) continue;
+
+      // Ambient glow — warm, soft
+      var glowA = btnProx * proximity * 0.2;
+      var glowR = bw / 2 + 8 + btnProx * 10;
+      var gg = ctx.createRadialGradient(bx, by, 0, bx, by, glowR);
+      gg.addColorStop(0, 'rgba(200, 165, 110, ' + glowA + ')');
+      gg.addColorStop(1, 'rgba(200, 165, 110, 0)');
+      ctx.fillStyle = gg;
+      ctx.beginPath();
+      ctx.arc(bx, by, glowR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ── Active dwell button: swelling glow + progress ──
+    if (dwell.btnEl && dwell.btnRect && !dwell.triggered) {
+      var r = dwell.btnRect;
+      var cx = (r.left + r.right) / 2;
+      var cy = (r.top + r.bottom) / 2;
+      var p = dwell.progress;
+
+      // Swelling warm glow
+      var swellR = r.width / 2 + 10 + p * 20;
+      var swellA = 0.15 + p * 0.35;
+      var sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, swellR);
+      sg.addColorStop(0, 'rgba(255, 220, 160, ' + swellA + ')');
+      sg.addColorStop(0.5, 'rgba(200, 165, 110, ' + (swellA * 0.5) + ')');
+      sg.addColorStop(1, 'rgba(200, 165, 110, 0)');
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(cx, cy, swellR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Thin bright ring showing progress
+      if (p > 0.05) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, swellR - 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+        ctx.strokeStyle = 'rgba(255, 230, 180, ' + (0.3 + p * 0.5) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+  };
+
+  // Hook into dwell trigger to fire the flash
+  var origDwellCheck = R.dwellCheckStart;
+  R.dwellCheckStart = function (mx, my) {
+    var wasBefore = dwell.triggered;
+    origDwellCheck(mx, my);
+    // If just triggered, start the flash
+    if (dwell.triggered && !wasBefore && dwell.btnRect) {
+      dwellFlash.active = true;
+      dwellFlash.cx = (dwell.btnRect.left + dwell.btnRect.right) / 2;
+      dwellFlash.cy = (dwell.btnRect.top + dwell.btnRect.bottom) / 2;
+      dwellFlash.startT = performance.now();
     }
   };
 })();
