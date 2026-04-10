@@ -51,6 +51,11 @@
       hw = 18; hh = 18;
     }
     if (a.alive) { hw *= 1.3; hh *= 1.3; }
+    // Clamp height to fit within lane in plan mode
+    if (a.ctx && a.ctx.type === 'lane' && R.planLaneHeight) {
+      var maxHH = R.planLaneHeight() * 0.4;
+      hh = Math.min(hh, maxHH);
+    }
     return { r: Math.max(hw, hh), hw: hw, hh: hh };
   };
 
