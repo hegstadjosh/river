@@ -187,9 +187,12 @@
     if (!R.dragging.moved && Math.sqrt(dx*dx + dy*dy) < R.DRAG_THRESHOLD) return;
     R.dragging.moved = true;
     R.canvas.style.cursor = 'grabbing';
-    // Disable pointer events on DOM overlays so canvas gets all events during drag
     var hzBar = document.getElementById('horizon-bar');
-    if (hzBar) hzBar.style.pointerEvents = 'none';
+    if (hzBar) {
+      hzBar.style.pointerEvents = 'none';
+      // Make bar fully opaque so canvas glow doesn't bleed through
+      hzBar.style.background = 'rgba(20, 17, 14, 1)';
+    }
 
     // Plan mode drag: dragging a task from a lane or cloud into lanes
     if (R.planMode && R.dragging.zone === 'plan') {
@@ -288,9 +291,11 @@
 
     if (!R.dragging) return;
     var d = R.dragging; R.dragging = null; R.canvas.style.cursor = 'default';
-    // Restore pointer events on DOM overlays
     var hzBar = document.getElementById('horizon-bar');
-    if (hzBar) hzBar.style.pointerEvents = '';
+    if (hzBar) {
+      hzBar.style.pointerEvents = '';
+      hzBar.style.background = '';
+    }
 
     // ── Plan mode drop logic ──
     if (R.planMode && d.zone === 'plan') {
