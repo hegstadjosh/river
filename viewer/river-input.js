@@ -211,11 +211,12 @@
     if (a) {
       var boundary = R.surfaceY();
 
-      // ── Cloud-to-River Wizard ──
-      // Non-blocking: transforms the task as you pass through the field,
-      // but NEVER prevents normal drag behavior. Task always follows cursor.
-      if (R.dragging.zone === 'cloud' && !R.planMode && R.wizardActivate) {
-        if (!R.dragging.wizardStarted) {
+      // ── Drag Wizard ──
+      // Activates whenever the cursor is in the cloud zone during any drag.
+      // Works for cloud tasks AND river tasks dragged upward.
+      var inCloud = e.clientY < boundary;
+      if (!R.planMode && R.wizardActivate) {
+        if (inCloud && !R.dragging.wizardStarted) {
           R.wizardActivate(R.dragging.id);
           R.dragging.wizardStarted = true;
         }
@@ -366,17 +367,18 @@
     var dd2 = R.taskStretch(a);
     var startEdge = a.x - dd2.hw;
     var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
+    // Persist wizard-applied properties if any stage was used
+    if (wizardWasActive) {
+      R.post('put', { id: d.id, mass: a.mass, solidity: a.solidity, energy: a.energy });
+    }
+
     if (d.zone === 'cloud' && a.y > boundary) {
       a.customY = a.y;
-      // Persist any wizard-applied properties along with the move
-      if (wizardWasActive) {
-        R.post('put', { id: d.id, mass: a.mass, solidity: a.solidity, energy: a.energy });
-      }
       R.post('move', { id: d.id, position: dropHours });
     } else if (d.zone === 'river' && a.y < boundary) {
       a.customY = a.y;
       R.post('move', { id: d.id, position: null });
-    } else if (d.zone === 'river') {
+    } else if (d.zone === 'river' && a.y > boundary) {
       a.customY = a.y;
       var dd3 = R.taskStretch(a);
       var startEdge2 = a.x - dd3.hw;
