@@ -9,7 +9,7 @@
   R.hitTest = function (mx, my) {
     // Sort by draw order (same as render: fixed first, alive last)
     // then check LAST drawn first (topmost visual = first hit)
-    var sorted = R.animTasks.slice().sort(function (a, b) {
+    var sorted = R.tasks.slice().sort(function (a, b) {
       if (a.alive !== b.alive) return a.alive ? 1 : -1;
       if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
       return 0;
@@ -28,33 +28,27 @@
   // Handles are OUTSIDE the grab area — they extend beyond the task edges.
   // 4 handles: left/right = duration, top = commitment, bottom = energy
   R.edgeHit = function (mx, my) {
-    // Check both normal and plan tasks
-    var lists = [R.animTasks];
-    if (R.planMode && R.planAnimTasks) lists.push(R.planAnimTasks);
-    for (var li = 0; li < lists.length; li++) {
-      var tasks = lists[li];
-      for (var i = tasks.length - 1; i >= 0; i--) {
-        var a = tasks[i];
-        var d = R.taskStretch(a);
-        var grabHW = Math.max(R.MIN_HIT, d.hw);
-        var grabHH = Math.max(R.MIN_HIT, d.hh);
+    for (var i = R.tasks.length - 1; i >= 0; i--) {
+      var a = R.tasks[i];
+      var d = R.taskStretch(a);
+      var grabHW = Math.max(R.MIN_HIT, d.hw);
+      var grabHH = Math.max(R.MIN_HIT, d.hh);
 
-        // Check vertical handles (top/bottom) — always available
-        var tEdge = a.y - grabHH;
-        var bEdge = a.y + grabHH;
-        if (Math.abs(mx - a.x) <= grabHW) {
-          if (my >= tEdge - R.HANDLE_ZONE && my <= tEdge + 2) return { task: a, side: 'top' };
-          if (my >= bEdge - 2 && my <= bEdge + R.HANDLE_ZONE) return { task: a, side: 'bottom' };
-        }
+      // Check vertical handles (top/bottom) — always available
+      var tEdge = a.y - grabHH;
+      var bEdge = a.y + grabHH;
+      if (Math.abs(mx - a.x) <= grabHW) {
+        if (my >= tEdge - R.HANDLE_ZONE && my <= tEdge + 2) return { task: a, side: 'top' };
+        if (my >= bEdge - 2 && my <= bEdge + R.HANDLE_ZONE) return { task: a, side: 'bottom' };
+      }
 
-        // Check horizontal handles (left/right) — only positioned tasks
-        if (a.position === null || a.position === undefined) continue;
-        var rEdge = a.x + grabHW;
-        var lEdge = a.x - grabHW;
-        if (Math.abs(my - a.y) <= grabHH + 5) {
-          if (mx >= rEdge - 2 && mx <= rEdge + R.HANDLE_ZONE) return { task: a, side: 'right' };
-          if (mx >= lEdge - R.HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
-        }
+      // Check horizontal handles (left/right) — only positioned tasks
+      if (a.position === null || a.position === undefined) continue;
+      var rEdge = a.x + grabHW;
+      var lEdge = a.x - grabHW;
+      if (Math.abs(my - a.y) <= grabHH + 5) {
+        if (mx >= rEdge - 2 && mx <= rEdge + R.HANDLE_ZONE) return { task: a, side: 'right' };
+        if (mx >= lEdge - R.HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
       }
     }
     return null;
@@ -73,10 +67,7 @@
     }
 
     var edge = R.edgeHit(e.clientX, e.clientY);
-
-    // Plan mode: also check plan task hits
     var hit = R.hitTest(e.clientX, e.clientY);
-    var planHit = (R.planMode && R.planHitTest) ? R.planHitTest(e.clientX, e.clientY) : null;
 
     // If edgeHit found a handle, ALWAYS resize — cursor already promised it
     if (edge) {
@@ -90,29 +81,28 @@
         startMX: e.clientX,
         startMY: e.clientY,
         startX: edge.task.x,
-        planLane: edge.task._lane !== undefined ? edge.task._lane : -1
       };
       R.canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       return;
     }
 
-    // Plan mode: prefer plan hit if mouse is in the river zone
-    if (R.planMode && planHit && e.clientY > R.surfaceY()) {
-      R.dragging = {
-        id: planHit.id,
-        sx: planHit.x, sy: planHit.y,
-        mx: e.clientX, my: e.clientY,
-        moved: false,
-        zone: 'plan',
-        planLane: planHit._lane,
-      };
-    } else if (hit) {
+    if (hit) {
+      var zone, planLane;
+      if (hit.ctx && hit.ctx.type === 'lane') {
+        zone = 'plan';
+        planLane = hit.ctx.lane;
+      } else if (hit.position != null) {
+        zone = 'river';
+      } else {
+        zone = 'cloud';
+      }
       R.dragging = {
         id: hit.id,
         sx: hit.x, sy: hit.y,
         mx: e.clientX, my: e.clientY,
         moved: false,
-        zone: (hit.position !== null && hit.position !== undefined) ? 'river' : 'cloud',
+        zone: zone,
+        planLane: planLane,
       };
     } else {
       R.hidePanel();
@@ -181,9 +171,7 @@
       if (edge) {
         R.canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       } else {
-        // In plan mode, also check plan task hits
         var anyHit = R.hitTest(e.clientX, e.clientY);
-        if (!anyHit && R.planMode && R.planHitTest) anyHit = R.planHitTest(e.clientX, e.clientY);
         R.canvas.style.cursor = anyHit ? 'grab' : 'default';
       }
       return;
@@ -197,7 +185,7 @@
 
     // Plan mode drag: dragging a task from a lane or cloud into lanes
     if (R.planMode && R.dragging.zone === 'plan') {
-      var pa = R.findPlanTask(R.dragging.id, R.dragging.planLane);
+      var pa = R.findTask(R.dragging.id);
       if (pa) {
         var rawX = R.dragging.sx + dx;
         var dd = R.taskStretch(pa);
@@ -258,36 +246,17 @@
     if (R.resizing) {
       var a = R.findTask(R.resizing.id);
       if (a) {
-        var isPlan = R.resizing.planLane >= 0;
         if (R.resizing.side === 'top') {
-          if (isPlan) {
-            R.post('plan_update_task', { lane: R.resizing.planLane, task_id: R.resizing.id, solidity: a.solidity });
-          } else {
-            R.post('put', { id: R.resizing.id, solidity: a.solidity });
-          }
+          R.save(R.resizing.id, { solidity: a.solidity });
         } else if (R.resizing.side === 'bottom') {
-          if (isPlan) {
-            R.post('plan_update_task', { lane: R.resizing.planLane, task_id: R.resizing.id, energy: a.energy });
-          } else {
-            R.post('put', { id: R.resizing.id, energy: a.energy });
-          }
+          R.save(R.resizing.id, { energy: a.energy });
         } else {
           var newMass = a.mass;
           var massDiffHours = (newMass - R.resizing.startMass) / 60;
-          if (isPlan) {
-            var pos = R.resizing.side === 'right'
-              ? R.resizing.startPosition + massDiffHours / 2
-              : R.resizing.startPosition - massDiffHours / 2;
-            R.post('plan_update_task', { lane: R.resizing.planLane, task_id: R.resizing.id, mass: newMass, position: pos });
-          } else {
-            var updates = { id: R.resizing.id, mass: newMass };
-            if (R.resizing.side === 'right') {
-              updates.position = R.resizing.startPosition + massDiffHours / 2;
-            } else {
-              updates.position = R.resizing.startPosition - massDiffHours / 2;
-            }
-            R.post('put', updates);
-          }
+          var pos = R.resizing.side === 'right'
+            ? R.resizing.startPosition + massDiffHours / 2
+            : R.resizing.startPosition - massDiffHours / 2;
+          R.save(R.resizing.id, { mass: newMass, position: pos });
         }
       }
       R.resizing = null;
@@ -304,14 +273,14 @@
     if (R.planMode && d.zone === 'plan') {
       if (!d.moved) {
         // Click on plan task — show panel
-        var pa = R.findPlanTask(d.id, d.planLane);
+        var pa = R.findTask(d.id);
         if (pa) R.showPanel(pa, e.clientX, e.clientY);
         return;
       }
 
       var dropLane = R.planLaneAt(e.clientY);
       var boundary = R.surfaceY();
-      var pa = R.findPlanTask(d.id, d.planLane);
+      var pa = R.findTask(d.id);
       if (!pa) return;
 
       var dd2 = R.taskStretch(pa);
@@ -377,21 +346,21 @@
     var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
     // Persist wizard-applied properties if any stage was used
     if (wizardWasActive) {
-      R.post('put', { id: d.id, mass: a.mass, solidity: a.solidity, energy: a.energy });
+      R.save(d.id, { mass: a.mass, solidity: a.solidity, energy: a.energy });
     }
 
     if (d.zone === 'cloud' && a.y > boundary) {
       a.customY = a.y;
-      R.post('move', { id: d.id, position: dropHours });
+      R.savePosition(d.id, dropHours);
     } else if (d.zone === 'river' && a.y < boundary) {
       a.customY = a.y;
-      R.post('move', { id: d.id, position: null });
+      R.savePosition(d.id, null);
     } else if (d.zone === 'river' && a.y > boundary) {
       a.customY = a.y;
       var dd3 = R.taskStretch(a);
       var startEdge2 = a.x - dd3.hw;
       var dropHours2 = R.screenXToHours(startEdge2) + a.mass / 120;
-      R.post('move', { id: d.id, position: dropHours2 });
+      R.savePosition(d.id, dropHours2);
     } else {
       a.customY = a.y;
     }
@@ -435,7 +404,7 @@
 
   ctxDelete.addEventListener('click', function () {
     if (!ctxTaskId) return;
-    R.post('delete', { id: ctxTaskId });
+    R.deleteTask(ctxTaskId);
     hideCtx();
   });
 
@@ -454,7 +423,6 @@
 
   R.canvas.addEventListener('dblclick', function (e) {
     if (R.hitTest(e.clientX, e.clientY)) return;
-    if (R.planMode && R.planHitTest && R.planHitTest(e.clientX, e.clientY)) return;
 
     var sY = R.surfaceY();
 
