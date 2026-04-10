@@ -161,40 +161,49 @@
 
     updateFieldRect();
 
-    // Always track which zone the cursor is over (by X position),
-    // even if the cursor isn't vertically inside the field.
-    // This handles fast swipes that jump over the field in one frame.
-    var zoneEls = wizardZonesEl.querySelectorAll('.wizard-zone');
-    var newIdx = -1;
-    for (var i = 0; i < zoneEls.length; i++) {
-      var zr = zoneEls[i].getBoundingClientRect();
-      if (mx >= zr.left && mx < zr.right) { newIdx = i; break; }
-    }
-    // Fallback: if cursor is left of all zones pick first, right of all pick last
-    if (newIdx < 0 && zoneEls.length > 0) {
-      var firstR = zoneEls[0].getBoundingClientRect();
-      var lastR = zoneEls[zoneEls.length - 1].getBoundingClientRect();
-      if (mx < firstR.left) newIdx = 0;
-      else if (mx >= lastR.right) newIdx = zoneEls.length - 1;
-    }
-
-    if (newIdx >= 0 && newIdx !== wiz.selectedIdx) {
-      wiz.selectedIdx = newIdx;
-      applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
-      renderWizardDOM();
-    }
-
-    // Stage advancement on boundary crossing.
-    // Detects crossing even if cursor jumps from far above to far below.
+    var inField = my >= wiz.fieldTop && my <= wiz.fieldBot;
     var above = my < wiz.fieldTop;
     var below = my > wiz.fieldBot;
 
+    // Only select zones while cursor is IN the field or crossing through it
+    if (inField) {
+      wiz.wasInField = true;
+      var zoneEls = wizardZonesEl.querySelectorAll('.wizard-zone');
+      var newIdx = -1;
+      for (var i = 0; i < zoneEls.length; i++) {
+        var zr = zoneEls[i].getBoundingClientRect();
+        if (mx >= zr.left && mx < zr.right) { newIdx = i; break; }
+      }
+      if (newIdx >= 0 && newIdx !== wiz.selectedIdx) {
+        wiz.selectedIdx = newIdx;
+        applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
+        renderWizardDOM();
+      }
+    }
+
+    // Fast swipe: cursor jumped from above to below without being inField.
+    // Use the last X to pick a zone, apply it, then advance.
     var crossedDown = below && wiz.lastSide === 'above';
     var crossedUp = above && wiz.lastSide === 'below';
 
-    if (above) wiz.lastSide = 'above';
-    if (below) wiz.lastSide = 'below';
+    if ((crossedDown || crossedUp) && !wiz.wasInField) {
+      // Cursor skipped the field — pick zone by X
+      var zoneEls2 = wizardZonesEl.querySelectorAll('.wizard-zone');
+      for (var j = 0; j < zoneEls2.length; j++) {
+        var zr2 = zoneEls2[j].getBoundingClientRect();
+        if (mx >= zr2.left && mx < zr2.right) {
+          wiz.selectedIdx = j;
+          applyZoneToTask(wiz.stage, wiz.zones[j].value);
+          renderWizardDOM();
+          break;
+        }
+      }
+    }
 
+    if (above) { wiz.lastSide = 'above'; wiz.wasInField = false; }
+    if (below) { wiz.lastSide = 'below'; wiz.wasInField = false; }
+
+    // Stage advancement on boundary crossing
     var shouldAdvance = false;
     if (wiz.stage === 0 && crossedDown) shouldAdvance = true;
     if (wiz.stage === 1 && crossedUp) shouldAdvance = true;
