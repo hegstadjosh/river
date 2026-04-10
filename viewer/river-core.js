@@ -35,10 +35,6 @@ window.River = {};
   R.HANDLE_ZONE = 14;
   R.NUM_STREAKS = 20;
 
-  // Tag hues (unused but preserved)
-  R.TAG_HUES = {};
-  R.DEFAULT_HUE = 30;
-
   // ── Palette ─────────────────────────────────────────────────────────
   R.SKY_COLOR    = '#17161a';  // cool dark — a night sky
   R.WATER_TOP    = '#231e19';  // warm dark — shallow water
@@ -90,37 +86,4 @@ window.River = {};
     }).catch(function () {});
   };
 
-  // Energy -> color (HSL). 0 = cool blue, 1 = rich red
-  R.energyColor = function (energy, sol, alpha) {
-    var e = Math.max(0, Math.min(1, energy || 0));
-    var hue, sat, lit;
-    if (e < 0.33) {
-      var t = e / 0.33;
-      hue = 220 - t * 10;
-      sat = 30 + t * 20;
-      lit = 25 + t * 25;
-    } else if (e < 0.66) {
-      var t = (e - 0.33) / 0.33;
-      hue = 210 - t * 180;
-      sat = 50 + t * 15;
-      lit = 50 + t * 5;
-    } else {
-      var t = (e - 0.66) / 0.34;
-      hue = 30 - t * 25;
-      sat = 65 + t * 15;
-      lit = 55 - t * 15;
-    }
-    sat *= (0.4 + sol * 0.6);
-    return 'hsla(' + hue + ',' + sat + '%,' + lit + '%,' + alpha + ')';
-  };
-
-  // Tag hue lookup (unused but preserved)
-  R.tagHue = function (tags) {
-    if (!tags || !tags.length) return R.DEFAULT_HUE;
-    for (var i = 0; i < tags.length; i++) {
-      var h = R.TAG_HUES[tags[i].toLowerCase()];
-      if (h !== undefined) return h;
-    }
-    return R.DEFAULT_HUE;
-  };
 })();

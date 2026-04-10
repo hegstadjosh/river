@@ -68,9 +68,9 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
           } else if (data.action === 'plan_remove' || data.action === 'plan_move' ||
                      data.action === 'plan_copy' || data.action === 'plan_reposition' ||
                      data.action === 'plan_add') {
-            // Viewer lane manipulation actions — these are stubs for now.
-            // Lane task manipulation is primarily done through MCP tools (Claude fills lanes).
-            // Future: implement direct viewer manipulation of lane tasks.
+            res.writeHead(501, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Lane manipulation not yet implemented. Use Claude MCP tools.' }));
+            return;
           }
 
           state.notify();
@@ -113,9 +113,14 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
       return;
     }
 
-    // Static file serving for viewer
+    // Static file serving for viewer — sanitize path to prevent traversal
     let filePath = url === '/' ? '/index.html' : url;
     const fullPath = join(viewerDir, filePath);
+    if (!fullPath.startsWith(viewerDir)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
 
     if (!existsSync(fullPath)) {
       res.writeHead(404);

@@ -1,0 +1,4 @@
+{"type":"server-started","port":63262,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:63262","screen_dir":"/Users/josh/river/.superpowers/brainstorm/53536-1775618502/content","state_dir":"/Users/josh/river/.superpowers/brainstorm/53536-1775618502/state"}
+{"type":"screen-added","file":"/Users/josh/river/.superpowers/brainstorm/53536-1775618502/content/spec-vs-built.html"}
+{"type":"screen-added","file":"/Users/josh/river/.superpowers/brainstorm/53536-1775618502/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}
