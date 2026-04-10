@@ -201,6 +201,9 @@
       }
     }
 
+    // ── Wizard glowing field ──
+    if (R.drawWizardField) R.drawWizardField(t);
+
     R.drawPastFade();
 
     // ── Keep panel attached to selected task ──

@@ -1,251 +1,273 @@
-// viewer/river-drag-wizard.js — Cloud-to-River drag wizard + drag-to-horizon timeframe switch
-// Two interaction features:
-// 1. When dragging a cloud task into the river, the horizon bar transforms into a
-//    3-stage property selector (duration, commitment, energy).
-// 2. When dragging a river task upward toward the horizon bar, hovering over a
-//    scale button for 500ms triggers a timeframe switch.
+// viewer/river-drag-wizard.js — Glowing field drag-through wizard
+//
+// When dragging from cloud toward river, the surface boundary becomes
+// a luminous field divided into 4 colored zones. You sweep through it
+// — whatever zone your cursor passes through transforms the task
+// IMMEDIATELY. Three stages: duration → commitment → energy.
+//
+// Also: drag-to-horizon dwell switcher for river tasks.
+
 (function () {
   'use strict';
-
   var R = window.River;
 
-  // ── Wizard State ────────────────────────────────────────────────────
+  // ── Wizard State ──────────────────────────────────────────────────
 
-  var wizard = {
+  var wiz = {
     active: false,
-    stage: 0,           // 0=duration, 1=commitment, 2=energy
-    hovered: -1,        // index of currently hovered preset (-1 = none)
-    selections: [null, null, null], // chosen values per stage
+    stage: -1,         // -1=inactive, 0=duration, 1=commitment, 2=energy
     taskId: null,
-    fadeIn: 0,          // 0-1 transition progress
-    stageStartTime: 0,  // timestamp when stage started (for transition)
-    barRect: null,       // cached bounding rect of #horizon-bar
-    completed: false    // all stages done, task is free in river
+    zones: [],         // [{x, w, value, label, r, g, b}] — computed per stage
+    selectedIdx: -1,   // which zone the cursor is currently in
+    fieldTop: 0,       // pixel Y where the field starts
+    fieldBot: 0,       // pixel Y where the field ends
+    fieldH: 0,
+    stageStartT: 0,    // for fade-in
+    justAdvanced: false // prevents instant re-trigger
   };
 
-  R.wizard = wizard;
+  R.wizardState = wiz;
 
-  // Preset definitions for each stage
-  var COMMITMENT_PRESETS = [
-    { v: 0.25, l: '25%', label: 'Light' },
-    { v: 0.50, l: '50%', label: 'Medium' },
-    { v: 0.75, l: '75%', label: 'Strong' },
-    { v: 1.00, l: '100%', label: 'Locked' }
-  ];
+  // Field height in pixels
+  var FIELD_H = 48;
 
-  var ENERGY_PRESETS = [
-    { v: 0.25, l: 'Low' },
-    { v: 0.50, l: 'Medium' },
-    { v: 0.75, l: 'High' },
-    { v: 1.00, l: 'Intense' }
-  ];
+  // ── Preset Definitions ────────────────────────────────────────────
 
-  var STAGE_NAMES = ['duration', 'commitment', 'energy'];
-  var STAGE_COLORS = [
-    'rgba(200, 165, 110, 0.08)',  // duration — warm amber
-    'rgba(170, 190, 140, 0.08)',  // commitment — muted green
-    'rgba(180, 150, 120, 0.08)'   // energy — earthy
-  ];
-
-  // ── DOM Elements ────────────────────────────────────────────────────
-
-  var horizonBar = document.getElementById('horizon-bar');
-  var wizardOverlay = null; // created on first use
-
-  function ensureOverlay() {
-    if (wizardOverlay) return wizardOverlay;
-    wizardOverlay = document.createElement('div');
-    wizardOverlay.id = 'wizard-overlay';
-    wizardOverlay.className = 'wizard-overlay hidden';
-    wizardOverlay.innerHTML =
-      '<div class="wizard-stage-label"></div>' +
-      '<div class="wizard-presets"></div>';
-    horizonBar.parentNode.insertBefore(wizardOverlay, horizonBar.nextSibling);
-    return wizardOverlay;
+  function durationPresets() {
+    var p = R.getPresets();
+    return p.map(function (pr) {
+      return { value: pr.m, label: pr.l, r: 200, g: 165, b: 110 }; // gold
+    });
   }
 
-  // ── Wizard Activation ───────────────────────────────────────────────
+  function commitmentPresets() {
+    return [
+      { value: 0.15, label: 'wisp',   r: 200, g: 165, b: 110 },  // barely there
+      { value: 0.40, label: 'maybe',  r: 210, g: 170, b: 105 },
+      { value: 0.70, label: 'likely', r: 220, g: 175, b: 95 },
+      { value: 0.95, label: 'locked', r: 235, g: 190, b: 80 }    // crystalline
+    ];
+  }
+
+  function energyPresets() {
+    // Matches the RGB color stops from river-blobs.js
+    return [
+      { value: 0.10, label: 'chill',   r: 55,  g: 75,  b: 115 },  // dark blue
+      { value: 0.35, label: 'easy',    r: 90,  g: 130, b: 170 },  // light blue
+      { value: 0.60, label: 'focus',   r: 200, g: 165, b: 110 },  // gold
+      { value: 0.85, label: 'deep',    r: 170, g: 65,  b: 50 }    // red
+    ];
+  }
+
+  var STAGE_PRESETS = [durationPresets, commitmentPresets, energyPresets];
+  var STAGE_LABELS = ['duration', 'commitment', 'energy'];
+
+  // ── Zone Layout ───────────────────────────────────────────────────
+
+  function computeZones(presets) {
+    // Divide the full viewport width into N equal zones
+    var n = presets.length;
+    var pad = R.W * 0.15; // 15% padding on each side
+    var usable = R.W - pad * 2;
+    var zones = [];
+    for (var i = 0; i < n; i++) {
+      zones.push({
+        x: pad + (usable / n) * i,
+        w: usable / n,
+        value: presets[i].value,
+        label: presets[i].label,
+        r: presets[i].r,
+        g: presets[i].g,
+        b: presets[i].b
+      });
+    }
+    return zones;
+  }
+
+  // ── Activation / Deactivation ─────────────────────────────────────
 
   R.wizardActivate = function (taskId) {
-    var overlay = ensureOverlay();
-    wizard.active = true;
-    wizard.stage = 0;
-    wizard.hovered = -1;
-    wizard.selections = [null, null, null];
-    wizard.taskId = taskId;
-    wizard.fadeIn = 0;
-    wizard.stageStartTime = performance.now();
-    wizard.completed = false;
-    wizard.barRect = horizonBar.getBoundingClientRect();
-
-    // Hide normal bar content, show wizard
-    horizonBar.classList.add('wizard-active');
-    overlay.classList.remove('hidden');
-    renderWizardStage();
+    var sY = R.surfaceY();
+    wiz.active = true;
+    wiz.stage = 0;
+    wiz.taskId = taskId;
+    wiz.fieldTop = sY - FIELD_H / 2;
+    wiz.fieldBot = sY + FIELD_H / 2;
+    wiz.fieldH = FIELD_H;
+    wiz.selectedIdx = -1;
+    wiz.stageStartT = performance.now();
+    wiz.justAdvanced = true;
+    wiz.zones = computeZones(STAGE_PRESETS[0]());
   };
 
   R.wizardDeactivate = function () {
-    wizard.active = false;
-    wizard.completed = false;
-    wizard.taskId = null;
-    horizonBar.classList.remove('wizard-active');
-    if (wizardOverlay) wizardOverlay.classList.add('hidden');
+    wiz.active = false;
+    wiz.stage = -1;
+    wiz.taskId = null;
+    wiz.zones = [];
+    wiz.selectedIdx = -1;
   };
 
-  R.wizardIsActive = function () {
-    return wizard.active && !wizard.completed;
-  };
+  R.wizardIsActive = function () { return wiz.active && wiz.stage >= 0 && wiz.stage <= 2; };
+  R.wizardIsCompleted = function () { return wiz.active && wiz.stage > 2; };
 
-  R.wizardIsCompleted = function () {
-    return wizard.active && wizard.completed;
-  };
-
-  // ── Stage Rendering ─────────────────────────────────────────────────
-
-  function getStagePresets() {
-    if (wizard.stage === 0) {
-      return R.getPresets().map(function (p) {
-        return { v: p.m, l: p.l };
-      });
-    } else if (wizard.stage === 1) {
-      return COMMITMENT_PRESETS;
-    } else {
-      return ENERGY_PRESETS;
-    }
-  }
-
-  function renderWizardStage() {
-    var overlay = ensureOverlay();
-    var label = overlay.querySelector('.wizard-stage-label');
-    var container = overlay.querySelector('.wizard-presets');
-
-    label.textContent = STAGE_NAMES[wizard.stage];
-    overlay.style.setProperty('--wizard-bg', STAGE_COLORS[wizard.stage]);
-
-    var presets = getStagePresets();
-    container.innerHTML = '';
-    for (var i = 0; i < presets.length; i++) {
-      var btn = document.createElement('div');
-      btn.className = 'wizard-preset';
-      btn.dataset.index = i;
-      btn.textContent = presets[i].l;
-      if (presets[i].label) {
-        btn.innerHTML = '<span class="wizard-preset-label">' + presets[i].label + '</span>' + presets[i].l;
-      }
-      container.appendChild(btn);
-    }
-
-    // Trigger transition
-    overlay.classList.remove('wizard-stage-0', 'wizard-stage-1', 'wizard-stage-2');
-    overlay.classList.add('wizard-stage-' + wizard.stage);
-    wizard.hovered = -1;
-  }
-
-  // ── Mouse Tracking (called from river-input.js mousemove) ──────────
+  // ── Mouse Tracking (called from river-input.js) ───────────────────
 
   R.wizardMouseMove = function (mx, my) {
-    if (!wizard.active || wizard.completed) return;
+    if (!wiz.active || wiz.stage > 2) return;
 
-    // Update bar rect (might change on scroll)
-    wizard.barRect = horizonBar.getBoundingClientRect();
-    var rect = wizard.barRect;
+    var inField = my >= wiz.fieldTop && my <= wiz.fieldBot;
 
-    // Fade in
-    var elapsed = performance.now() - wizard.stageStartTime;
-    wizard.fadeIn = Math.min(1, elapsed / 200);
+    if (inField) {
+      wiz.justAdvanced = false;
 
-    // Check if cursor is in the bar area (vertically)
-    var inBar = my >= rect.top - 10 && my <= rect.bottom + 10;
-
-    if (inBar) {
-      // Determine which preset the cursor is over (horizontal position)
-      var overlay = ensureOverlay();
-      var presetEls = overlay.querySelectorAll('.wizard-preset');
-      var newHovered = -1;
-      for (var i = 0; i < presetEls.length; i++) {
-        var pr = presetEls[i].getBoundingClientRect();
-        if (mx >= pr.left && mx <= pr.right) {
-          newHovered = i;
+      // Find which zone the cursor is in
+      var newIdx = -1;
+      for (var i = 0; i < wiz.zones.length; i++) {
+        var z = wiz.zones[i];
+        if (mx >= z.x && mx < z.x + z.w) {
+          newIdx = i;
           break;
         }
       }
 
-      // Update hover state
-      if (newHovered !== wizard.hovered) {
-        wizard.hovered = newHovered;
-        for (var j = 0; j < presetEls.length; j++) {
-          presetEls[j].classList.toggle('wizard-preset-hover', j === newHovered);
-        }
+      if (newIdx !== wiz.selectedIdx && newIdx >= 0) {
+        wiz.selectedIdx = newIdx;
+        // IMMEDIATELY transform the task
+        applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
       }
-    } else if (my > rect.bottom + 10) {
-      // Cursor has exited below the bar — select current hover and advance
-      var presets = getStagePresets();
-      if (wizard.hovered >= 0 && wizard.hovered < presets.length) {
-        wizard.selections[wizard.stage] = presets[wizard.hovered].v;
-      }
-      // else: keep default (null = no selection = skip)
-
-      if (wizard.stage < 2) {
-        wizard.stage++;
-        wizard.stageStartTime = performance.now();
-        wizard.hovered = -1;
-        renderWizardStage();
-      } else {
-        // All stages done
-        wizard.completed = true;
-        applyWizardSelections();
-        horizonBar.classList.remove('wizard-active');
-        if (wizardOverlay) wizardOverlay.classList.add('hidden');
-      }
+    } else if (my > wiz.fieldBot && !wiz.justAdvanced) {
+      // Exited below the field — advance to next stage
+      advanceStage();
+    } else if (my < wiz.fieldTop && !wiz.justAdvanced) {
+      // Exited above — also advance (they're sweeping back up for next stage)
+      advanceStage();
     }
-    // If cursor is above the bar, don't change anything (let them re-enter)
   };
 
-  function applyWizardSelections() {
-    var a = R.findTask(wizard.taskId);
+  function applyZoneToTask(stage, value) {
+    var a = R.findTask(wiz.taskId);
     if (!a) return;
 
-    // Apply duration if selected
-    if (wizard.selections[0] !== null) {
-      a.mass = wizard.selections[0];
-    }
-    // Apply commitment if selected
-    if (wizard.selections[1] !== null) {
-      a.solidity = wizard.selections[1];
-    }
-    // Apply energy if selected
-    if (wizard.selections[2] !== null) {
-      a.energy = wizard.selections[2];
+    if (stage === 0) {
+      // Duration — also adjust position to keep start time fixed
+      var oldMass = a.mass;
+      a.mass = value;
+      if (a.position != null) {
+        var massDiffH = (value - oldMass) / 60;
+        // Don't shift position during wizard — task isn't placed yet
+      }
+    } else if (stage === 1) {
+      a.solidity = value;
+    } else if (stage === 2) {
+      a.energy = value;
     }
   }
 
-  // ── Get Final Selections (called on mouseup to include in POST) ────
+  function advanceStage() {
+    wiz.stage++;
+    wiz.selectedIdx = -1;
+    wiz.stageStartT = performance.now();
+    wiz.justAdvanced = true;
+
+    if (wiz.stage <= 2) {
+      wiz.zones = computeZones(STAGE_PRESETS[wiz.stage]());
+    }
+    // stage > 2 = completed, wizardIsCompleted() returns true
+  }
+
+  // ── Get Selections for POST ───────────────────────────────────────
 
   R.wizardGetSelections = function () {
-    return {
-      mass: wizard.selections[0],
-      solidity: wizard.selections[1],
-      energy: wizard.selections[2]
-    };
+    var a = R.findTask(wiz.taskId);
+    if (!a) return { mass: null, solidity: null, energy: null };
+    return { mass: a.mass, solidity: a.solidity, energy: a.energy };
   };
 
-  // ── Horizon Dwell Switcher ──────────────────────────────────────────
+  // ── Rendering (called from frame loop) ────────────────────────────
+
+  R.drawWizardField = function (t) {
+    if (!wiz.active || wiz.stage > 2) return;
+
+    var ctx = R.ctx;
+    var fadeIn = Math.min(1, (performance.now() - wiz.stageStartT) / 150);
+
+    // Draw the field background — a warm glowing band at the surface
+    var grad = ctx.createLinearGradient(0, wiz.fieldTop - 10, 0, wiz.fieldBot + 10);
+    grad.addColorStop(0, 'rgba(200, 165, 110, 0)');
+    grad.addColorStop(0.15, 'rgba(200, 165, 110, ' + (0.03 * fadeIn) + ')');
+    grad.addColorStop(0.5, 'rgba(200, 165, 110, ' + (0.06 * fadeIn) + ')');
+    grad.addColorStop(0.85, 'rgba(200, 165, 110, ' + (0.03 * fadeIn) + ')');
+    grad.addColorStop(1, 'rgba(200, 165, 110, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, wiz.fieldTop - 10, R.W, wiz.fieldH + 20);
+
+    // Draw each zone as a colored glow
+    for (var i = 0; i < wiz.zones.length; i++) {
+      var z = wiz.zones[i];
+      var isActive = i === wiz.selectedIdx;
+      var alpha = isActive ? 0.35 * fadeIn : 0.12 * fadeIn;
+
+      // Zone glow — radial gradient centered in the zone
+      var cx = z.x + z.w / 2;
+      var cy = (wiz.fieldTop + wiz.fieldBot) / 2;
+      var rx = z.w / 2;
+      var ry = wiz.fieldH / 2;
+
+      var zg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
+      zg.addColorStop(0, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + alpha + ')');
+      zg.addColorStop(0.6, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (alpha * 0.5) + ')');
+      zg.addColorStop(1, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',0)');
+      ctx.fillStyle = zg;
+      ctx.fillRect(z.x, wiz.fieldTop, z.w, wiz.fieldH);
+
+      // Active zone: bright border glow
+      if (isActive) {
+        ctx.beginPath();
+        ctx.roundRect(z.x + 2, wiz.fieldTop + 2, z.w - 4, wiz.fieldH - 4, 8);
+        ctx.strokeStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (0.4 * fadeIn) + ')';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Zone label
+      ctx.font = (isActive ? '600 ' : '400 ') + '12px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255, 255, 255, ' + (isActive ? 0.9 : 0.4) * fadeIn + ')';
+      ctx.fillText(z.label, cx, cy);
+    }
+
+    // Stage label above the field
+    ctx.font = '500 9px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.4 * fadeIn) + ')';
+    ctx.fillText(STAGE_LABELS[wiz.stage], R.W / 2, wiz.fieldTop - 4);
+
+    // Stage dots (show progress: ● ○ ○)
+    for (var d = 0; d < 3; d++) {
+      ctx.beginPath();
+      ctx.arc(R.W / 2 - 12 + d * 12, wiz.fieldBot + 10, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = d <= wiz.stage
+        ? 'rgba(200, 165, 110, ' + (0.5 * fadeIn) + ')'
+        : 'rgba(200, 165, 110, ' + (0.15 * fadeIn) + ')';
+      ctx.fill();
+    }
+  };
+
+  // ── Horizon Dwell Switcher ────────────────────────────────────────
   // When dragging a RIVER task, hovering over a scale button for 500ms
-  // triggers a timeframe switch.
+  // triggers a timeframe switch. Button grows and glows during dwell.
 
   var dwell = {
-    active: false,
     btnEl: null,
-    btnHours: 0,
     startTime: 0,
     triggered: false
   };
 
-  R.dwellState = dwell;
-
   R.dwellCheckStart = function (mx, my) {
-    // Only active when dragging a river task (not during wizard)
-    if (wizard.active) return;
+    if (wiz.active) return;
 
     var hzBtns = document.querySelectorAll('.hz-btn');
     var found = null;
@@ -258,55 +280,34 @@
     }
 
     if (found) {
-      var hours = Number(found.dataset.hours);
       if (dwell.btnEl === found && !dwell.triggered) {
-        // Still on same button — check elapsed
         var elapsed = performance.now() - dwell.startTime;
         if (elapsed >= 500) {
           dwell.triggered = true;
-          // Remove the grow class before switching
           found.classList.remove('hz-btn-dwell');
           found.classList.add('hz-btn-trigger');
-          // Switch timeframe
           R.scrollHours = 0;
-          R.scrollVel = 0;
-          R.setHorizon(hours);
-          // Flash then remove trigger class
-          setTimeout(function () {
-            found.classList.remove('hz-btn-trigger');
-          }, 300);
+          R.setHorizon(Number(found.dataset.hours));
+          setTimeout(function () { found.classList.remove('hz-btn-trigger'); }, 300);
         } else {
-          // Still dwelling — add grow animation
           found.classList.add('hz-btn-dwell');
         }
       } else if (dwell.btnEl !== found) {
-        // Moved to a new button — reset
-        if (dwell.btnEl) {
-          dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
-        }
+        if (dwell.btnEl) dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
         dwell.btnEl = found;
-        dwell.btnHours = hours;
         dwell.startTime = performance.now();
         dwell.triggered = false;
-        dwell.active = true;
       }
     } else {
-      // Not on any button
-      if (dwell.btnEl) {
-        dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
-      }
+      if (dwell.btnEl) dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
       dwell.btnEl = null;
-      dwell.active = false;
       dwell.triggered = false;
     }
   };
 
   R.dwellReset = function () {
-    if (dwell.btnEl) {
-      dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
-    }
+    if (dwell.btnEl) dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
     dwell.btnEl = null;
-    dwell.active = false;
     dwell.triggered = false;
   };
 })();

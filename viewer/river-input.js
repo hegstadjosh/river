@@ -209,32 +209,29 @@
       var boundary = R.surfaceY();
 
       // ── Cloud-to-River Wizard ──
-      // When a cloud task crosses below the surface, activate the wizard
+      // Activates IMMEDIATELY on any cloud drag (not just when crossing boundary).
+      // The glowing field appears at the surface; you sweep through it.
       if (R.dragging.zone === 'cloud' && !R.planMode) {
+        if (!R.dragging.wizardStarted && R.wizardActivate) {
+          R.wizardActivate(R.dragging.id);
+          R.dragging.wizardStarted = true;
+        }
+
         if (R.wizardIsActive()) {
-          // Wizard is running — feed it mouse position, don't move the task
           R.wizardMouseMove(e.clientX, e.clientY);
-          // Keep task pinned near the bar area while wizard is active
+          // Task follows cursor freely — the field transforms it as you pass through
           a.x = e.clientX;
-          a.y = Math.min(e.clientY, boundary + 30);
+          a.y = e.clientY;
           a.tx = a.x; a.ty = a.y;
           return;
         } else if (R.wizardIsCompleted()) {
-          // Wizard finished — task is now free to position in river
-          var rawX = R.dragging.sx + dx;
+          // All stages done — task follows cursor freely, ready to place in river
+          var rawX = e.clientX;
           var dd = R.taskStretch(a);
           var startEdgeX = rawX - dd.hw;
           var snappedStart = R.snapX(startEdgeX);
           a.x = snappedStart + dd.hw;
-          a.y = R.dragging.sy + dy;
-          a.tx = a.x; a.ty = a.y;
-          return;
-        } else if (e.clientY > boundary && !R.dragging.wizardDone) {
-          // Just crossed the boundary — activate wizard
-          R.wizardActivate(R.dragging.id);
-          R.wizardMouseMove(e.clientX, e.clientY);
-          a.x = e.clientX;
-          a.y = boundary + 20;
+          a.y = e.clientY;
           a.tx = a.x; a.ty = a.y;
           return;
         }
