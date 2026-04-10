@@ -125,15 +125,31 @@
     wizardLabel.textContent = STAGE_LABELS[wiz.stage];
 
     var presets = wiz.zones;
+    var isEnergy = wiz.stage === 2;
+    var isCommitment = wiz.stage === 1;
     wizardZonesEl.innerHTML = '';
     for (var i = 0; i < presets.length; i++) {
+      var p = presets[i];
       var zone = document.createElement('div');
-      zone.className = 'wizard-zone' + (i === wiz.selectedIdx ? ' active' : '');
-      zone.textContent = presets[i].label;
-      // Tint the active zone with its color
-      if (i === wiz.selectedIdx) {
-        zone.style.background = 'rgba(' + presets[i].r + ',' + presets[i].g + ',' + presets[i].b + ',0.15)';
-        zone.style.color = 'rgb(' + presets[i].r + ',' + presets[i].g + ',' + presets[i].b + ')';
+      var isActive = i === wiz.selectedIdx;
+      zone.className = 'wizard-zone' + (isActive ? ' active' : '');
+      zone.textContent = p.label;
+
+      if (isEnergy) {
+        // Energy: always show the color — it IS a color picker
+        var a = isActive ? 0.3 : 0.12;
+        zone.style.background = 'rgba(' + p.r + ',' + p.g + ',' + p.b + ',' + a + ')';
+        zone.style.color = 'rgb(' + p.r + ',' + p.g + ',' + p.b + ')';
+        zone.style.borderColor = 'rgba(' + p.r + ',' + p.g + ',' + p.b + ',0.2)';
+      } else if (isCommitment) {
+        // Commitment: opacity increases left to right
+        var commitA = isActive ? 0.9 : (0.25 + i * 0.2);
+        zone.style.color = 'rgba(200, 165, 110, ' + commitA + ')';
+        if (isActive) zone.style.background = 'rgba(200, 165, 110, 0.12)';
+      } else if (isActive) {
+        // Duration: just highlight active
+        zone.style.background = 'rgba(200, 165, 110, 0.12)';
+        zone.style.color = 'rgba(200, 165, 110, 0.95)';
       }
       wizardZonesEl.appendChild(zone);
     }
