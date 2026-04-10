@@ -64,13 +64,13 @@
         return function () {
           if (!R.selectedId) return;
           var a = R.findTask(R.selectedId);
-          var updates = { id: R.selectedId, mass: mass };
+          var changes = { mass: mass };
           // Keep start time fixed: shift center by half the mass delta
           if (a && a.position !== null && a.position !== undefined) {
             var massDiffH = (mass - a.mass) / 60;
-            updates.position = a.position + massDiffH / 2;
+            changes.position = a.position + massDiffH / 2;
           }
-          R.post('put', updates);
+          R.save(R.selectedId, changes);
           panelDurInput.value = R.formatDuration(mass);
           R.renderPresetButtons(mass);
         };
@@ -175,12 +175,12 @@
   R.applyDuration = function (parsed) {
     if (!parsed || !R.selectedId) return;
     var a = R.findTask(R.selectedId);
-    var updates = { id: R.selectedId, mass: parsed };
+    var changes = { mass: parsed };
     if (a && a.position !== null && a.position !== undefined) {
       var massDiffH = (parsed - a.mass) / 60;
-      updates.position = a.position + massDiffH / 2;
+      changes.position = a.position + massDiffH / 2;
     }
-    R.post('put', updates);
+    R.save(R.selectedId, changes);
     panelDurInput.value = R.formatDuration(parsed);
     R.renderPresetButtons(parsed);
   };
@@ -259,7 +259,7 @@
     if (!R.selectedId) return;
     clearTimeout(nameTimer);
     nameTimer = setTimeout(function () {
-      R.post('put', { id: R.selectedId, name: panelName.value });
+      R.save(R.selectedId, { name: panelName.value });
     }, 300);
   });
 
@@ -276,7 +276,7 @@
 
   panelSolidity.addEventListener('input', function () {
     if (!R.selectedId) return;
-    R.post('put', { id: R.selectedId, solidity: Number(panelSolidity.value) / 100 });
+    R.save(R.selectedId, { solidity: Number(panelSolidity.value) / 100 });
   });
 
   startIcon.addEventListener('click', function() {
@@ -311,7 +311,7 @@
     if (!parsed) return;
     var nowMs = new Date(R.state.now).getTime();
     var newCenterH = (parsed.getTime() - nowMs) / 3600000 + a.mass / 120;
-    R.post('put', { id: R.selectedId, position: newCenterH });
+    R.save(R.selectedId, { position: newCenterH });
     panelStart.value = R.fmtCompact(parsed);
     panelEnd.value = R.fmtCompact(new Date(parsed.getTime() + a.mass * 60000));
   });
@@ -328,7 +328,7 @@
     var newMass = Math.max(5, Math.round((endParsed.getTime() - startParsed.getTime()) / 60000));
     var nowMs = new Date(R.state.now).getTime();
     var newCenterH = (startParsed.getTime() - nowMs) / 3600000 + newMass / 120;
-    R.post('put', { id: R.selectedId, mass: newMass, position: newCenterH });
+    R.save(R.selectedId, { mass: newMass, position: newCenterH });
     panelDurInput.value = R.formatDuration(newMass);
     panelEnd.value = R.fmtCompact(endParsed);
     R.renderPresetButtons(newMass);
@@ -336,15 +336,15 @@
 
   document.getElementById('panel-energy').addEventListener('input', function () {
     if (!R.selectedId) return;
-    R.post('put', { id: R.selectedId, energy: Number(this.value) / 100 });
+    R.save(R.selectedId, { energy: Number(this.value) / 100 });
   });
   panelFixed.addEventListener('change', function () {
     if (!R.selectedId) return;
-    R.post('put', { id: R.selectedId, fixed: panelFixed.checked });
+    R.save(R.selectedId, { fixed: panelFixed.checked });
   });
   panelDissolve.addEventListener('click', function () {
     if (!R.selectedId) return;
-    R.post('delete', { id: R.selectedId });
+    R.deleteTask(R.selectedId);
     R.hidePanel();
   });
 })();
