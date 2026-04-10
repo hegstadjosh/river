@@ -23,10 +23,12 @@
 
   R.cloudPos = function (task) {
     var top = R.cloudTopY();
-    var bot = R.surfaceY() - 50; // stay well above the surface
+    var bot = R.surfaceY() - 50;
+    var cx = (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx');
+    var cy = (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy');
     return {
-      x: R.W * 0.15 + R.hashFrac(task.id, 'cx') * R.W * 0.7,
-      y: top + R.hashFrac(task.id, 'cy') * (bot - top)
+      x: R.W * 0.15 + cx * R.W * 0.7,
+      y: top + cy * (bot - top)
     };
   };
 

@@ -13,6 +13,8 @@ export interface Task {
   alive: boolean;
   tags: string[];
   created: string;
+  cloud_x: number | null; // 0-1 normalized X in cloud zone
+  cloud_y: number | null; // 0-1 normalized Y in cloud zone
 }
 
 export interface TaskWithPosition extends Task {

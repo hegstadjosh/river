@@ -208,7 +208,7 @@
         a.anchor = src.anchor;
         a.ctx = src.ctx;
         a.tx = tgt.x;
-        a.ty = tgt.y;
+        a.ty = (a.customY !== undefined) ? a.customY : tgt.y;
       } else {
         // Add new task with initial position at target
         R.tasks.push({

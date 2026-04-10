@@ -359,23 +359,30 @@
       var dd3 = R.taskStretch(a);
       var startEdge2 = a.x - dd3.hw;
       updates.position = R.screenXToHours(startEdge2) + a.mass / 120;
-    } else {
-      a.customY = a.y;
+    } else if (d.zone === 'cloud') {
+      // Stayed in cloud — save cloud position as normalized 0-1
+      var cTop = R.cloudTopY();
+      var cBot = R.surfaceY() - 50;
+      var cLeft = R.W * 0.15;
+      var cWidth = R.W * 0.7;
+      updates.cloud_x = Math.max(0, Math.min(1, (a.x - cLeft) / cWidth));
+      updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
     }
 
-    // Send as one request — avoids race between property save and position move
-    if (updates.position !== undefined) {
-      // Position change needs special handling — 'move' endpoint, not 'put'
-      if (wizardWasActive) {
-        // Save properties first, then move — but use raw post to combine
+    // Send combined update
+    var hasPosition = updates.position !== undefined;
+    var hasCloudPos = updates.cloud_x !== undefined;
+    var hasAny = hasPosition || hasCloudPos || wizardWasActive;
+
+    if (hasAny) {
+      if (hasPosition && wizardWasActive) {
         R.post('put', { id: d.id, mass: updates.mass, solidity: updates.solidity, energy: updates.energy, position: updates.position });
-      } else {
+      } else if (hasPosition) {
         R.savePosition(d.id, updates.position);
+      } else {
+        R.save(d.id, updates);
       }
-    } else if (wizardWasActive) {
-      R.save(d.id, updates);
     }
-    a.ty = a.y;
   });
 
   // ── Context Menu ──────────────────────────────────────────────────

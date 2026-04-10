@@ -34,6 +34,8 @@ export function registerPut(server: McpServer, state: RiverState): void {
         fixed: z.boolean().optional().describe('If true, task never recirculates'),
         alive: z.boolean().optional().describe('Mark as the currently active task'),
         tags: z.array(z.string()).optional().describe('Freeform tags'),
+        cloud_x: z.number().min(0).max(1).nullable().optional().describe('Cloud zone X position 0-1 (left to right). Use to arrange cloud tasks spatially.'),
+        cloud_y: z.number().min(0).max(1).nullable().optional().describe('Cloud zone Y position 0-1 (top to bottom). Use to arrange cloud tasks spatially.'),
 
         // Batch
         tasks: z
@@ -62,6 +64,8 @@ export function registerPut(server: McpServer, state: RiverState): void {
           fixed: args.fixed,
           alive: args.alive,
           tags: args.tags,
+          cloud_x: args.cloud_x,
+          cloud_y: args.cloud_y,
         });
         results.push(taskWithPosition(task));
       }

@@ -10,7 +10,7 @@ import {
 import { type TaskRow, rowToTask } from './types.js';
 
 export function createTaskCrud(db: Database.Database, currentTimelineId: () => string) {
-  function putTask(input: PutSingleInput & { position?: number | null }): Task {
+  function putTask(input: PutSingleInput & { position?: number | null; cloud_x?: number | null; cloud_y?: number | null }): Task {
     const timelineId = currentTimelineId();
 
     // Convert position to anchor if provided
@@ -47,6 +47,8 @@ export function createTaskCrud(db: Database.Database, currentTimelineId: () => s
       if (input.fixed !== undefined) { updates.push('fixed = @fixed_val'); values.fixed_val = input.fixed ? 1 : 0; }
       if (input.alive !== undefined) { updates.push('alive = @alive_val'); values.alive_val = input.alive ? 1 : 0; }
       if (input.tags !== undefined) { updates.push('tags = @tags_val'); values.tags_val = JSON.stringify(input.tags); }
+      if (input.cloud_x !== undefined) { updates.push('cloud_x = @cx_val'); values.cx_val = input.cloud_x; }
+      if (input.cloud_y !== undefined) { updates.push('cloud_y = @cy_val'); values.cy_val = input.cloud_y; }
 
       if (updates.length > 0) {
         db
@@ -81,12 +83,14 @@ export function createTaskCrud(db: Database.Database, currentTimelineId: () => s
         alive: (input.alive ?? false) ? 1 : 0,
         tags: JSON.stringify(input.tags ?? []),
         created: new Date().toISOString(),
+        cloud_x: input.cloud_x ?? null,
+        cloud_y: input.cloud_y ?? null,
       };
 
       db
         .prepare(
-          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-           VALUES (@id, @timeline_id, @name, @mass, @anchor, @solidity, @energy, @fixed, @alive, @tags, @created)`
+          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y)
+           VALUES (@id, @timeline_id, @name, @mass, @anchor, @solidity, @energy, @fixed, @alive, @tags, @created, @cloud_x, @cloud_y)`
         )
         .run(task);
 

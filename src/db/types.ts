@@ -14,6 +14,8 @@ export interface TaskRow {
   alive: number;
   tags: string;
   created: string;
+  cloud_x: number | null;
+  cloud_y: number | null;
 }
 
 export function rowToTask(row: TaskRow): Task {
@@ -28,5 +30,7 @@ export function rowToTask(row: TaskRow): Task {
     alive: row.alive === 1,
     tags: JSON.parse(row.tags),
     created: row.created,
+    cloud_x: row.cloud_x ?? null,
+    cloud_y: row.cloud_y ?? null,
   };
 }
