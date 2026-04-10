@@ -288,14 +288,11 @@
       var dropHours = R.screenXToHours(startEdge) + pa.mass / 120;
 
       if (e.clientY < boundary) {
-        // Dragged to cloud — move from lane back to main cloud
-        R.post('plan_to_cloud', { lane: d.planLane, task_id: d.id });
+        R.moveToCloud(d.id, d.planLane);
       } else if (dropLane >= 0 && dropLane !== d.planLane) {
-        // Dragged to different lane — move
-        R.post('plan_move', { from_lane: d.planLane, to_lane: dropLane, task_id: d.id, position: dropHours });
+        R.moveToLane(d.id, d.planLane, dropLane, dropHours);
       } else if (dropLane >= 0) {
-        // Same lane, different x position
-        R.post('plan_reposition', { lane: d.planLane, task_id: d.id, position: dropHours });
+        R.savePosition(d.id, dropHours);
       }
       return;
     }
@@ -310,8 +307,7 @@
           var startEdge = a.x - dd2.hw;
           var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
 
-          // Copy cloud task into lane (original stays in cloud)
-          R.post('plan_add', { lane: dropLane, task_id: d.id, position: dropHours, copy: true });
+          R.copyToLane(d.id, dropLane, dropHours);
         }
         return;
       }

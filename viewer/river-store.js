@@ -81,6 +81,30 @@
     }
   };
 
+  // ── Cross-context operations ────────────────────────────────────────
+
+  R.moveToCloud = function (taskId, fromLane) {
+    R.post('plan_to_cloud', { lane: fromLane, task_id: taskId });
+  };
+
+  R.moveToLane = function (taskId, fromLane, toLane, position) {
+    R.post('plan_move', { from_lane: fromLane, to_lane: toLane, task_id: taskId, position: position });
+  };
+
+  R.copyToLane = function (taskId, toLane, position) {
+    R.post('plan_add', { lane: toLane, task_id: taskId, position: position, copy: true });
+  };
+
+  R.visibleTasks = function () {
+    if (R.planMode) {
+      // In plan mode: cloud tasks + all lane tasks
+      return R.tasks.filter(function (t) {
+        return t.ctx && (t.ctx.type === 'lane' || (t.ctx.type === 'main' && (t.position === null || t.position === undefined)));
+      });
+    }
+    return R.mainTasks();
+  };
+
   // ── Sync: merge server state into the store ────────────────────────
   // Preserves animation state (x, y, vx, vy) for existing tasks.
 
@@ -102,6 +126,7 @@
       if (!wasPlanMode && R.initPlanStreaks) R.initPlanStreaks();
     } else {
       R.planLanes = [];
+      R.planHoverLane = -1;
     }
     if (R.updatePlanIndicator) R.updatePlanIndicator();
 
