@@ -23,7 +23,7 @@
     fieldBot: 0,       // pixel Y where the field ends
     fieldH: 0,
     stageStartT: 0,    // for fade-in
-    lastInField: false  // tracks if cursor was in the field
+    lastSide: null     // 'above' or 'below' — which side the cursor was last on
   };
 
   R.wizardState = wiz;
@@ -98,7 +98,7 @@
     wiz.fieldH = FIELD_H;
     wiz.selectedIdx = -1;
     wiz.stageStartT = performance.now();
-    wiz.lastInField = false;
+    wiz.lastSide = 'above'; // starting from cloud = above the field
     wiz.zones = computeZones(STAGE_PRESETS[0]());
     // Hide the DOM horizon bar so the Canvas field is visible
     if (horizonBar) horizonBar.style.opacity = '0';
@@ -122,30 +122,40 @@
   R.wizardMouseMove = function (mx, my) {
     if (!wiz.active || wiz.stage > 2) return;
 
-    // Always update which zone the cursor is over (based on X)
-    var newIdx = -1;
-    for (var i = 0; i < wiz.zones.length; i++) {
-      var z = wiz.zones[i];
-      if (mx >= z.x && mx < z.x + z.w) { newIdx = i; break; }
+    var inField = my >= wiz.fieldTop && my <= wiz.fieldBot;
+    var above = my < wiz.fieldTop;
+    var below = my > wiz.fieldBot;
+
+    // While in the field: update zone selection and transform the task
+    if (inField) {
+      var newIdx = -1;
+      for (var i = 0; i < wiz.zones.length; i++) {
+        var z = wiz.zones[i];
+        if (mx >= z.x && mx < z.x + z.w) { newIdx = i; break; }
+      }
+      if (newIdx >= 0 && newIdx !== wiz.selectedIdx) {
+        wiz.selectedIdx = newIdx;
+        applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
+      }
     }
 
-    // If cursor is in or near the field vertically, select the zone
-    var inField = my >= wiz.fieldTop - 20 && my <= wiz.fieldBot + 20;
-    if (inField && newIdx >= 0 && newIdx !== wiz.selectedIdx) {
-      wiz.selectedIdx = newIdx;
-      applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
-      wiz.lastInField = true;
-    }
+    // Zigzag stage advancement:
+    // Stage 0 (duration):  starts above, advance when exits BELOW (dragging down)
+    // Stage 1 (commitment): starts below, advance when exits ABOVE (dragging up)
+    // Stage 2 (energy):     starts above, advance when exits BELOW (dragging down → land in river)
+    var exitDir = null;
+    if (below && wiz.lastSide !== 'below') exitDir = 'below';
+    if (above && wiz.lastSide !== 'above') exitDir = 'above';
 
-    // Track when cursor was last in the field
-    if (inField) wiz.lastInField = true;
+    if (above) wiz.lastSide = 'above';
+    if (below) wiz.lastSide = 'below';
 
-    // Advance stage when cursor exits below the field
-    // (they've swept through and continued downward)
-    if (my > wiz.fieldBot + 20 && wiz.lastInField) {
-      wiz.lastInField = false;
-      advanceStage();
-    }
+    var shouldAdvance = false;
+    if (wiz.stage === 0 && exitDir === 'below') shouldAdvance = true;  // dragged down through duration
+    if (wiz.stage === 1 && exitDir === 'above') shouldAdvance = true;  // dragged back up through commitment
+    if (wiz.stage === 2 && exitDir === 'below') shouldAdvance = true;  // dragged down through energy → done
+
+    if (shouldAdvance) advanceStage();
   };
 
   function applyZoneToTask(stage, value) {
@@ -171,12 +181,14 @@
     wiz.stage++;
     wiz.selectedIdx = -1;
     wiz.stageStartT = performance.now();
-    wiz.lastInField = false;
 
     if (wiz.stage <= 2) {
       wiz.zones = computeZones(STAGE_PRESETS[wiz.stage]());
+      // After stage 0 (exited below), cursor is below → lastSide = 'below'
+      // After stage 1 (exited above), cursor is above → lastSide = 'above'
+      // Stage 2 starts from above (just like stage 0)
     }
-    // stage > 2 = completed, wizardIsCompleted() returns true
+    // stage > 2 = completed
   }
 
   // ── Get Selections for POST ───────────────────────────────────────
