@@ -496,11 +496,19 @@ input[type="checkbox"] {
   text-align: center;
   white-space: nowrap;
   transition: all 0.1s ease;
-  border-right: 1px solid rgba(200, 165, 110, 0.12);
+}
+
+.wizard-zone + .wizard-zone {
+  border-left: 1px solid rgba(200, 165, 110, 0.12);
+  border-radius: 0;
+}
+
+.wizard-zone:first-child {
+  border-radius: 5px 0 0 5px;
 }
 
 .wizard-zone:last-child {
-  border-right: none;
+  border-radius: 0 5px 5px 0;
 }
 
 .wizard-zone.active {
