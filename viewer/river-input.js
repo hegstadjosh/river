@@ -340,25 +340,40 @@
     var dd2 = R.taskStretch(a);
     var startEdge = a.x - dd2.hw;
     var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
-    // Persist wizard-applied properties if any stage was used
+    // Build one combined update — wizard properties + position change
+    var updates = {};
     if (wizardWasActive) {
-      R.save(d.id, { mass: a.mass, solidity: a.solidity, energy: a.energy });
+      updates.mass = a.mass;
+      updates.solidity = a.solidity;
+      updates.energy = a.energy;
     }
 
     if (d.zone === 'cloud' && a.y > boundary) {
       a.customY = a.y;
-      R.savePosition(d.id, dropHours);
+      updates.position = dropHours;
     } else if (d.zone === 'river' && a.y < boundary) {
       a.customY = a.y;
-      R.savePosition(d.id, null);
+      updates.position = null;
     } else if (d.zone === 'river' && a.y > boundary) {
       a.customY = a.y;
       var dd3 = R.taskStretch(a);
       var startEdge2 = a.x - dd3.hw;
-      var dropHours2 = R.screenXToHours(startEdge2) + a.mass / 120;
-      R.savePosition(d.id, dropHours2);
+      updates.position = R.screenXToHours(startEdge2) + a.mass / 120;
     } else {
       a.customY = a.y;
+    }
+
+    // Send as one request — avoids race between property save and position move
+    if (updates.position !== undefined) {
+      // Position change needs special handling — 'move' endpoint, not 'put'
+      if (wizardWasActive) {
+        // Save properties first, then move — but use raw post to combine
+        R.post('put', { id: d.id, mass: updates.mass, solidity: updates.solidity, energy: updates.energy, position: updates.position });
+      } else {
+        R.savePosition(d.id, updates.position);
+      }
+    } else if (wizardWasActive) {
+      R.save(d.id, updates);
     }
     a.ty = a.y;
   });
