@@ -41,16 +41,17 @@
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
     // ── Dimensions ──
-    // Width = exact duration in pixels. Always.
-    // Height = proportional to width, clamped. Never more oblong than ~3:1.
+    // Width = exact duration in pixels for river tasks.
+    // During wizard drag: show duration-based size even though still a cloud task.
     var hw, hh;
-    if (a.position !== null && a.position !== undefined) {
+    var isRiverOrWizard = (a.position !== null && a.position !== undefined) ||
+      (R.wizardState && R.wizardState.active && R.wizardState.taskId === a.id);
+    if (isRiverOrWizard) {
       var durationPx = (a.mass / 60) * R.PIXELS_PER_HOUR;
-      hw = Math.max(8, durationPx / 2); // min 8px so it's grabbable
-      hh = Math.min(hw, Math.max(14, hw * 0.6)); // proportional, max ratio ~1.7:1
-      hh = Math.min(hh, 60); // absolute max height
+      hw = Math.max(8, durationPx / 2);
+      hh = Math.min(hw, Math.max(14, hw * 0.6));
+      hh = Math.min(hh, 60);
     } else {
-      // Cloud: circle based on a modest fixed size
       hw = 18; hh = 18;
     }
 
