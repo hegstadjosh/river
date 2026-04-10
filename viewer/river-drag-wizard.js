@@ -137,10 +137,12 @@
         zone.style.color = 'rgb(' + p.r + ',' + p.g + ',' + p.b + ')';
         zone.style.borderColor = 'rgba(' + p.r + ',' + p.g + ',' + p.b + ',0.2)';
       } else if (isCommitment) {
-        // Commitment: opacity increases left to right
-        var commitA = isActive ? 0.9 : (0.25 + i * 0.2);
-        zone.style.color = 'rgba(200, 165, 110, ' + commitA + ')';
-        if (isActive) zone.style.background = 'rgba(200, 165, 110, 0.12)';
+        // Commitment: background + text opacity = the actual commitment value
+        var v = p.value; // 0.15, 0.40, 0.70, 0.95
+        var bgA = isActive ? v * 0.4 : v * 0.2;
+        var txtA = isActive ? Math.max(v, 0.8) : v;
+        zone.style.background = 'rgba(200, 165, 110, ' + bgA + ')';
+        zone.style.color = 'rgba(200, 165, 110, ' + txtA + ')';
       } else if (isActive) {
         // Duration: just highlight active
         zone.style.background = 'rgba(200, 165, 110, 0.12)';
