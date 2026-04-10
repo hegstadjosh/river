@@ -13,10 +13,7 @@
   R.planAnimTasks = [];    // animated task objects for plan mode
   R.planStreaks = [];       // per-lane flow streaks (array of arrays)
 
-  // ── Palette Zone ───────────────────────────────────────────────────
-  // A strip at the top of the cloud zone for the clone gesture
-  var PALETTE_HEIGHT = 50;
-  R.planCloneGhost = null; // { id, x, y, fadeIn } — the clone being deposited
+  R.planCloneGhost = null;
 
   // ── Layout Helpers ─────────────────────────────────────────────────
 
@@ -47,10 +44,6 @@
     return Math.min(lane, R.planLaneCount() - 1);
   };
 
-  // Is the position in the palette zone? (top strip of cloud)
-  R.inPaletteZone = function (my) {
-    return my >= R.cloudTopY() && my <= R.cloudTopY() + PALETTE_HEIGHT;
-  };
 
   // ── Per-lane flow streaks ──────────────────────────────────────────
 
@@ -164,26 +157,6 @@
     var ctx = R.ctx;
     var laneH = R.planLaneHeight();
 
-    // ── Draw the palette zone indicator ──
-    var palTop = R.cloudTopY();
-    var palBot = palTop + PALETTE_HEIGHT;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(200, 165, 110, 0.08)';
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(0, palBot);
-    ctx.lineTo(R.W, palBot);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Palette zone warm wash
-    var palGrad = ctx.createLinearGradient(0, palTop, 0, palBot);
-    palGrad.addColorStop(0, 'rgba(200, 165, 110, 0.015)');
-    palGrad.addColorStop(1, 'rgba(200, 165, 110, 0)');
-    ctx.fillStyle = palGrad;
-    ctx.fillRect(0, palTop, R.W, PALETTE_HEIGHT);
-    ctx.restore();
-
     // ── Draw lane separators (sediment layers) ──
     for (var i = 0; i < R.planLaneCount(); i++) {
       var bounds = R.planLaneBounds(i);
@@ -273,26 +246,6 @@
       }
     }
 
-    // ── Clone ghost (palette gesture feedback) ──
-    if (R.planCloneGhost) {
-      var ghost = R.planCloneGhost;
-      ghost.fadeIn = Math.min(1, (ghost.fadeIn || 0) + dt * 3);
-      ctx.save();
-      ctx.globalAlpha = ghost.fadeIn * 0.5;
-      // Find the source task to get rendering info
-      var src = R.findTask(ghost.id);
-      if (src) {
-        var ghostTask = Object.assign({}, src, { x: ghost.x, y: ghost.y });
-        R.drawBlob(ghostTask, t);
-      }
-      ctx.restore();
-      // Ghost fades out after full opacity
-      if (ghost.fadeIn >= 1) {
-        ghost.fadeIn += dt; // keep incrementing
-        if (ghost.fadeIn > 2) R.planCloneGhost = null; // done
-      }
-    }
-
     // ── Commit buttons ──
     R.drawPlanCommitButtons(t);
   };
@@ -375,17 +328,19 @@
 
   // ── Plan indicator DOM toggle ──────────────────────────────────────
 
-  var planIndicator = document.getElementById('plan-indicator');
+  var planBtn = document.getElementById('plan-btn');
   R._lastPlanIndicatorState = false;
 
   R.updatePlanIndicator = function () {
     if (R.planMode !== R._lastPlanIndicatorState) {
       R._lastPlanIndicatorState = R.planMode;
-      if (planIndicator) {
+      if (planBtn) {
         if (R.planMode) {
-          planIndicator.classList.remove('hidden');
+          planBtn.textContent = 'exit plan';
+          planBtn.classList.add('active');
         } else {
-          planIndicator.classList.add('hidden');
+          planBtn.textContent = 'plan';
+          planBtn.classList.remove('active');
         }
       }
     }

@@ -383,7 +383,7 @@
     var ctx = R.ctx;
 
     // ── Tick the dwell timer every frame (not just on mousemove) ──
-    if (R.dragging && R.dragging.moved && R.dragging.zone === 'river' && !wiz.active) {
+    if (R.dragging && R.dragging.moved && (R.dragging.zone === 'river' || R.dragging.zone === 'plan') && !wiz.active) {
       R.dwellCheckStart(R.mouseX, R.mouseY);
     }
 
@@ -427,7 +427,7 @@
     if (!barEl) return;
 
     // Add/remove glow class on the bar during river drag
-    if (R.dragging.zone === 'river') {
+    if (R.dragging.zone === 'river' || R.dragging.zone === 'plan') {
       barEl.classList.add('river-bar-glow');
     }
 

@@ -282,6 +282,38 @@ export class RiverState {
     return this.planFns.getLaneTasks(lane);
   }
 
+  addToLane(lane: number, taskId: string, position: number | null, copy: boolean): void {
+    this.planFns.addToLane(lane, taskId, position, copy);
+  }
+
+  removeFromLane(lane: number, taskId: string): void {
+    this.planFns.removeFromLane(lane, taskId);
+  }
+
+  repositionInLane(lane: number, taskId: string, position: number): void {
+    this.planFns.repositionInLane(lane, taskId, position);
+  }
+
+  moveBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): void {
+    this.planFns.moveBetweenLanes(fromLane, toLane, taskId, position);
+  }
+
+  copyBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): void {
+    this.planFns.copyBetweenLanes(fromLane, toLane, taskId, position);
+  }
+
+  laneToCloud(lane: number, taskId: string): void {
+    this.planFns.laneToCloud(lane, taskId);
+  }
+
+  updateTaskInLane(lane: number, taskId: string, updates: { mass?: number; solidity?: number; energy?: number; position?: number }): void {
+    this.planFns.updateTaskInLane(lane, taskId, updates);
+  }
+
+  putTaskInLane(lane: number, name: string, position: number | null): void {
+    this.planFns.putTaskInLane(lane, name, position);
+  }
+
   // ── SSE ──────────────────────────────────────────────────────────
 
   addSSEClient(res: ServerResponse): void {

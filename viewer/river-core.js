@@ -76,6 +76,10 @@ window.River = {};
   R.findTask = function (id) {
     for (var i = 0; i < R.animTasks.length; i++)
       if (R.animTasks[i].id === id) return R.animTasks[i];
+    if (R.planAnimTasks) {
+      for (var j = 0; j < R.planAnimTasks.length; j++)
+        if (R.planAnimTasks[j].id === id) return R.planAnimTasks[j];
+    }
     return null;
   };
 

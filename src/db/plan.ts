@@ -65,36 +65,10 @@ export function createPlanFns(
         const branchName = laneBranchName(i);
         const branchId = randomUUID();
 
-        // Create timeline for this lane
+        // Create empty timeline for this lane
         db.prepare(
           'INSERT INTO timelines (id, name, parent_id, created) VALUES (?, ?, ?, ?)',
         ).run(branchId, branchName, mainId, now);
-
-        // Snapshot main's tasks into the lane
-        const tasks = db
-          .prepare('SELECT * FROM tasks WHERE timeline_id = ?')
-          .all(mainId) as TaskRow[];
-
-        const insert = db.prepare(
-          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        );
-
-        for (const task of tasks) {
-          insert.run(
-            task.id,
-            branchId,
-            task.name,
-            task.mass,
-            task.anchor,
-            task.solidity,
-            task.energy,
-            task.fixed,
-            task.alive,
-            task.tags,
-            task.created,
-          );
-        }
       }
 
       // Set plan mode metadata
@@ -264,6 +238,139 @@ export function createPlanFns(
     return { active, timeframe, lanes };
   }
 
+  // ── Lane manipulation (viewer-driven) ───────────────────────────
+
+  function getLaneBranchId(lane: number): string {
+    const branch = db
+      .prepare('SELECT id FROM timelines WHERE name = ?')
+      .get(laneBranchName(lane)) as { id: string } | undefined;
+    if (!branch) throw new Error(`Lane ${lane} branch not found`);
+    return branch.id;
+  }
+
+  function addToLane(lane: number, taskId: string, position: number | null, copy: boolean): void {
+    assertPlanActive();
+    assertValidLane(lane);
+    const branchId = getLaneBranchId(lane);
+
+    // Find source task — check main timeline first, then all lanes
+    const mainId = getMainTimelineId();
+    let source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, mainId) as TaskRow | undefined;
+    if (!source) {
+      // Check all lane branches
+      for (let i = 1; i <= 5; i++) {
+        const bid = getLaneBranchId(i);
+        source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, bid) as TaskRow | undefined;
+        if (source) break;
+      }
+    }
+    if (!source) throw new Error(`Task ${taskId} not found`);
+
+    const anchor = position != null ? positionToAnchor(position) : source.anchor;
+    db.prepare(
+      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(randomUUID(), branchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+
+    // If not copy, remove from main cloud
+    if (!copy) {
+      db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, mainId);
+    }
+  }
+
+  function removeFromLane(lane: number, taskId: string): void {
+    assertPlanActive();
+    assertValidLane(lane);
+    const branchId = getLaneBranchId(lane);
+    db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, branchId);
+  }
+
+  function updateTaskInLane(lane: number, taskId: string, updates: { mass?: number; solidity?: number; energy?: number; position?: number }): void {
+    assertPlanActive();
+    assertValidLane(lane);
+    const branchId = getLaneBranchId(lane);
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (updates.mass !== undefined) { sets.push('mass = ?'); vals.push(updates.mass); }
+    if (updates.solidity !== undefined) { sets.push('solidity = ?'); vals.push(updates.solidity); }
+    if (updates.energy !== undefined) { sets.push('energy = ?'); vals.push(updates.energy); }
+    if (updates.position !== undefined) { sets.push('anchor = ?'); vals.push(positionToAnchor(updates.position)); }
+    if (sets.length === 0) return;
+    vals.push(taskId, branchId);
+    db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ? AND timeline_id = ?`).run(...vals);
+  }
+
+  function laneToCloud(lane: number, taskId: string): void {
+    assertPlanActive();
+    assertValidLane(lane);
+    const branchId = getLaneBranchId(lane);
+    const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, branchId) as TaskRow | undefined;
+    if (!source) throw new Error(`Task ${taskId} not found in lane ${lane}`);
+    const mainId = getMainTimelineId();
+    db.transaction(() => {
+      db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, branchId);
+      db.prepare(
+        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(randomUUID(), mainId, source.name, source.mass, null, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+    })();
+  }
+
+  function repositionInLane(lane: number, taskId: string, position: number): void {
+    assertPlanActive();
+    assertValidLane(lane);
+    const branchId = getLaneBranchId(lane);
+    const anchor = positionToAnchor(position);
+    db.prepare('UPDATE tasks SET anchor = ? WHERE id = ? AND timeline_id = ?').run(anchor, taskId, branchId);
+  }
+
+  function moveBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): void {
+    assertPlanActive();
+    assertValidLane(fromLane);
+    assertValidLane(toLane);
+    const fromBranchId = getLaneBranchId(fromLane);
+    const toBranchId = getLaneBranchId(toLane);
+    const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, fromBranchId) as TaskRow | undefined;
+    if (!source) throw new Error(`Task ${taskId} not found in lane ${fromLane}`);
+
+    const anchor = positionToAnchor(position);
+    db.transaction(() => {
+      db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, fromBranchId);
+      db.prepare(
+        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(randomUUID(), toBranchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+    })();
+  }
+
+  function putTaskInLane(lane: number, name: string, position: number | null): void {
+    assertPlanActive();
+    assertValidLane(lane);
+    const branchId = getLaneBranchId(lane);
+    const anchor = position != null ? positionToAnchor(position) : null;
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(randomUUID(), branchId, name, DEFAULT_MASS, anchor, DEFAULT_SOLIDITY, 0.5, 0, 0, '[]', now);
+  }
+
+  function copyBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): void {
+    assertPlanActive();
+    assertValidLane(fromLane);
+    assertValidLane(toLane);
+    const fromBranchId = getLaneBranchId(fromLane);
+    const toBranchId = getLaneBranchId(toLane);
+    const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, fromBranchId) as TaskRow | undefined;
+    if (!source) throw new Error(`Task ${taskId} not found in lane ${fromLane}`);
+
+    const anchor = positionToAnchor(position);
+    db.prepare(
+      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(randomUUID(), toBranchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+  }
+
   // ── Internal helpers ────────────────────────────────────────────
 
   function assertPlanActive(): void {
@@ -334,5 +441,5 @@ export function createPlanFns(
     };
   }
 
-  return { startPlan, fillLane, nameLane, commitLane, endPlan, getPlanState, getLaneTasks };
+  return { startPlan, fillLane, nameLane, commitLane, endPlan, getPlanState, getLaneTasks, addToLane, removeFromLane, repositionInLane, moveBetweenLanes, copyBetweenLanes, putTaskInLane, laneToCloud, updateTaskInLane };
 }

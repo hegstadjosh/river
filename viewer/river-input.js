@@ -28,27 +28,33 @@
   // Handles are OUTSIDE the grab area — they extend beyond the task edges.
   // 4 handles: left/right = duration, top = commitment, bottom = energy
   R.edgeHit = function (mx, my) {
-    for (var i = R.animTasks.length - 1; i >= 0; i--) {
-      var a = R.animTasks[i];
-      var d = R.taskStretch(a);
-      var grabHW = Math.max(R.MIN_HIT, d.hw);
-      var grabHH = Math.max(R.MIN_HIT, d.hh);
+    // Check both normal and plan tasks
+    var lists = [R.animTasks];
+    if (R.planMode && R.planAnimTasks) lists.push(R.planAnimTasks);
+    for (var li = 0; li < lists.length; li++) {
+      var tasks = lists[li];
+      for (var i = tasks.length - 1; i >= 0; i--) {
+        var a = tasks[i];
+        var d = R.taskStretch(a);
+        var grabHW = Math.max(R.MIN_HIT, d.hw);
+        var grabHH = Math.max(R.MIN_HIT, d.hh);
 
-      // Check vertical handles (top/bottom) — always available, even cloud tasks
-      var tEdge = a.y - grabHH;
-      var bEdge = a.y + grabHH;
-      if (Math.abs(mx - a.x) <= grabHW) {
-        if (my >= tEdge - R.HANDLE_ZONE && my <= tEdge + 2) return { task: a, side: 'top' };
-        if (my >= bEdge - 2 && my <= bEdge + R.HANDLE_ZONE) return { task: a, side: 'bottom' };
-      }
+        // Check vertical handles (top/bottom) — always available
+        var tEdge = a.y - grabHH;
+        var bEdge = a.y + grabHH;
+        if (Math.abs(mx - a.x) <= grabHW) {
+          if (my >= tEdge - R.HANDLE_ZONE && my <= tEdge + 2) return { task: a, side: 'top' };
+          if (my >= bEdge - 2 && my <= bEdge + R.HANDLE_ZONE) return { task: a, side: 'bottom' };
+        }
 
-      // Check horizontal handles (left/right) — only river tasks
-      if (a.position === null || a.position === undefined) continue;
-      var rEdge = a.x + grabHW;
-      var lEdge = a.x - grabHW;
-      if (Math.abs(my - a.y) <= grabHH + 5) {
-        if (mx >= rEdge - 2 && mx <= rEdge + R.HANDLE_ZONE) return { task: a, side: 'right' };
-        if (mx >= lEdge - R.HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
+        // Check horizontal handles (left/right) — only positioned tasks
+        if (a.position === null || a.position === undefined) continue;
+        var rEdge = a.x + grabHW;
+        var lEdge = a.x - grabHW;
+        if (Math.abs(my - a.y) <= grabHH + 5) {
+          if (mx >= rEdge - 2 && mx <= rEdge + R.HANDLE_ZONE) return { task: a, side: 'right' };
+          if (mx >= lEdge - R.HANDLE_ZONE && mx <= lEdge + 2) return { task: a, side: 'left' };
+        }
       }
     }
     return null;
@@ -61,7 +67,7 @@
     if (R.planMode) {
       var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
       if (commitLane >= 0) {
-        R.post('plan', { action: 'plan_commit', lane: commitLane });
+        R.post('plan_commit', { lane: commitLane });
         return;
       }
     }
@@ -83,7 +89,8 @@
         startEnergy: edge.task.energy || 0.5,
         startMX: e.clientX,
         startMY: e.clientY,
-        startX: edge.task.x
+        startX: edge.task.x,
+        planLane: edge.task._lane !== undefined ? edge.task._lane : -1
       };
       R.canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       return;
@@ -98,7 +105,6 @@
         moved: false,
         zone: 'plan',
         planLane: planHit._lane,
-        passedPalette: false
       };
     } else if (hit) {
       R.dragging = {
@@ -107,7 +113,6 @@
         mx: e.clientX, my: e.clientY,
         moved: false,
         zone: (hit.position !== null && hit.position !== undefined) ? 'river' : 'cloud',
-        passedPalette: false
       };
     } else {
       R.hidePanel();
@@ -203,12 +208,6 @@
         pa.tx = pa.x; pa.ty = pa.y;
       }
 
-      // Palette zone detection (clone gesture)
-      if (R.inPaletteZone && R.inPaletteZone(e.clientY) && !R.dragging.passedPalette) {
-        R.dragging.passedPalette = true;
-        // Create clone ghost at palette position
-        R.planCloneGhost = { id: R.dragging.id, x: e.clientX, y: e.clientY, fadeIn: 0 };
-      }
       return;
     }
 
@@ -223,7 +222,7 @@
       // Wizard activates only when well into the cloud zone (30px above surface)
       var cloudThreshold = boundary - 30;
       var inCloud = e.clientY < cloudThreshold;
-      if (!R.planMode && R.wizardActivate) {
+      if (R.wizardActivate) {
         if (inCloud && !R.dragging.wizardStarted) {
           R.wizardActivate(R.dragging.id);
           R.dragging.wizardStarted = true;
@@ -236,7 +235,7 @@
 
       // ── Drag-to-Horizon Dwell Switcher ──
       // When dragging ANY task near the horizon buttons, check for dwell
-      if (R.dwellCheckStart && !R.planMode && !R.wizardIsActive()) {
+      if (R.dwellCheckStart && !R.wizardIsActive()) {
         R.dwellCheckStart(e.clientX, e.clientY);
       }
 
@@ -249,11 +248,6 @@
       a.y = R.dragging.sy + dy;
       a.tx = a.x; a.ty = a.y;
 
-      // Plan mode: palette zone detection for cloud tasks
-      if (R.planMode && R.inPaletteZone && R.inPaletteZone(e.clientY) && !R.dragging.passedPalette) {
-        R.dragging.passedPalette = true;
-        R.planCloneGhost = { id: R.dragging.id, x: e.clientX, y: e.clientY, fadeIn: 0 };
-      }
     }
   });
 
@@ -264,20 +258,36 @@
     if (R.resizing) {
       var a = R.findTask(R.resizing.id);
       if (a) {
+        var isPlan = R.resizing.planLane >= 0;
         if (R.resizing.side === 'top') {
-          R.post('put', { id: R.resizing.id, solidity: a.solidity });
+          if (isPlan) {
+            R.post('plan_update_task', { lane: R.resizing.planLane, task_id: R.resizing.id, solidity: a.solidity });
+          } else {
+            R.post('put', { id: R.resizing.id, solidity: a.solidity });
+          }
         } else if (R.resizing.side === 'bottom') {
-          R.post('put', { id: R.resizing.id, energy: a.energy });
+          if (isPlan) {
+            R.post('plan_update_task', { lane: R.resizing.planLane, task_id: R.resizing.id, energy: a.energy });
+          } else {
+            R.post('put', { id: R.resizing.id, energy: a.energy });
+          }
         } else {
           var newMass = a.mass;
           var massDiffHours = (newMass - R.resizing.startMass) / 60;
-          var updates = { id: R.resizing.id, mass: newMass };
-          if (R.resizing.side === 'right') {
-            updates.position = R.resizing.startPosition + massDiffHours / 2;
+          if (isPlan) {
+            var pos = R.resizing.side === 'right'
+              ? R.resizing.startPosition + massDiffHours / 2
+              : R.resizing.startPosition - massDiffHours / 2;
+            R.post('plan_update_task', { lane: R.resizing.planLane, task_id: R.resizing.id, mass: newMass, position: pos });
           } else {
-            updates.position = R.resizing.startPosition - massDiffHours / 2;
+            var updates = { id: R.resizing.id, mass: newMass };
+            if (R.resizing.side === 'right') {
+              updates.position = R.resizing.startPosition + massDiffHours / 2;
+            } else {
+              updates.position = R.resizing.startPosition - massDiffHours / 2;
+            }
+            R.post('put', updates);
           }
-          R.post('put', updates);
         }
       }
       R.resizing = null;
@@ -309,18 +319,14 @@
       var dropHours = R.screenXToHours(startEdge) + pa.mass / 120;
 
       if (e.clientY < boundary) {
-        // Dragged to cloud — remove from lane
-        R.post('plan', { action: 'plan_remove', lane: d.planLane, task_id: d.id });
+        // Dragged to cloud — move from lane back to main cloud
+        R.post('plan_to_cloud', { lane: d.planLane, task_id: d.id });
       } else if (dropLane >= 0 && dropLane !== d.planLane) {
-        // Dragged to different lane — move (or copy if passed palette)
-        if (d.passedPalette) {
-          R.post('plan', { action: 'plan_copy', from_lane: d.planLane, to_lane: dropLane, task_id: d.id, position: dropHours });
-        } else {
-          R.post('plan', { action: 'plan_move', from_lane: d.planLane, to_lane: dropLane, task_id: d.id, position: dropHours });
-        }
+        // Dragged to different lane — move
+        R.post('plan_move', { from_lane: d.planLane, to_lane: dropLane, task_id: d.id, position: dropHours });
       } else if (dropLane >= 0) {
         // Same lane, different x position
-        R.post('plan', { action: 'plan_reposition', lane: d.planLane, task_id: d.id, position: dropHours });
+        R.post('plan_reposition', { lane: d.planLane, task_id: d.id, position: dropHours });
       }
       return;
     }
@@ -335,13 +341,8 @@
           var startEdge = a.x - dd2.hw;
           var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
 
-          if (d.passedPalette) {
-            // Clone: original stays in cloud, copy goes to lane
-            R.post('plan', { action: 'plan_add', lane: dropLane, task_id: d.id, position: dropHours, copy: true });
-          } else {
-            // Move from cloud to lane
-            R.post('plan', { action: 'plan_add', lane: dropLane, task_id: d.id, position: dropHours });
-          }
+          // Copy cloud task into lane (original stays in cloud)
+          R.post('plan_add', { lane: dropLane, task_id: d.id, position: dropHours, copy: true });
         }
         return;
       }
@@ -449,14 +450,32 @@
 
   var quickAdd = document.getElementById('quick-add');
   var quickAddPos = null; // null = cloud, number = hours from now
+  var quickAddLane = -1;  // -1 = not in a plan lane
 
   R.canvas.addEventListener('dblclick', function (e) {
-    if (R.hitTest(e.clientX, e.clientY)) return; // double-clicked a task, ignore
+    if (R.hitTest(e.clientX, e.clientY)) return;
+    if (R.planMode && R.planHitTest && R.planHitTest(e.clientX, e.clientY)) return;
 
     var sY = R.surfaceY();
-    quickAddPos = (e.clientY > sY)
-      ? (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours
-      : null;
+
+    // Plan mode: double-click in a lane creates a task there
+    if (R.planMode) {
+      var lane = R.planLaneAt(e.clientY);
+      if (lane >= 0) {
+        quickAddLane = lane;
+        quickAddPos = (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
+      } else {
+        quickAddLane = -1;
+        quickAddPos = (e.clientY > sY)
+          ? (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours
+          : null;
+      }
+    } else {
+      quickAddLane = -1;
+      quickAddPos = (e.clientY > sY)
+        ? (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours
+        : null;
+    }
 
     quickAdd.style.left = (e.clientX - 100) + 'px';
     quickAdd.style.top = (e.clientY - 18) + 'px';
@@ -467,9 +486,14 @@
 
   quickAdd.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && quickAdd.value.trim()) {
-      var payload = { name: quickAdd.value.trim() };
-      if (quickAddPos !== null) payload.position = quickAddPos;
-      R.post('put', payload);
+      if (quickAddLane >= 0) {
+        // Create task directly in plan lane
+        R.post('plan_lane_put', { lane: quickAddLane, name: quickAdd.value.trim(), position: quickAddPos });
+      } else {
+        var payload = { name: quickAdd.value.trim() };
+        if (quickAddPos !== null) payload.position = quickAddPos;
+        R.post('put', payload);
+      }
       quickAdd.classList.add('hidden');
       quickAdd.value = '';
     } else if (e.key === 'Escape') {

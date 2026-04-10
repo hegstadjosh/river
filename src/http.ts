@@ -61,16 +61,34 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
             state.putTask(rest);
           } else if (data.action === 'delete') {
             state.deleteTask(data.id);
+          } else if (data.action === 'plan_start') {
+            state.startPlan(data.timeframe);
+          } else if (data.action === 'plan_end') {
+            state.endPlan();
           } else if (data.action === 'plan_commit') {
             // "Use this" button — commit a lane's arrangement to the main river
             // Viewer uses 0-indexed lanes, server uses 1-indexed
             state.commitLane((data.lane ?? 0) + 1);
-          } else if (data.action === 'plan_remove' || data.action === 'plan_move' ||
-                     data.action === 'plan_copy' || data.action === 'plan_reposition' ||
-                     data.action === 'plan_add') {
-            res.writeHead(501, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Lane manipulation not yet implemented. Use Claude MCP tools.' }));
-            return;
+          } else if (data.action === 'plan_lane_put') {
+            // Create a new task directly in a lane (double-click in plan mode)
+            state.putTaskInLane((data.lane ?? 0) + 1, data.name, data.position ?? null);
+          } else if (data.action === 'plan_update_task') {
+            state.updateTaskInLane((data.lane ?? 0) + 1, data.task_id, {
+              mass: data.mass, solidity: data.solidity, energy: data.energy, position: data.position,
+            });
+          } else if (data.action === 'plan_to_cloud') {
+            state.laneToCloud((data.lane ?? 0) + 1, data.task_id);
+          } else if (data.action === 'plan_add') {
+            // Viewer uses 0-indexed lanes, server uses 1-indexed
+            state.addToLane((data.lane ?? 0) + 1, data.task_id, data.position ?? null, !!data.copy);
+          } else if (data.action === 'plan_remove') {
+            state.removeFromLane((data.lane ?? 0) + 1, data.task_id);
+          } else if (data.action === 'plan_reposition') {
+            state.repositionInLane((data.lane ?? 0) + 1, data.task_id, data.position);
+          } else if (data.action === 'plan_move') {
+            state.moveBetweenLanes((data.from_lane ?? 0) + 1, (data.to_lane ?? 0) + 1, data.task_id, data.position);
+          } else if (data.action === 'plan_copy') {
+            state.copyBetweenLanes((data.from_lane ?? 0) + 1, (data.to_lane ?? 0) + 1, data.task_id, data.position);
           }
 
           state.notify();
