@@ -190,8 +190,9 @@
     var hzBar = document.getElementById('horizon-bar');
     if (hzBar) {
       hzBar.style.pointerEvents = 'none';
-      // Make bar fully opaque so canvas glow doesn't bleed through
-      hzBar.style.background = 'rgba(20, 17, 14, 1)';
+      hzBar.style.background = 'rgb(20, 17, 14)';
+      hzBar.style.backdropFilter = 'none';
+      hzBar.style.webkitBackdropFilter = 'none';
     }
 
     // Plan mode drag: dragging a task from a lane or cloud into lanes
@@ -295,6 +296,8 @@
     if (hzBar) {
       hzBar.style.pointerEvents = '';
       hzBar.style.background = '';
+      hzBar.style.backdropFilter = '';
+      hzBar.style.webkitBackdropFilter = '';
     }
 
     // ── Plan mode drop logic ──
