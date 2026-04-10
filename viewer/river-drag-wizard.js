@@ -349,6 +349,11 @@
   R.drawDwellIndicator = function (t) {
     var ctx = R.ctx;
 
+    // ── Tick the dwell timer every frame (not just on mousemove) ──
+    if (R.dragging && R.dragging.moved && R.dragging.zone === 'river' && !wiz.active) {
+      R.dwellCheckStart(R.mouseX, R.mouseY);
+    }
+
     // ── Flash effect after trigger — outlines the entire river ──
     if (dwellFlash.active) {
       var age = (performance.now() - dwellFlash.startT) / 500;
@@ -390,13 +395,13 @@
     if (!barEl) return;
     var barR = barEl.getBoundingClientRect();
 
-    // Whole bar glow — warm wash behind the entire bar
-    var breathe = Math.sin(t / 2000 * Math.PI) * 0.5 + 0.5;
-    var barGlowA = 0.08 + breathe * 0.05;
-    var pad = 15;
+    // Whole bar glow — tight, pulsing softly
+    var pulse = Math.sin(t / 1200 * Math.PI) * 0.5 + 0.5;
+    var barGlowA = 0.04 + pulse * 0.04;
+    var pad = 4 + pulse * 3;
     ctx.fillStyle = 'rgba(200, 165, 110, ' + barGlowA + ')';
     ctx.beginPath();
-    ctx.roundRect(barR.left - pad, barR.top - pad, barR.width + pad * 2, barR.height + pad * 2, 14);
+    ctx.roundRect(barR.left - pad, barR.top - pad, barR.width + pad * 2, barR.height + pad * 2, 12);
     ctx.fill();
 
     // ── Hovered button: crisp box + glow on top ──
