@@ -209,33 +209,18 @@
       var boundary = R.surfaceY();
 
       // ── Cloud-to-River Wizard ──
-      // Activates IMMEDIATELY on any cloud drag (not just when crossing boundary).
-      // The glowing field appears at the surface; you sweep through it.
-      if (R.dragging.zone === 'cloud' && !R.planMode) {
-        if (!R.dragging.wizardStarted && R.wizardActivate) {
+      // Non-blocking: transforms the task as you pass through the field,
+      // but NEVER prevents normal drag behavior. Task always follows cursor.
+      if (R.dragging.zone === 'cloud' && !R.planMode && R.wizardActivate) {
+        if (!R.dragging.wizardStarted) {
           R.wizardActivate(R.dragging.id);
           R.dragging.wizardStarted = true;
         }
-
-        if (R.wizardIsActive()) {
+        if (R.wizardIsActive && R.wizardIsActive()) {
           R.wizardMouseMove(e.clientX, e.clientY);
-          // Task follows cursor freely — the field transforms it as you pass through
-          a.x = e.clientX;
-          a.y = e.clientY;
-          a.tx = a.x; a.ty = a.y;
-          return;
-        } else if (R.wizardIsCompleted()) {
-          // All stages done — task follows cursor freely, ready to place in river
-          var rawX = e.clientX;
-          var dd = R.taskStretch(a);
-          var startEdgeX = rawX - dd.hw;
-          var snappedStart = R.snapX(startEdgeX);
-          a.x = snappedStart + dd.hw;
-          a.y = e.clientY;
-          a.tx = a.x; a.ty = a.y;
-          return;
         }
       }
+      // Task ALWAYS follows cursor — wizard just transforms properties in-flight
 
       // ── Drag-to-Horizon Dwell Switcher ──
       // When dragging a river task, check if cursor is hovering over scale buttons
@@ -365,37 +350,21 @@
     if (!a) return;
     var boundary = R.surfaceY();
 
-    // ── Wizard completion on mouseup ──
-    // If the wizard was active (incomplete), cancel it — task returns to cloud
-    if (d.zone === 'cloud' && R.wizardIsActive && R.wizardIsActive()) {
-      R.wizardDeactivate();
-      // Return task to cloud position
-      var cp = R.cloudPos(a);
-      a.tx = cp.x; a.ty = cp.y;
-      return;
-    }
-
-    // If wizard completed, include wizard selections in the move POST
-    var wizardSel = null;
-    if (d.zone === 'cloud' && R.wizardIsCompleted && R.wizardIsCompleted()) {
-      wizardSel = R.wizardGetSelections();
-      R.wizardDeactivate();
-    }
+    // ── Wizard cleanup on mouseup ──
+    // Wizard already transformed the task's properties directly.
+    // Just persist them with the move.
+    var wizardWasActive = d.wizardStarted && R.wizardDeactivate;
+    if (wizardWasActive) R.wizardDeactivate();
 
     // Convert snapped start edge to hours-from-now
     var dd2 = R.taskStretch(a);
     var startEdge = a.x - dd2.hw;
-    var dropHours = R.screenXToHours(startEdge) + a.mass / 120; // center = start + halfDur
+    var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
     if (d.zone === 'cloud' && a.y > boundary) {
       a.customY = a.y;
-      // Apply wizard property selections via put BEFORE moving
-      if (wizardSel) {
-        var putData = { id: d.id };
-        var hasPut = false;
-        if (wizardSel.mass !== null) { putData.mass = wizardSel.mass; hasPut = true; }
-        if (wizardSel.solidity !== null) { putData.solidity = wizardSel.solidity; hasPut = true; }
-        if (wizardSel.energy !== null) { putData.energy = wizardSel.energy; hasPut = true; }
-        if (hasPut) R.post('put', putData);
+      // Persist any wizard-applied properties along with the move
+      if (wizardWasActive) {
+        R.post('put', { id: d.id, mass: a.mass, solidity: a.solidity, energy: a.energy });
       }
       R.post('move', { id: d.id, position: dropHours });
     } else if (d.zone === 'river' && a.y < boundary) {

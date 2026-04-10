@@ -86,6 +86,8 @@
 
   // ── Activation / Deactivation ─────────────────────────────────────
 
+  var horizonBar = document.getElementById('horizon-bar');
+
   R.wizardActivate = function (taskId) {
     var sY = R.surfaceY();
     wiz.active = true;
@@ -98,6 +100,8 @@
     wiz.stageStartT = performance.now();
     wiz.justAdvanced = true;
     wiz.zones = computeZones(STAGE_PRESETS[0]());
+    // Hide the DOM horizon bar so the Canvas field is visible
+    if (horizonBar) horizonBar.style.opacity = '0';
   };
 
   R.wizardDeactivate = function () {
@@ -106,6 +110,8 @@
     wiz.taskId = null;
     wiz.zones = [];
     wiz.selectedIdx = -1;
+    // Restore the horizon bar
+    if (horizonBar) horizonBar.style.opacity = '';
   };
 
   R.wizardIsActive = function () { return wiz.active && wiz.stage >= 0 && wiz.stage <= 2; };
