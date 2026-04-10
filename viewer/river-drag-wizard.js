@@ -89,6 +89,11 @@
     wiz.lastSide = 'above';
     wiz.zones = computeZones(STAGE_PRESETS[0]());
 
+    // Measure the horizon bar BEFORE hiding it, then size wizard to match
+    var rect = horizonBar.getBoundingClientRect();
+    wizardEl.style.width = rect.width + 'px';
+    wizardEl.style.height = rect.height + 'px';
+
     // Hide horizon bar, show wizard field
     horizonBar.style.display = 'none';
     wizardEl.classList.remove('hidden');
@@ -104,6 +109,8 @@
     wiz.selectedIdx = -1;
 
     wizardEl.classList.add('hidden');
+    wizardEl.style.width = '';
+    wizardEl.style.height = '';
     horizonBar.style.display = '';
   };
 

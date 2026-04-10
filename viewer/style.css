@@ -33,25 +33,25 @@ canvas {
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   padding: 4px 6px;
   border-radius: 10px;
   background: rgba(20, 17, 14, 0.75);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(200, 165, 110, 0.1);
-}
-
-#horizon-bar {
-  gap: 12px;
+  /* Width/height set dynamically by JS so wizard matches horizon exactly */
 }
 
 .hz-scales {
   display: flex;
   gap: 1px;
+  flex: 1;
+  min-width: 0;
 }
 
 .hz-btn {
+  flex: 1;
   background: transparent;
   border: none;
   color: rgba(200, 165, 110, 0.3);
@@ -64,6 +64,7 @@ canvas {
   cursor: pointer;
   transition: all 0.3s ease;
   transform: scale(1);
+  text-align: center;
 }
 
 .hz-btn:hover {
@@ -90,6 +91,7 @@ canvas {
   gap: 2px;
   border-left: 1px solid rgba(200, 165, 110, 0.1);
   padding-left: 10px;
+  flex: 0 0 120px;
 }
 
 .hz-arrow {
@@ -427,7 +429,6 @@ input[type="checkbox"] {
 
 .wizard-field {
   z-index: 6;
-  gap: 12px;  /* same as #horizon-bar */
   box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
   transition: box-shadow 0.3s ease, opacity 0.15s ease;
   pointer-events: none;
@@ -444,6 +445,7 @@ input[type="checkbox"] {
   gap: 6px;
   border-left: 1px solid rgba(200, 165, 110, 0.1);
   padding-left: 10px;
+  flex: 0 0 120px;
 }
 
 .wizard-field-label {
@@ -476,10 +478,13 @@ input[type="checkbox"] {
 .wizard-field-zones {
   display: flex;
   gap: 1px;  /* same as .hz-scales */
+  flex: 1;
+  min-width: 0;
 }
 
 .wizard-zone {
   /* Must match .hz-btn exactly */
+  flex: 1;
   background: transparent;
   border: none;
   color: rgba(200, 165, 110, 0.3);
