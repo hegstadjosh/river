@@ -7,9 +7,8 @@
   // ── Hit Testing ─────────────────────────────────────────────────────
 
   R.hitTest = function (mx, my) {
-    // Sort by draw order (same as render: fixed first, alive last)
-    // then check LAST drawn first (topmost visual = first hit)
-    var sorted = R.tasks.slice().sort(function (a, b) {
+    // Only test visible tasks — in plan mode, main river tasks are hidden
+    var sorted = R.visibleTasks().slice().sort(function (a, b) {
       if (a.alive !== b.alive) return a.alive ? 1 : -1;
       if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
       return 0;
@@ -28,8 +27,9 @@
   // Handles are OUTSIDE the grab area — they extend beyond the task edges.
   // 4 handles: left/right = duration, top = commitment, bottom = energy
   R.edgeHit = function (mx, my) {
-    for (var i = R.tasks.length - 1; i >= 0; i--) {
-      var a = R.tasks[i];
+    var visible = R.visibleTasks();
+    for (var i = visible.length - 1; i >= 0; i--) {
+      var a = visible[i];
       var d = R.taskStretch(a);
       var grabHW = Math.max(R.MIN_HIT, d.hw);
       var grabHH = Math.max(R.MIN_HIT, d.hh);
