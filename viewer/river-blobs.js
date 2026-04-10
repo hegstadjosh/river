@@ -35,8 +35,8 @@
 
     // Is anything alive? If so, non-alive tasks dim.
     var anyAlive = false;
-    for (var i = 0; i < R.animTasks.length; i++) {
-      if (R.animTasks[i].alive) { anyAlive = true; break; }
+    for (var i = 0; i < R.tasks.length; i++) {
+      if (R.tasks[i].alive) { anyAlive = true; break; }
     }
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
