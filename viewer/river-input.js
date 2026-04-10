@@ -206,6 +206,46 @@
     // Normal or cloud drag (including cloud -> lane in plan mode)
     var a = R.findTask(R.dragging.id);
     if (a) {
+      var boundary = R.surfaceY();
+
+      // ── Cloud-to-River Wizard ──
+      // When a cloud task crosses below the surface, activate the wizard
+      if (R.dragging.zone === 'cloud' && !R.planMode) {
+        if (R.wizardIsActive()) {
+          // Wizard is running — feed it mouse position, don't move the task
+          R.wizardMouseMove(e.clientX, e.clientY);
+          // Keep task pinned near the bar area while wizard is active
+          a.x = e.clientX;
+          a.y = Math.min(e.clientY, boundary + 30);
+          a.tx = a.x; a.ty = a.y;
+          return;
+        } else if (R.wizardIsCompleted()) {
+          // Wizard finished — task is now free to position in river
+          var rawX = R.dragging.sx + dx;
+          var dd = R.taskStretch(a);
+          var startEdgeX = rawX - dd.hw;
+          var snappedStart = R.snapX(startEdgeX);
+          a.x = snappedStart + dd.hw;
+          a.y = R.dragging.sy + dy;
+          a.tx = a.x; a.ty = a.y;
+          return;
+        } else if (e.clientY > boundary && !R.dragging.wizardDone) {
+          // Just crossed the boundary — activate wizard
+          R.wizardActivate(R.dragging.id);
+          R.wizardMouseMove(e.clientX, e.clientY);
+          a.x = e.clientX;
+          a.y = boundary + 20;
+          a.tx = a.x; a.ty = a.y;
+          return;
+        }
+      }
+
+      // ── Drag-to-Horizon Dwell Switcher ──
+      // When dragging a river task, check if cursor is hovering over scale buttons
+      if (R.dragging.zone === 'river' && R.dwellCheckStart && !R.planMode) {
+        R.dwellCheckStart(e.clientX, e.clientY);
+      }
+
       var rawX = R.dragging.sx + dx;
       // Snap the START edge (left edge = center - halfWidth) to grid
       var dd = R.taskStretch(a);
@@ -311,7 +351,14 @@
       }
     }
 
+    // Reset dwell on any mouseup
+    if (R.dwellReset) R.dwellReset();
+
     if (!d.moved) {
+      // Deactivate wizard if click (no drag)
+      if (R.wizardIsActive && (R.wizardIsActive() || R.wizardIsCompleted())) {
+        R.wizardDeactivate();
+      }
       var a = R.findTask(d.id);
       if (a) R.showPanel(a, e.clientX, e.clientY);
       return;
@@ -321,12 +368,38 @@
     if (!a) return;
     var boundary = R.surfaceY();
 
+    // ── Wizard completion on mouseup ──
+    // If the wizard was active (incomplete), cancel it — task returns to cloud
+    if (d.zone === 'cloud' && R.wizardIsActive && R.wizardIsActive()) {
+      R.wizardDeactivate();
+      // Return task to cloud position
+      var cp = R.cloudPos(a);
+      a.tx = cp.x; a.ty = cp.y;
+      return;
+    }
+
+    // If wizard completed, include wizard selections in the move POST
+    var wizardSel = null;
+    if (d.zone === 'cloud' && R.wizardIsCompleted && R.wizardIsCompleted()) {
+      wizardSel = R.wizardGetSelections();
+      R.wizardDeactivate();
+    }
+
     // Convert snapped start edge to hours-from-now
     var dd2 = R.taskStretch(a);
     var startEdge = a.x - dd2.hw;
     var dropHours = R.screenXToHours(startEdge) + a.mass / 120; // center = start + halfDur
     if (d.zone === 'cloud' && a.y > boundary) {
       a.customY = a.y;
+      // Apply wizard property selections via put BEFORE moving
+      if (wizardSel) {
+        var putData = { id: d.id };
+        var hasPut = false;
+        if (wizardSel.mass !== null) { putData.mass = wizardSel.mass; hasPut = true; }
+        if (wizardSel.solidity !== null) { putData.solidity = wizardSel.solidity; hasPut = true; }
+        if (wizardSel.energy !== null) { putData.energy = wizardSel.energy; hasPut = true; }
+        if (hasPut) R.post('put', putData);
+      }
       R.post('move', { id: d.id, position: dropHours });
     } else if (d.zone === 'river' && a.y < boundary) {
       a.customY = a.y;
