@@ -10,6 +10,9 @@ import {
   type LookResult,
   type BranchDiff,
   type PutSingleInput,
+  type PlanState,
+  type PlanTaskInput,
+  type PlanTimeframe,
   DEFAULT_MASS,
   DEFAULT_SOLIDITY,
   DB_NAME,
@@ -20,6 +23,7 @@ import { createRecirculateFn } from './db/recirculate.js';
 import { createLookFns } from './db/look.js';
 import { createBranchFns } from './db/branches.js';
 import { createSweepFn } from './db/sweep.js';
+import { createPlanFns } from './db/plan.js';
 
 // ── RiverState ───────────────────────────────────────────────────────
 
@@ -34,6 +38,7 @@ export class RiverState {
   private lookFns: ReturnType<typeof createLookFns>;
   private branchFns: ReturnType<typeof createBranchFns>;
   private sweepFn: ReturnType<typeof createSweepFn>;
+  private planFns: ReturnType<typeof createPlanFns>;
 
   constructor(dbDir: string) {
     if (!existsSync(dbDir)) {
@@ -60,6 +65,7 @@ export class RiverState {
     );
     this.branchFns = createBranchFns(this.db, currentTimelineId);
     this.sweepFn = createSweepFn(this.db, currentTimelineId);
+    this.planFns = createPlanFns(this.db, currentTimelineId);
   }
 
   private init() {
@@ -179,7 +185,12 @@ export class RiverState {
   // ── Look (delegated) ────────────────────────────────────────────
 
   look(options?: { horizon?: number; id?: string; cloud?: boolean }): LookResult {
-    return this.lookFns.look(options);
+    const result = this.lookFns.look(options);
+    const planState = this.planFns.getPlanState();
+    if (planState.active) {
+      result.plan = planState;
+    }
+    return result;
   }
 
   // ── Recirculation (delegated) ───────────────────────────────────
@@ -231,6 +242,32 @@ export class RiverState {
     params?: { shift?: number; solidity?: number; mass?: number; position?: number | null }
   ): number {
     return this.sweepFn.sweep(filter, action, params);
+  }
+
+  // ── Plan Mode (delegated) ────────────────────────────────────────
+
+  startPlan(timeframe: PlanTimeframe): PlanState {
+    return this.planFns.startPlan(timeframe);
+  }
+
+  fillLane(lane: number, tasks: PlanTaskInput[]): { lane: number; tasks: Task[] } {
+    return this.planFns.fillLane(lane, tasks);
+  }
+
+  nameLane(lane: number, label: string): { lane: number; label: string } {
+    return this.planFns.nameLane(lane, label);
+  }
+
+  commitLane(lane: number): { committed: number; taskCount: number } {
+    return this.planFns.commitLane(lane);
+  }
+
+  endPlan(): { ended: true } {
+    return this.planFns.endPlan();
+  }
+
+  getPlanState(): PlanState {
+    return this.planFns.getPlanState();
   }
 
   // ── SSE ──────────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ export interface LookResult {
   };
   now: string;
   timeline: string;
+  plan?: PlanState;
 }
 
 export interface BranchDiff {
@@ -120,6 +121,44 @@ export const SweepSchema = z.object({
   mass: z.number().positive().optional(),
   position: z.number().nullable().optional(),
 });
+
+export const PLAN_TIMEFRAMES = ['6h', 'day', '4d', 'week', 'month', 'quarter', 'year'] as const;
+export type PlanTimeframe = typeof PLAN_TIMEFRAMES[number];
+
+export const PlanTaskSchema = z.object({
+  name: z.string().describe('Task name'),
+  mass: z.number().positive().optional().describe('Duration in minutes (default 30)'),
+  position: z.number().nullable().optional().describe('Hours from now (null = cloud)'),
+  solidity: z.number().min(0).max(1).optional().describe('Commitment level 0-1'),
+  energy: z.number().min(0).max(1).optional().describe('Energy level 0-1'),
+  fixed: z.boolean().optional().describe('Whether this task is pinned in time'),
+  tags: z.array(z.string()).optional().describe('Tags for grouping'),
+});
+
+export type PlanTaskInput = z.infer<typeof PlanTaskSchema>;
+
+export const PlanSchema = z.object({
+  action: z.enum(['start', 'fill', 'name', 'commit', 'end', 'status']),
+  timeframe: z.enum(PLAN_TIMEFRAMES).optional(),
+  lane: z.number().int().min(1).max(5).optional(),
+  label: z.string().optional(),
+  tasks: z.array(PlanTaskSchema).optional(),
+});
+
+export type PlanInput = z.infer<typeof PlanSchema>;
+
+export interface PlanLaneInfo {
+  number: number;
+  label: string | null;
+  taskCount: number;
+  branchName: string;
+}
+
+export interface PlanState {
+  active: boolean;
+  timeframe: PlanTimeframe | null;
+  lanes: PlanLaneInfo[];
+}
 
 // ── Constants ────────────────────────────────────────────────────────
 
