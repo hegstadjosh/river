@@ -2,11 +2,13 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import {
   type Task,
+  type TaskWithPosition,
   type PlanState,
   type PlanLaneInfo,
   type PlanTaskInput,
   type PlanTimeframe,
   positionToAnchor,
+  taskWithPosition,
   DEFAULT_MASS,
   DEFAULT_SOLIDITY,
 } from '../schema.js';
@@ -306,5 +308,31 @@ export function createPlanFns(
     })();
   }
 
-  return { startPlan, fillLane, nameLane, commitLane, endPlan, getPlanState };
+  function getLaneTasks(lane: number): { river: TaskWithPosition[]; cloud: TaskWithPosition[] } {
+    assertValidLane(lane);
+
+    const branchName = laneBranchName(lane);
+    const branch = db
+      .prepare('SELECT id FROM timelines WHERE name = ?')
+      .get(branchName) as { id: string } | undefined;
+
+    if (!branch) {
+      return { river: [], cloud: [] };
+    }
+
+    const riverRows = db
+      .prepare('SELECT * FROM tasks WHERE timeline_id = ? AND anchor IS NOT NULL ORDER BY anchor ASC')
+      .all(branch.id) as TaskRow[];
+
+    const cloudRows = db
+      .prepare('SELECT * FROM tasks WHERE timeline_id = ? AND anchor IS NULL')
+      .all(branch.id) as TaskRow[];
+
+    return {
+      river: riverRows.map((r) => taskWithPosition(rowToTask(r))),
+      cloud: cloudRows.map((r) => taskWithPosition(rowToTask(r))),
+    };
+  }
+
+  return { startPlan, fillLane, nameLane, commitLane, endPlan, getPlanState, getLaneTasks };
 }

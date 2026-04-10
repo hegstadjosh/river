@@ -270,6 +270,10 @@ export class RiverState {
     return this.planFns.getPlanState();
   }
 
+  getLaneTasks(lane: number): { river: TaskWithPosition[]; cloud: TaskWithPosition[] } {
+    return this.planFns.getLaneTasks(lane);
+  }
+
   // ── SSE ──────────────────────────────────────────────────────────
 
   addSSEClient(res: ServerResponse): void {

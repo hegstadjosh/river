@@ -82,6 +82,27 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
       return;
     }
 
+    // GET /plan — plan mode state with lane task details
+    if (url === '/plan') {
+      const planState = state.getPlanState();
+      if (planState.active) {
+        const lanes = planState.lanes.map((lane) => {
+          const tasks = state.getLaneTasks(lane.number);
+          return {
+            ...lane,
+            river: tasks.river,
+            cloud: tasks.cloud,
+          };
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ...planState, lanes }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(planState));
+      }
+      return;
+    }
+
     // Static file serving for viewer
     let filePath = url === '/' ? '/index.html' : url;
     const fullPath = join(viewerDir, filePath);
