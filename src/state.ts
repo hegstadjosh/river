@@ -93,6 +93,7 @@ export class RiverState {
         created TEXT NOT NULL,
         cloud_x REAL,
         cloud_y REAL,
+        river_y REAL,
         FOREIGN KEY (timeline_id) REFERENCES timelines(id)
       );
 
@@ -120,6 +121,8 @@ export class RiverState {
     // Migrate: add cloud_x/cloud_y columns if missing
     try { this.db.prepare('SELECT cloud_x FROM tasks LIMIT 0').run(); }
     catch { this.db.exec('ALTER TABLE tasks ADD COLUMN cloud_x REAL; ALTER TABLE tasks ADD COLUMN cloud_y REAL;'); }
+    try { this.db.prepare('SELECT river_y FROM tasks LIMIT 0').run(); }
+    catch { this.db.exec('ALTER TABLE tasks ADD COLUMN river_y REAL;'); }
 
     // Ensure a default "main" timeline exists
     const existing = this.db

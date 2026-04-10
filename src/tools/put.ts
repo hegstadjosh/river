@@ -36,6 +36,7 @@ export function registerPut(server: McpServer, state: RiverState): void {
         tags: z.array(z.string()).optional().describe('Freeform tags'),
         cloud_x: z.number().min(0).max(1).nullable().optional().describe('Cloud zone X position 0-1 (left to right). Use to arrange cloud tasks spatially.'),
         cloud_y: z.number().min(0).max(1).nullable().optional().describe('Cloud zone Y position 0-1 (top to bottom). Use to arrange cloud tasks spatially.'),
+        river_y: z.number().min(0).max(1).nullable().optional().describe('River zone Y position 0-1 (top to bottom). Use to arrange river tasks vertically.'),
 
         // Batch
         tasks: z
@@ -66,6 +67,7 @@ export function registerPut(server: McpServer, state: RiverState): void {
           tags: args.tags,
           cloud_x: args.cloud_x,
           cloud_y: args.cloud_y,
+          river_y: args.river_y,
         });
         results.push(taskWithPosition(task));
       }

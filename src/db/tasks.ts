@@ -10,7 +10,7 @@ import {
 import { type TaskRow, rowToTask } from './types.js';
 
 export function createTaskCrud(db: Database.Database, currentTimelineId: () => string) {
-  function putTask(input: PutSingleInput & { position?: number | null; cloud_x?: number | null; cloud_y?: number | null }): Task {
+  function putTask(input: PutSingleInput & { position?: number | null; cloud_x?: number | null; cloud_y?: number | null; river_y?: number | null }): Task {
     const timelineId = currentTimelineId();
 
     // Convert position to anchor if provided
@@ -49,6 +49,7 @@ export function createTaskCrud(db: Database.Database, currentTimelineId: () => s
       if (input.tags !== undefined) { updates.push('tags = @tags_val'); values.tags_val = JSON.stringify(input.tags); }
       if (input.cloud_x !== undefined) { updates.push('cloud_x = @cx_val'); values.cx_val = input.cloud_x; }
       if (input.cloud_y !== undefined) { updates.push('cloud_y = @cy_val'); values.cy_val = input.cloud_y; }
+      if (input.river_y !== undefined) { updates.push('river_y = @ry_val'); values.ry_val = input.river_y; }
 
       if (updates.length > 0) {
         db
@@ -85,12 +86,13 @@ export function createTaskCrud(db: Database.Database, currentTimelineId: () => s
         created: new Date().toISOString(),
         cloud_x: input.cloud_x ?? null,
         cloud_y: input.cloud_y ?? null,
+        river_y: input.river_y ?? null,
       };
 
       db
         .prepare(
-          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y)
-           VALUES (@id, @timeline_id, @name, @mass, @anchor, @solidity, @energy, @fixed, @alive, @tags, @created, @cloud_x, @cloud_y)`
+          `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+           VALUES (@id, @timeline_id, @name, @mass, @anchor, @solidity, @energy, @fixed, @alive, @tags, @created, @cloud_x, @cloud_y, @river_y)`
         )
         .run(task);
 

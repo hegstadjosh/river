@@ -36,9 +36,8 @@
     var x = R.hoursToX(task.position || 0);
     var top = R.surfaceY() + 30;
     var bot = R.H - 50;
-    var mid = (top + bot) / 2;
-    var spread = (bot - top) * 0.2;
-    var y = mid + (R.hashFrac(task.id, 'ry') - 0.5) * 2 * spread;
+    var ry = (task.river_y != null) ? task.river_y : R.hashFrac(task.id, 'ry');
+    var y = top + ry * (bot - top);
     return { x: x, y: y };
   };
 

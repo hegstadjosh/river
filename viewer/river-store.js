@@ -200,15 +200,11 @@
         a.fixed = src.fixed;
         a.alive = src.alive;
         a.tags = src.tags;
-        // Clear customY when position context changes (cloud↔river)
-        var wasCloud = a.position === null || a.position === undefined;
-        var isCloud = src.position === null || src.position === undefined;
-        if (wasCloud !== isCloud) delete a.customY;
         a.position = src.position;
         a.anchor = src.anchor;
         a.ctx = src.ctx;
         a.tx = tgt.x;
-        a.ty = (a.customY !== undefined) ? a.customY : tgt.y;
+        a.ty = tgt.y;
       } else {
         // Add new task with initial position at target
         R.tasks.push({

@@ -348,24 +348,29 @@
       updates.energy = a.energy;
     }
 
+    var rTop = R.surfaceY() + 30;
+    var rBot = R.H - 50;
+    var cTop = R.cloudTopY();
+    var cBot = R.surfaceY() - 50;
+
     if (d.zone === 'cloud' && a.y > boundary) {
-      a.customY = a.y;
+      // Cloud → river
       updates.position = dropHours;
+      updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
     } else if (d.zone === 'river' && a.y < boundary) {
-      a.customY = a.y;
+      // River → cloud
       updates.position = null;
+      updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.15) / (R.W * 0.7)));
+      updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
     } else if (d.zone === 'river' && a.y > boundary) {
-      a.customY = a.y;
+      // River → river (reposition)
       var dd3 = R.taskStretch(a);
       var startEdge2 = a.x - dd3.hw;
       updates.position = R.screenXToHours(startEdge2) + a.mass / 120;
+      updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
     } else if (d.zone === 'cloud') {
-      // Stayed in cloud — save cloud position as normalized 0-1
-      var cTop = R.cloudTopY();
-      var cBot = R.surfaceY() - 50;
-      var cLeft = R.W * 0.15;
-      var cWidth = R.W * 0.7;
-      updates.cloud_x = Math.max(0, Math.min(1, (a.x - cLeft) / cWidth));
+      // Cloud → cloud (rearrange)
+      updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.15) / (R.W * 0.7)));
       updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
     }
 

@@ -15,6 +15,7 @@ export interface Task {
   created: string;
   cloud_x: number | null; // 0-1 normalized X in cloud zone
   cloud_y: number | null; // 0-1 normalized Y in cloud zone
+  river_y: number | null; // 0-1 normalized Y in river zone
 }
 
 export interface TaskWithPosition extends Task {

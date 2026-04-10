@@ -16,6 +16,7 @@ export interface TaskRow {
   created: string;
   cloud_x: number | null;
   cloud_y: number | null;
+  river_y: number | null;
 }
 
 export function rowToTask(row: TaskRow): Task {
@@ -32,5 +33,6 @@ export function rowToTask(row: TaskRow): Task {
     created: row.created,
     cloud_x: row.cloud_x ?? null,
     cloud_y: row.cloud_y ?? null,
+    river_y: row.river_y ?? null,
   };
 }
