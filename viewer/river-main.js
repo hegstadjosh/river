@@ -125,6 +125,30 @@
     R.sync(); R.updateFrameLabel();
   });
 
+  // ── Plan Mode Button ──────────────────────────────────────────────
+  var planBtn = document.getElementById('hz-plan');
+  planBtn.addEventListener('click', function () {
+    if (R.planMode) {
+      // Exit plan mode
+      R.post('plan', { action: 'end' });
+      planBtn.textContent = 'plan';
+      planBtn.classList.remove('active');
+    } else {
+      // Enter plan mode with current horizon
+      var tf = 'day';
+      if (R.horizonHours <= 6) tf = '6h';
+      else if (R.horizonHours <= 24) tf = 'day';
+      else if (R.horizonHours <= 96) tf = '4d';
+      else if (R.horizonHours <= 168) tf = 'week';
+      else if (R.horizonHours <= 720) tf = 'month';
+      else if (R.horizonHours <= 2160) tf = 'quarter';
+      else tf = 'year';
+      R.post('plan', { action: 'start', timeframe: tf });
+      planBtn.textContent = 'exit plan';
+      planBtn.classList.add('active');
+    }
+  });
+
   // ── Scroll / Trackpad ──────────────────────────────────────────────
   // Horizontal scroll (wheel or trackpad) pans the river smoothly.
 
