@@ -220,12 +220,10 @@
   // Compute target position for a task based on its context
   function computeTarget(t) {
     if (t.ctx.type === 'lane') {
-      // Plan lane task — position within lane bounds
+      // Plan lane task — centered in lane
       var bounds = R.planLaneBounds ? R.planLaneBounds(t.ctx.lane) : { midY: R.H * 0.6 };
       var x = R.hoursToX(t.position || 0);
-      var spread = bounds.bottom !== undefined ? (bounds.bottom - bounds.top) * 0.15 : 30;
-      var y = (bounds.midY || R.H * 0.6) + (R.hashFrac(t.id, 'ry') - 0.5) * 2 * spread;
-      return { x: x, y: y };
+      return { x: x, y: bounds.midY || R.H * 0.6 };
     } else {
       // Main task — river or cloud
       return (t.position !== null && t.position !== undefined) ? R.riverPos(t) : R.cloudPos(t);
