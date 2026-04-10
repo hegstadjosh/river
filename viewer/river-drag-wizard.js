@@ -277,12 +277,16 @@
   R.dwellCheckStart = function (mx, my) {
     if (wiz.active) return;
 
+    // Find which horizon button the cursor is over
     var hzBtns = document.querySelectorAll('.hz-btn');
     var found = null;
+    var foundRect = null;
     for (var i = 0; i < hzBtns.length; i++) {
       var r = hzBtns[i].getBoundingClientRect();
-      if (mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom) {
+      // Expand hit area vertically since cursor might be approaching from below
+      if (mx >= r.left - 5 && mx <= r.right + 5 && my >= r.top - 15 && my <= r.bottom + 15) {
         found = hzBtns[i];
+        foundRect = r;
         break;
       }
     }
@@ -290,32 +294,72 @@
     if (found) {
       if (dwell.btnEl === found && !dwell.triggered) {
         var elapsed = performance.now() - dwell.startTime;
+        dwell.progress = Math.min(1, elapsed / 500);
+
         if (elapsed >= 500) {
           dwell.triggered = true;
-          found.classList.remove('hz-btn-dwell');
-          found.classList.add('hz-btn-trigger');
+          dwell.progress = 1;
           R.scrollHours = 0;
           R.setHorizon(Number(found.dataset.hours));
-          setTimeout(function () { found.classList.remove('hz-btn-trigger'); }, 300);
-        } else {
-          found.classList.add('hz-btn-dwell');
         }
       } else if (dwell.btnEl !== found) {
-        if (dwell.btnEl) dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
         dwell.btnEl = found;
+        dwell.btnRect = foundRect;
+        dwell.btnHours = Number(found.dataset.hours);
         dwell.startTime = performance.now();
         dwell.triggered = false;
+        dwell.progress = 0;
       }
     } else {
-      if (dwell.btnEl) dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
       dwell.btnEl = null;
+      dwell.btnRect = null;
+      dwell.progress = 0;
       dwell.triggered = false;
     }
   };
 
   R.dwellReset = function () {
-    if (dwell.btnEl) dwell.btnEl.classList.remove('hz-btn-dwell', 'hz-btn-trigger');
     dwell.btnEl = null;
+    dwell.btnRect = null;
+    dwell.progress = 0;
     dwell.triggered = false;
+  };
+
+  // ── Dwell Rendering (called from frame loop) ──────────────────────
+  // Draws a growing golden ring behind the hovered button as the dwell timer fills.
+
+  R.drawDwellIndicator = function () {
+    if (!dwell.btnEl || !dwell.btnRect || dwell.triggered) return;
+
+    var ctx = R.ctx;
+    var r = dwell.btnRect;
+    var cx = (r.left + r.right) / 2;
+    var cy = (r.top + r.bottom) / 2;
+    var p = dwell.progress;
+
+    // Growing ring
+    var radius = 18 + p * 12;
+    var alpha = 0.1 + p * 0.3;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200, 165, 110, ' + alpha + ')';
+    ctx.lineWidth = 2 + p * 2;
+    ctx.stroke();
+
+    // Fill progress arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+    ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.5 + p * 0.4) + ')';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Label below
+    if (p > 0.2) {
+      ctx.font = '500 9px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(200, 165, 110, ' + (p * 0.6) + ')';
+      ctx.fillText(R.FRAME_LABELS[dwell.btnHours] || '', cx, cy + radius + 12);
+    }
   };
 })();

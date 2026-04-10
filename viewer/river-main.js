@@ -203,6 +203,8 @@
 
     // ── Wizard glowing field ──
     if (R.drawWizardField) R.drawWizardField(t);
+    // ── Dwell timeframe indicator ──
+    if (R.drawDwellIndicator) R.drawDwellIndicator();
 
     R.drawPastFade();
 

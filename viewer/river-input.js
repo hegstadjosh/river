@@ -180,6 +180,9 @@
     if (!R.dragging.moved && Math.sqrt(dx*dx + dy*dy) < R.DRAG_THRESHOLD) return;
     R.dragging.moved = true;
     R.canvas.style.cursor = 'grabbing';
+    // Disable pointer events on DOM overlays so canvas gets all events during drag
+    var hzBar = document.getElementById('horizon-bar');
+    if (hzBar) hzBar.style.pointerEvents = 'none';
 
     // Plan mode drag: dragging a task from a lane or cloud into lanes
     if (R.planMode && R.dragging.zone === 'plan') {
@@ -223,8 +226,8 @@
       // Task ALWAYS follows cursor — wizard just transforms properties in-flight
 
       // ── Drag-to-Horizon Dwell Switcher ──
-      // When dragging a river task, check if cursor is hovering over scale buttons
-      if (R.dragging.zone === 'river' && R.dwellCheckStart && !R.planMode) {
+      // When dragging ANY task near the horizon buttons, check for dwell
+      if (R.dwellCheckStart && !R.planMode && !R.wizardIsActive()) {
         R.dwellCheckStart(e.clientX, e.clientY);
       }
 
@@ -275,6 +278,9 @@
 
     if (!R.dragging) return;
     var d = R.dragging; R.dragging = null; R.canvas.style.cursor = 'default';
+    // Restore pointer events on DOM overlays
+    var hzBar = document.getElementById('horizon-bar');
+    if (hzBar) hzBar.style.pointerEvents = '';
 
     // ── Plan mode drop logic ──
     if (R.planMode && d.zone === 'plan') {
