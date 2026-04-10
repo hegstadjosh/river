@@ -61,6 +61,16 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
             state.putTask(rest);
           } else if (data.action === 'delete') {
             state.deleteTask(data.id);
+          } else if (data.action === 'plan_commit') {
+            // "Use this" button — commit a lane's arrangement to the main river
+            // Viewer uses 0-indexed lanes, server uses 1-indexed
+            state.commitLane((data.lane ?? 0) + 1);
+          } else if (data.action === 'plan_remove' || data.action === 'plan_move' ||
+                     data.action === 'plan_copy' || data.action === 'plan_reposition' ||
+                     data.action === 'plan_add') {
+            // Viewer lane manipulation actions — these are stubs for now.
+            // Lane task manipulation is primarily done through MCP tools (Claude fills lanes).
+            // Future: implement direct viewer manipulation of lane tasks.
           }
 
           state.notify();

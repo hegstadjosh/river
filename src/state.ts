@@ -188,7 +188,15 @@ export class RiverState {
     const result = this.lookFns.look(options);
     const planState = this.planFns.getPlanState();
     if (planState.active) {
-      result.plan = planState;
+      // Enrich plan lanes with full task data for the viewer
+      const enrichedLanes = planState.lanes.map((lane) => {
+        const tasks = this.planFns.getLaneTasks(lane.number);
+        return {
+          ...lane,
+          tasks: [...tasks.river, ...tasks.cloud],
+        };
+      });
+      result.plan = { ...planState, lanes: enrichedLanes };
     }
     return result;
   }
