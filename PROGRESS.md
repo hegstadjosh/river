@@ -1,52 +1,69 @@
 # River — Build Progress
 
-## Status: REFACTOR IN PROGRESS
+## Status: COMPLETE (v0.2.0)
 
-## Current Task
-Refactoring river.js (1687 lines) and state.ts (711 lines) into focused modules.
-Then building Plan Mode on the clean architecture.
+## What's Built
 
-## What Exists (all working)
-- **MCP server**: 5 tools (put, move, look, branch, sweep) + energy dimension
-- **SQLite storage**: tasks, timelines, meta tables. Energy column added.
-- **Viewer**: Canvas 2D with warm dark theme
-  - Unified blob→rectangle rendering (solidity-driven shape morph)
-  - Energy-based color: dark blue → light blue → gold → mid red → dark red
-  - 4 drag handles: left/right=duration, top=commitment, bottom=energy
-  - Horizon selector: 6h, day, 4d, week, month, quarter, year
-  - Horizontal scrolling with frame navigation
-  - Snap-to-grid (sticky zones on visible lines)
-  - Double-click to create tasks
-  - Detail panel with duration presets, commitment/energy sliders, start/end times
-  - Panel follows task during drag/scroll
-  - Resize handles with live time labels
-  - SSE real-time updates from MCP tools
-  - Adaptive time grid (local timezone, intuitive boundaries)
-  - Past fade, flow streaks, breathing now-line
+### Backend (src/)
+- **MCP server**: 6 tools (put, move, look, branch, sweep, plan)
+- **SQLite storage**: tasks (with energy), timelines, meta tables
+- **Modular architecture**: state.ts (249 lines) composes 8 db modules:
+  - `db/tasks.ts` — CRUD
+  - `db/move.ts` — positioning
+  - `db/look.ts` — river view + breathing room
+  - `db/recirculate.ts` — past-due task handling
+  - `db/branches.ts` — timeline branching
+  - `db/sweep.ts` — bulk operations
+  - `db/plan.ts` — plan mode (5 lanes, fill, name, commit)
+  - `db/types.ts` — shared row types
 
-## Refactor Plan
+### Viewer (viewer/)
+- **11 modular JS files** sharing `window.River` namespace (no build step):
+  - `river-core.js` — constants, state, canvas
+  - `river-layout.js` — positioning, snap math
+  - `river-render.js` — world, streaks, now-line, past fade
+  - `river-grid.js` — time markers, local-time boundaries
+  - `river-blobs.js` — unified blob rendering (RGB energy color)
+  - `river-sse.js` — SSE + sync
+  - `river-panel.js` — detail panel, duration/time inputs
+  - `river-input.js` — mouse handlers, drag, resize, hit testing
+  - `river-plan.js` — plan mode lanes, palette, commit buttons
+  - `river-drag-wizard.js` — cloud→river wizard, horizon dwell switch
+  - `river-main.js` — frame loop, horizon bar
 
-### river.js → viewer/ modules
-- `viewer/core.js` — canvas setup, resize, DPR, state vars
-- `viewer/layout.js` — position calculations, hoursToX, cloudPos, riverPos, taskStretch
-- `viewer/render.js` — drawWorld, drawStreaks, drawNowLine, drawPastFade
-- `viewer/blobs.js` — drawBlob (unified rendering), energy color
-- `viewer/grid.js` — drawTimeMarkers, all the boundary helpers
-- `viewer/input.js` — mouse handlers, drag, resize handles, snap, hit testing
-- `viewer/panel.js` — detail panel, duration presets, time inputs, show/hide
-- `viewer/sse.js` — SSE connection, fetch, sync
-- `viewer/river.js` — main IIFE, imports everything, runs the frame loop
+### Features
+- 3 task dimensions: duration (horizontal), commitment (shape), energy (color)
+- 4 drag handles per task: left/right=duration, top=commitment, bottom=energy
+- Horizon selector: 6h, day, 4d, week, month, quarter, year
+- Horizontal scrolling + frame navigation (step by 1 unit)
+- Sticky snap-to-grid on visible time boundaries
+- Double-click to create tasks
+- Cloud-to-river drag wizard (duration→commitment→energy in one gesture)
+- Drag-to-horizon timeframe switch (dwell 0.5s to zoom)
+- Plan mode: 5 swim lanes, Claude fills 3, palette zone for cloning
+- Adaptive time grid (local timezone, intuitive boundaries)
+- Detail panel with start/end times, duration presets, energy slider
+- Panel follows task during drag/scroll
 
-### state.ts → src/ modules
-- `src/state.ts` — RiverState class (slim: constructor, DB init, SSE, close)
-- `src/db/tasks.ts` — putTask, getTask, deleteTask, moveTask, moveTasks
-- `src/db/look.ts` — look(), recirculate(), breathing room
-- `src/db/branches.ts` — create/list/switch/commit/diff/delete branches
-- `src/db/sweep.ts` — sweep filter + actions
+### Code Review Fixes
+- Path traversal vulnerability in static file serving — fixed
+- Silent no-op plan actions — now return 501
+- Dead code (energyColor HSL, tagHue) — removed
 
-## Plan Mode (Round 2)
-See docs/plan-mode.md for full spec.
+## Known Issues (from code review)
+- customY never clears — dragged tasks permanently ignore server Y
+- No test coverage for plan mode (13 tests cover only basic CRUD/look)
+- look() calls recirculate() on every invocation — performance concern at scale
+- Module load order in index.html is fragile (no enforcement)
 
-## Known Issues
-- Snap feel still not perfect
-- Position = center in data model (causes edge-pinning complexity)
+## Git Log (recent)
+```
+08b8c3e fix: path traversal vulnerability, silent no-op plan actions, dead code
+5192425 feat: cloud-to-river drag wizard + drag-to-horizon timeframe switch
+2a55418 feat: enrich SSE plan state with lane tasks
+3ee1eb0 feat: plan mode viewer — 5-lane swim lanes, palette zone
+0b0fe8e feat: register plan MCP tool
+3944267 feat: add plan mode schema, db module, state wiring
+4f7f4f2 refactor: viewer into 10 modules
+... (refactor: backend into 8 db modules)
+```
