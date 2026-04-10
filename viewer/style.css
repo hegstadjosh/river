@@ -483,7 +483,6 @@ input[type="checkbox"] {
 }
 
 .wizard-zone {
-  /* Must match .hz-btn exactly */
   flex: 1;
   background: transparent;
   border: none;
@@ -497,6 +496,11 @@ input[type="checkbox"] {
   text-align: center;
   white-space: nowrap;
   transition: all 0.1s ease;
+  border-right: 1px solid rgba(200, 165, 110, 0.12);
+}
+
+.wizard-zone:last-child {
+  border-right: none;
 }
 
 .wizard-zone.active {
