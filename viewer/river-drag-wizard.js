@@ -300,13 +300,17 @@
     if (found) {
       if (dwell.btnEl === found && !dwell.triggered) {
         var elapsed = performance.now() - dwell.startTime;
-        dwell.progress = Math.min(1, elapsed / 500);
+        dwell.progress = Math.min(1, elapsed / 250);
 
-        if (elapsed >= 500) {
+        if (elapsed >= 250) {
           dwell.triggered = true;
           dwell.progress = 1;
-          // Remove preview, do the real switch
           found.classList.remove('hz-btn-preview');
+          // Flash and switch simultaneously
+          dwellFlash.active = true;
+          dwellFlash.cx = (foundRect.left + foundRect.right) / 2;
+          dwellFlash.cy = (foundRect.top + foundRect.bottom) / 2;
+          dwellFlash.startT = performance.now();
           R.scrollHours = 0;
           R.setHorizon(Number(found.dataset.hours));
         }
@@ -424,17 +428,4 @@
     }
   };
 
-  // Hook into dwell trigger to fire the flash
-  var origDwellCheck = R.dwellCheckStart;
-  R.dwellCheckStart = function (mx, my) {
-    var wasBefore = dwell.triggered;
-    origDwellCheck(mx, my);
-    // If just triggered, start the flash
-    if (dwell.triggered && !wasBefore && dwell.btnRect) {
-      dwellFlash.active = true;
-      dwellFlash.cx = (dwell.btnRect.left + dwell.btnRect.right) / 2;
-      dwellFlash.cy = (dwell.btnRect.top + dwell.btnRect.bottom) / 2;
-      dwellFlash.startT = performance.now();
-    }
-  };
 })();
