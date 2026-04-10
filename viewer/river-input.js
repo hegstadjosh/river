@@ -50,8 +50,20 @@
   // ── Mouse Down ──────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mousedown', function (e) {
+    // Plan mode: check commit button first
+    if (R.planMode) {
+      var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
+      if (commitLane >= 0) {
+        R.post('plan', { action: 'plan_commit', lane: commitLane });
+        return;
+      }
+    }
+
     var edge = R.edgeHit(e.clientX, e.clientY);
+
+    // Plan mode: also check plan task hits
     var hit = R.hitTest(e.clientX, e.clientY);
+    var planHit = (R.planMode && R.planHitTest) ? R.planHitTest(e.clientX, e.clientY) : null;
 
     // If edgeHit found a handle, ALWAYS resize — cursor already promised it
     if (edge) {
@@ -70,13 +82,25 @@
       return;
     }
 
-    if (hit) {
+    // Plan mode: prefer plan hit if mouse is in the river zone
+    if (R.planMode && planHit && e.clientY > R.surfaceY()) {
+      R.dragging = {
+        id: planHit.id,
+        sx: planHit.x, sy: planHit.y,
+        mx: e.clientX, my: e.clientY,
+        moved: false,
+        zone: 'plan',
+        planLane: planHit._lane,
+        passedPalette: false
+      };
+    } else if (hit) {
       R.dragging = {
         id: hit.id,
         sx: hit.x, sy: hit.y,
         mx: e.clientX, my: e.clientY,
         moved: false,
-        zone: (hit.position !== null && hit.position !== undefined) ? 'river' : 'cloud'
+        zone: (hit.position !== null && hit.position !== undefined) ? 'river' : 'cloud',
+        passedPalette: false
       };
     } else {
       R.hidePanel();
@@ -87,6 +111,11 @@
 
   R.canvas.addEventListener('mousemove', function (e) {
     R.mouseX = e.clientX; R.mouseY = e.clientY;
+
+    // Update plan hover lane
+    if (R.planMode) {
+      R.planHoverLane = R.planLaneAt(e.clientY);
+    }
 
     // Resizing (horizontal or vertical)
     if (R.resizing) {
@@ -140,7 +169,10 @@
       if (edge) {
         R.canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       } else {
-        R.canvas.style.cursor = R.hitTest(e.clientX, e.clientY) ? 'grab' : 'default';
+        // In plan mode, also check plan task hits
+        var anyHit = R.hitTest(e.clientX, e.clientY);
+        if (!anyHit && R.planMode && R.planHitTest) anyHit = R.planHitTest(e.clientX, e.clientY);
+        R.canvas.style.cursor = anyHit ? 'grab' : 'default';
       }
       return;
     }
@@ -148,6 +180,30 @@
     if (!R.dragging.moved && Math.sqrt(dx*dx + dy*dy) < R.DRAG_THRESHOLD) return;
     R.dragging.moved = true;
     R.canvas.style.cursor = 'grabbing';
+
+    // Plan mode drag: dragging a task from a lane or cloud into lanes
+    if (R.planMode && R.dragging.zone === 'plan') {
+      var pa = R.findPlanTask(R.dragging.id, R.dragging.planLane);
+      if (pa) {
+        var rawX = R.dragging.sx + dx;
+        var dd = R.taskStretch(pa);
+        var startEdgeX = rawX - dd.hw;
+        var snappedStart = R.snapX(startEdgeX);
+        pa.x = snappedStart + dd.hw;
+        pa.y = R.dragging.sy + dy;
+        pa.tx = pa.x; pa.ty = pa.y;
+      }
+
+      // Palette zone detection (clone gesture)
+      if (R.inPaletteZone && R.inPaletteZone(e.clientY) && !R.dragging.passedPalette) {
+        R.dragging.passedPalette = true;
+        // Create clone ghost at palette position
+        R.planCloneGhost = { id: R.dragging.id, x: e.clientX, y: e.clientY, fadeIn: 0 };
+      }
+      return;
+    }
+
+    // Normal or cloud drag (including cloud -> lane in plan mode)
     var a = R.findTask(R.dragging.id);
     if (a) {
       var rawX = R.dragging.sx + dx;
@@ -158,6 +214,12 @@
       a.x = snappedStart + dd.hw; // shift center so start edge aligns
       a.y = R.dragging.sy + dy;
       a.tx = a.x; a.ty = a.y;
+
+      // Plan mode: palette zone detection for cloud tasks
+      if (R.planMode && R.inPaletteZone && R.inPaletteZone(e.clientY) && !R.dragging.passedPalette) {
+        R.dragging.passedPalette = true;
+        R.planCloneGhost = { id: R.dragging.id, x: e.clientX, y: e.clientY, fadeIn: 0 };
+      }
     }
   });
 
@@ -191,6 +253,63 @@
 
     if (!R.dragging) return;
     var d = R.dragging; R.dragging = null; R.canvas.style.cursor = 'default';
+
+    // ── Plan mode drop logic ──
+    if (R.planMode && d.zone === 'plan') {
+      if (!d.moved) {
+        // Click on plan task — show panel
+        var pa = R.findPlanTask(d.id, d.planLane);
+        if (pa) R.showPanel(pa, e.clientX, e.clientY);
+        return;
+      }
+
+      var dropLane = R.planLaneAt(e.clientY);
+      var boundary = R.surfaceY();
+      var pa = R.findPlanTask(d.id, d.planLane);
+      if (!pa) return;
+
+      var dd2 = R.taskStretch(pa);
+      var startEdge = pa.x - dd2.hw;
+      var dropHours = R.screenXToHours(startEdge) + pa.mass / 120;
+
+      if (e.clientY < boundary) {
+        // Dragged to cloud — remove from lane
+        R.post('plan', { action: 'plan_remove', lane: d.planLane, task_id: d.id });
+      } else if (dropLane >= 0 && dropLane !== d.planLane) {
+        // Dragged to different lane — move (or copy if passed palette)
+        if (d.passedPalette) {
+          R.post('plan', { action: 'plan_copy', from_lane: d.planLane, to_lane: dropLane, task_id: d.id, position: dropHours });
+        } else {
+          R.post('plan', { action: 'plan_move', from_lane: d.planLane, to_lane: dropLane, task_id: d.id, position: dropHours });
+        }
+      } else if (dropLane >= 0) {
+        // Same lane, different x position
+        R.post('plan', { action: 'plan_reposition', lane: d.planLane, task_id: d.id, position: dropHours });
+      }
+      return;
+    }
+
+    // Plan mode: cloud task dropped into a lane
+    if (R.planMode && d.zone === 'cloud' && d.moved) {
+      var dropLane = R.planLaneAt(e.clientY);
+      if (dropLane >= 0) {
+        var a = R.findTask(d.id);
+        if (a) {
+          var dd2 = R.taskStretch(a);
+          var startEdge = a.x - dd2.hw;
+          var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
+
+          if (d.passedPalette) {
+            // Clone: original stays in cloud, copy goes to lane
+            R.post('plan', { action: 'plan_add', lane: dropLane, task_id: d.id, position: dropHours, copy: true });
+          } else {
+            // Move from cloud to lane
+            R.post('plan', { action: 'plan_add', lane: dropLane, task_id: d.id, position: dropHours });
+          }
+        }
+        return;
+      }
+    }
 
     if (!d.moved) {
       var a = R.findTask(d.id);

@@ -8,6 +8,32 @@
 
   R.sync = function () {
     if (!R.state) return;
+
+    // ── Plan mode detection ──
+    var wasPlanMode = R.planMode;
+    if (R.state.plan) {
+      R.planMode = true;
+      R.planTimeframe = R.state.plan.timeframe || null;
+      // Build planLanes from state.plan.lanes (array of { label, tasks })
+      R.planLanes = [];
+      var lanes = R.state.plan.lanes || [];
+      for (var li = 0; li < 5; li++) {
+        R.planLanes.push(lanes[li] || { label: '', tasks: [] });
+      }
+      // Initialize plan streaks if just entered plan mode
+      if (!wasPlanMode && R.initPlanStreaks) R.initPlanStreaks();
+      // Sync plan animated tasks
+      if (R.syncPlanTasks) R.syncPlanTasks();
+      if (R.updatePlanIndicator) R.updatePlanIndicator();
+    } else {
+      R.planMode = false;
+      R.planLanes = [];
+      R.planAnimTasks = [];
+      R.planTimeframe = null;
+      if (R.updatePlanIndicator) R.updatePlanIndicator();
+    }
+
+    // ── Normal task sync (cloud + river) ──
     var all = (R.state.river || []).concat(R.state.cloud || []);
     var map = {};
     for (var i = 0; i < all.length; i++) map[all[i].id] = all[i];
@@ -20,7 +46,15 @@
 
     for (var k = 0; k < all.length; k++) {
       var t = all[k];
-      var tgt = (t.position !== null && t.position !== undefined) ? R.riverPos(t) : R.cloudPos(t);
+      // In plan mode, river tasks are not rendered in the main river
+      // (they go into lanes instead) — but cloud tasks are still in the cloud
+      var tgt;
+      if (R.planMode && t.position !== null && t.position !== undefined) {
+        // River tasks still get positions calculated for cloud fallback
+        tgt = R.riverPos(t);
+      } else {
+        tgt = (t.position !== null && t.position !== undefined) ? R.riverPos(t) : R.cloudPos(t);
+      }
 
       if (existing[t.id] !== undefined) {
         var a = R.animTasks[existing[t.id]];

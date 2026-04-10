@@ -140,7 +140,7 @@
     dt = Math.min(dt, 0.1);
     R.lastTime = t;
 
-    // Spring physics — fluid, damped, organic
+    // Spring physics — fluid, damped, organic (cloud + river tasks)
     for (var i = 0; i < R.animTasks.length; i++) {
       var a = R.animTasks[i];
       if (R.dragging && R.dragging.id === a.id && R.dragging.moved) continue;
@@ -152,28 +152,53 @@
       a.y += a.vy;
     }
 
+    // Plan mode physics
+    if (R.planMode && R.planPhysicsStep) R.planPhysicsStep();
+
     // Draw the world
     R.drawWorld(t);
-    R.drawStreaks(dt);
-    R.drawNowLine(t);
-    R.drawTimeMarkers();
 
-    // Sort: fixed first (they're terrain), then by alive (on top)
-    var sorted = R.animTasks.slice().sort(function (a, b) {
-      if (a.alive !== b.alive) return a.alive ? 1 : -1;
-      if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
-      return 0;
-    });
+    if (R.planMode) {
+      // Plan mode: subtler main streaks, plan handles its own per-lane streaks
+      R.drawStreaks(dt);
+      R.drawNowLine(t);
+      R.drawTimeMarkers();
 
-    for (var j = 0; j < sorted.length; j++) {
-      var task = sorted[j];
-      // Viewport culling — skip river tasks far off-screen
-      if (task.position !== null && task.position !== undefined) {
-        var screenX = R.hoursToX(task.position);
-        var cullHW = R.taskStretch(task).hw + 50;
-        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+      // Draw plan mode lanes, lane tasks, commit buttons
+      R.drawPlanMode(t, dt);
+
+      // Cloud tasks still render normally (the palette)
+      var cloudSorted = R.animTasks.filter(function (a) {
+        return a.position === null || a.position === undefined;
+      }).sort(function (a, b) {
+        if (a.alive !== b.alive) return a.alive ? 1 : -1;
+        return 0;
+      });
+
+      for (var ci = 0; ci < cloudSorted.length; ci++) {
+        R.drawBlob(cloudSorted[ci], t);
       }
-      R.drawBlob(task, t);
+    } else {
+      // Normal mode — unchanged
+      R.drawStreaks(dt);
+      R.drawNowLine(t);
+      R.drawTimeMarkers();
+
+      var sorted = R.animTasks.slice().sort(function (a, b) {
+        if (a.alive !== b.alive) return a.alive ? 1 : -1;
+        if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
+        return 0;
+      });
+
+      for (var j = 0; j < sorted.length; j++) {
+        var task = sorted[j];
+        if (task.position !== null && task.position !== undefined) {
+          var screenX = R.hoursToX(task.position);
+          var cullHW = R.taskStretch(task).hw + 50;
+          if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        }
+        R.drawBlob(task, t);
+      }
     }
 
     R.drawPastFade();
@@ -181,6 +206,12 @@
     // ── Keep panel attached to selected task ──
     if (R.selectedId && !document.getElementById('panel').classList.contains('hidden')) {
       var selTask = R.findTask(R.selectedId);
+      if (!selTask && R.planMode) {
+        // Check plan tasks too
+        for (var pi = 0; pi < R.planAnimTasks.length; pi++) {
+          if (R.planAnimTasks[pi].id === R.selectedId) { selTask = R.planAnimTasks[pi]; break; }
+        }
+      }
       if (selTask) R.positionPanel(selTask);
     }
 
