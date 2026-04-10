@@ -350,41 +350,22 @@
       }
     }
 
-    // ── Proximity glow on all buttons when dragging near the bar ──
+    // ── Ambient glow on ALL buttons when dragging from river ──
+    // Always visible during river drag — the bar is alive, inviting.
     if (!R.dragging || !R.dragging.moved) return;
+    if (R.dragging.zone !== 'river') return;
 
     var hzBtns = document.querySelectorAll('.hz-btn');
-    var barEl = document.getElementById('horizon-bar');
-    if (!barEl) return;
-    var barRect = barEl.getBoundingClientRect();
-    var my = R.mouseY;
 
-    // How close is the cursor to the bar? 0 = on it, 1 = far away
-    var distToBar = 0;
-    if (my < barRect.top) distToBar = barRect.top - my;
-    else if (my > barRect.bottom) distToBar = my - barRect.bottom;
-    var proximity = Math.max(0, 1 - distToBar / 80); // 80px range
-
-    if (proximity <= 0) return;
-
-    // All buttons get a subtle ambient glow based on proximity
+    // Soft ambient glow on every button — the bar breathes
+    var breathe = Math.sin(t / 1500 * Math.PI) * 0.5 + 0.5;
     for (var i = 0; i < hzBtns.length; i++) {
       var br = hzBtns[i].getBoundingClientRect();
       var bx = (br.left + br.right) / 2;
       var by = (br.top + br.bottom) / 2;
-      var bw = br.width;
 
-      // Distance from cursor to this button's center
-      var dx = Math.abs(R.mouseX - bx);
-      var dy = Math.abs(R.mouseY - by);
-      var dist = Math.sqrt(dx * dx + dy * dy);
-      var btnProx = Math.max(0, 1 - dist / 60); // 60px per-button range
-
-      if (btnProx <= 0) continue;
-
-      // Ambient glow — warm, soft
-      var glowA = btnProx * proximity * 0.2;
-      var glowR = bw / 2 + 8 + btnProx * 10;
+      var glowA = 0.06 + breathe * 0.04;
+      var glowR = br.width / 2 + 12;
       var gg = ctx.createRadialGradient(bx, by, 0, bx, by, glowR);
       gg.addColorStop(0, 'rgba(200, 165, 110, ' + glowA + ')');
       gg.addColorStop(1, 'rgba(200, 165, 110, 0)');
@@ -394,33 +375,24 @@
       ctx.fill();
     }
 
-    // ── Active dwell button: swelling glow + progress ──
+    // ── Hovered button: brighter, swelling ──
     if (dwell.btnEl && dwell.btnRect && !dwell.triggered) {
       var r = dwell.btnRect;
       var cx = (r.left + r.right) / 2;
       var cy = (r.top + r.bottom) / 2;
-      var p = dwell.progress;
+      var p = dwell.progress; // 0→1 over 500ms
 
-      // Swelling warm glow
-      var swellR = r.width / 2 + 10 + p * 20;
-      var swellA = 0.15 + p * 0.35;
+      // Warm swell — grows brighter and bigger toward trigger
+      var swellR = r.width / 2 + 12 + p * 25;
+      var swellA = 0.15 + p * 0.4;
       var sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, swellR);
       sg.addColorStop(0, 'rgba(255, 220, 160, ' + swellA + ')');
-      sg.addColorStop(0.5, 'rgba(200, 165, 110, ' + (swellA * 0.5) + ')');
+      sg.addColorStop(0.6, 'rgba(200, 165, 110, ' + (swellA * 0.4) + ')');
       sg.addColorStop(1, 'rgba(200, 165, 110, 0)');
       ctx.fillStyle = sg;
       ctx.beginPath();
       ctx.arc(cx, cy, swellR, 0, Math.PI * 2);
       ctx.fill();
-
-      // Thin bright ring showing progress
-      if (p > 0.05) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, swellR - 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
-        ctx.strokeStyle = 'rgba(255, 230, 180, ' + (0.3 + p * 0.5) + ')';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
     }
   };
 
