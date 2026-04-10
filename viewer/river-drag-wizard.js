@@ -462,54 +462,43 @@
     var barR = barEl.getBoundingClientRect();
     var barCR = 10; // matches the bar's CSS border-radius
 
-    // Outer glow — pulsing, ONLY outside the bar
+    // Outer glow — ONLY outside the bar. Nothing drawn under the DOM bar.
+    // Use a margin to keep glow away from the bar interior entirely.
     var pulse = Math.sin(t / 1200 * Math.PI) * 0.5 + 0.5;
-    var glowSpread = 8 + pulse * 4;
-    var glowA = 0.06 + pulse * 0.05;
+    var glowSpread = 6 + pulse * 3;
+    var glowA = 0.08 + pulse * 0.06;
+    var margin = 3; // gap between bar edge and glow start
+
+    // Draw 4 glow strips around the bar (top, bottom, left, right) — never overlapping bar
+    var gx = barR.left - glowSpread - margin;
+    var gy = barR.top - glowSpread - margin;
+    var gw = barR.width + (glowSpread + margin) * 2;
+    var gh = barR.height + (glowSpread + margin) * 2;
 
     ctx.save();
-    // Draw glow rect, then cut out the bar interior
+    // Clip out the bar interior + margin so nothing bleeds through
     ctx.beginPath();
-    ctx.rect(barR.left - glowSpread - 5, barR.top - glowSpread - 5,
-             barR.width + (glowSpread + 5) * 2, barR.height + (glowSpread + 5) * 2);
-    ctx.roundRect(barR.left, barR.top, barR.width, barR.height, barCR);
-    // evenodd means the inner roundRect is subtracted
+    ctx.rect(gx - 5, gy - 5, gw + 10, gh + 10);
+    ctx.roundRect(barR.left - margin, barR.top - margin,
+                  barR.width + margin * 2, barR.height + margin * 2, barCR + 2);
     ctx.clip('evenodd');
 
     ctx.fillStyle = 'rgba(200, 165, 110, ' + glowA + ')';
     ctx.beginPath();
-    ctx.roundRect(barR.left - glowSpread, barR.top - glowSpread,
-                  barR.width + glowSpread * 2, barR.height + glowSpread * 2, barCR + 4);
+    ctx.roundRect(gx, gy, gw, gh, barCR + 6);
     ctx.fill();
     ctx.restore();
 
-    // ── Hovered button: glow outside the button, not inside ──
+    // ── Hovered button: border glow outside only ──
     if (dwell.btnEl && dwell.btnRect && !dwell.triggered) {
       var br = dwell.btnRect;
       var p = dwell.progress;
-      var btnCR = 5;
 
-      ctx.save();
-      // Cut out the button interior
-      var glowPad = 4 + p * 10;
+      // Just a warm border that intensifies — no fill inside or outside
+      ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.25 + p * 0.55) + ')';
+      ctx.lineWidth = 1.5 + p;
       ctx.beginPath();
-      ctx.rect(br.left - glowPad - 5, br.top - glowPad - 5,
-               br.width + (glowPad + 5) * 2, br.height + (glowPad + 5) * 2);
-      ctx.roundRect(br.left, br.top, br.width, br.height, btnCR);
-      ctx.clip('evenodd');
-
-      ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.15 + p * 0.3) + ')';
-      ctx.beginPath();
-      ctx.roundRect(br.left - glowPad, br.top - glowPad,
-                    br.width + glowPad * 2, br.height + glowPad * 2, btnCR + 3);
-      ctx.fill();
-      ctx.restore();
-
-      // Border on the button — crisp edge
-      ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.3 + p * 0.5) + ')';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(br.left - 1, br.top - 1, br.width + 2, br.height + 2, btnCR);
+      ctx.roundRect(br.left - 1, br.top - 1, br.width + 2, br.height + 2, 5);
       ctx.stroke();
     }
   };

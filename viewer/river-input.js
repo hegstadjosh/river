@@ -7,8 +7,15 @@
   // ── Hit Testing ─────────────────────────────────────────────────────
 
   R.hitTest = function (mx, my) {
-    for (var i = R.animTasks.length - 1; i >= 0; i--) {
-      var a = R.animTasks[i];
+    // Sort by draw order (same as render: fixed first, alive last)
+    // then check LAST drawn first (topmost visual = first hit)
+    var sorted = R.animTasks.slice().sort(function (a, b) {
+      if (a.alive !== b.alive) return a.alive ? 1 : -1;
+      if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
+      return 0;
+    });
+    for (var i = sorted.length - 1; i >= 0; i--) {
+      var a = sorted[i];
       var d = R.taskStretch(a);
       var hitHW = Math.max(R.MIN_HIT, d.hw + 5);
       var hitHH = Math.max(R.MIN_HIT, d.hh + 5);

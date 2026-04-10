@@ -35,6 +35,16 @@
     R.horizonHours = hours;
     R.recalcScale();
     R.sync();
+    // Snap all tasks to their new positions immediately — no spring animation
+    for (var i = 0; i < R.animTasks.length; i++) {
+      var a = R.animTasks[i];
+      // Skip the task being dragged
+      if (R.dragging && R.dragging.id === a.id) continue;
+      a.x = a.tx;
+      a.y = a.ty;
+      a.vx = 0;
+      a.vy = 0;
+    }
     R.updateFrameLabel();
   };
 
