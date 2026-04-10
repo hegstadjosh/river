@@ -453,47 +453,63 @@
     }
 
     // ── Bar glow when dragging from river ──
+    // Glow surrounds the bar but does NOT cover the inside.
     if (!R.dragging || !R.dragging.moved) return;
     if (R.dragging.zone !== 'river') return;
 
     var barEl = document.getElementById('horizon-bar');
     if (!barEl) return;
     var barR = barEl.getBoundingClientRect();
+    var barCR = 10; // matches the bar's CSS border-radius
 
-    // Whole bar glow — tight, pulsing softly
+    // Outer glow — pulsing, ONLY outside the bar
     var pulse = Math.sin(t / 1200 * Math.PI) * 0.5 + 0.5;
-    var barGlowA = 0.04 + pulse * 0.04;
-    var pad = 4 + pulse * 3;
-    ctx.fillStyle = 'rgba(200, 165, 110, ' + barGlowA + ')';
-    ctx.beginPath();
-    ctx.roundRect(barR.left - pad, barR.top - pad, barR.width + pad * 2, barR.height + pad * 2, 12);
-    ctx.fill();
+    var glowSpread = 8 + pulse * 4;
+    var glowA = 0.06 + pulse * 0.05;
 
-    // ── Hovered button: crisp box + glow on top ──
+    ctx.save();
+    // Draw glow rect, then cut out the bar interior
+    ctx.beginPath();
+    ctx.rect(barR.left - glowSpread - 5, barR.top - glowSpread - 5,
+             barR.width + (glowSpread + 5) * 2, barR.height + (glowSpread + 5) * 2);
+    ctx.roundRect(barR.left, barR.top, barR.width, barR.height, barCR);
+    // evenodd means the inner roundRect is subtracted
+    ctx.clip('evenodd');
+
+    ctx.fillStyle = 'rgba(200, 165, 110, ' + glowA + ')';
+    ctx.beginPath();
+    ctx.roundRect(barR.left - glowSpread, barR.top - glowSpread,
+                  barR.width + glowSpread * 2, barR.height + glowSpread * 2, barCR + 4);
+    ctx.fill();
+    ctx.restore();
+
+    // ── Hovered button: glow outside the button, not inside ──
     if (dwell.btnEl && dwell.btnRect && !dwell.triggered) {
       var br = dwell.btnRect;
       var p = dwell.progress;
+      var btnCR = 5;
 
-      // Outer glow — warm amber, grows with progress
-      var glowPad = 4 + p * 8;
-      var glowA = 0.1 + p * 0.25;
-      ctx.fillStyle = 'rgba(200, 165, 110, ' + glowA + ')';
+      ctx.save();
+      // Cut out the button interior
+      var glowPad = 4 + p * 10;
       ctx.beginPath();
-      ctx.roundRect(br.left - glowPad, br.top - glowPad, br.width + glowPad * 2, br.height + glowPad * 2, 8);
-      ctx.fill();
+      ctx.rect(br.left - glowPad - 5, br.top - glowPad - 5,
+               br.width + (glowPad + 5) * 2, br.height + (glowPad + 5) * 2);
+      ctx.roundRect(br.left, br.top, br.width, br.height, btnCR);
+      ctx.clip('evenodd');
 
-      // Inner box — brighter, distinct
-      var boxA = 0.2 + p * 0.35;
-      ctx.fillStyle = 'rgba(255, 220, 160, ' + boxA + ')';
+      ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.15 + p * 0.3) + ')';
       ctx.beginPath();
-      ctx.roundRect(br.left - 2, br.top - 2, br.width + 4, br.height + 4, 6);
+      ctx.roundRect(br.left - glowPad, br.top - glowPad,
+                    br.width + glowPad * 2, br.height + glowPad * 2, btnCR + 3);
       ctx.fill();
+      ctx.restore();
 
-      // Border — crisp edge so you know exactly which button
-      ctx.strokeStyle = 'rgba(255, 230, 180, ' + (0.3 + p * 0.5) + ')';
+      // Border on the button — crisp edge
+      ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.3 + p * 0.5) + ')';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(br.left - 2, br.top - 2, br.width + 4, br.height + 4, 6);
+      ctx.roundRect(br.left - 1, br.top - 1, br.width + 2, br.height + 2, btnCR);
       ctx.stroke();
     }
   };
