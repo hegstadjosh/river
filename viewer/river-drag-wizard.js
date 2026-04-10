@@ -334,65 +334,82 @@
   R.drawDwellIndicator = function (t) {
     var ctx = R.ctx;
 
-    // ── Flash effect after trigger ──
+    // ── Flash effect after trigger — outlines the entire river ──
     if (dwellFlash.active) {
-      var age = (performance.now() - dwellFlash.startT) / 400; // 0→1 over 400ms
+      var age = (performance.now() - dwellFlash.startT) / 500;
       if (age > 1) { dwellFlash.active = false; }
       else {
-        var flashA = (1 - age) * 0.6;
-        var flashR = 30 + age * 80;
+        var sY = R.surfaceY();
+        var flashA = (1 - age) * 0.5;
+        var inset = 8 + age * 4;
+
+        // Bright border around the entire river zone
+        ctx.strokeStyle = 'rgba(255, 220, 160, ' + flashA + ')';
+        ctx.lineWidth = 3 - age * 2;
+        ctx.beginPath();
+        ctx.roundRect(inset, sY + inset, R.W - inset * 2, R.H - sY - inset * 2, 8);
+        ctx.stroke();
+
+        // Warm wash over the river
+        ctx.fillStyle = 'rgba(200, 165, 110, ' + (flashA * 0.15) + ')';
+        ctx.fillRect(0, sY, R.W, R.H - sY);
+
+        // Small flash at the button that triggered
+        var flashR = 20 + age * 40;
+        var btnA = (1 - age) * 0.4;
         var fg = ctx.createRadialGradient(dwellFlash.cx, dwellFlash.cy, 0, dwellFlash.cx, dwellFlash.cy, flashR);
-        fg.addColorStop(0, 'rgba(255, 220, 160, ' + flashA + ')');
-        fg.addColorStop(0.4, 'rgba(200, 165, 110, ' + (flashA * 0.5) + ')');
+        fg.addColorStop(0, 'rgba(255, 230, 180, ' + btnA + ')');
         fg.addColorStop(1, 'rgba(200, 165, 110, 0)');
         ctx.fillStyle = fg;
-        ctx.fillRect(dwellFlash.cx - flashR, dwellFlash.cy - flashR, flashR * 2, flashR * 2);
+        ctx.beginPath();
+        ctx.arc(dwellFlash.cx, dwellFlash.cy, flashR, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    // ── Ambient glow on ALL buttons when dragging from river ──
-    // Always visible during river drag — the bar is alive, inviting.
+    // ── Bar glow when dragging from river ──
     if (!R.dragging || !R.dragging.moved) return;
     if (R.dragging.zone !== 'river') return;
 
-    var hzBtns = document.querySelectorAll('.hz-btn');
+    var barEl = document.getElementById('horizon-bar');
+    if (!barEl) return;
+    var barR = barEl.getBoundingClientRect();
 
-    // Soft ambient glow on every button — the bar breathes
-    var breathe = Math.sin(t / 1500 * Math.PI) * 0.5 + 0.5;
-    for (var i = 0; i < hzBtns.length; i++) {
-      var br = hzBtns[i].getBoundingClientRect();
-      var bx = (br.left + br.right) / 2;
-      var by = (br.top + br.bottom) / 2;
+    // Whole bar glow — warm wash behind the entire bar
+    var breathe = Math.sin(t / 2000 * Math.PI) * 0.5 + 0.5;
+    var barGlowA = 0.08 + breathe * 0.05;
+    var pad = 15;
+    ctx.fillStyle = 'rgba(200, 165, 110, ' + barGlowA + ')';
+    ctx.beginPath();
+    ctx.roundRect(barR.left - pad, barR.top - pad, barR.width + pad * 2, barR.height + pad * 2, 14);
+    ctx.fill();
 
-      var glowA = 0.06 + breathe * 0.04;
-      var glowR = br.width / 2 + 12;
-      var gg = ctx.createRadialGradient(bx, by, 0, bx, by, glowR);
-      gg.addColorStop(0, 'rgba(200, 165, 110, ' + glowA + ')');
-      gg.addColorStop(1, 'rgba(200, 165, 110, 0)');
-      ctx.fillStyle = gg;
-      ctx.beginPath();
-      ctx.arc(bx, by, glowR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // ── Hovered button: brighter, swelling ──
+    // ── Hovered button: crisp box + glow on top ──
     if (dwell.btnEl && dwell.btnRect && !dwell.triggered) {
-      var r = dwell.btnRect;
-      var cx = (r.left + r.right) / 2;
-      var cy = (r.top + r.bottom) / 2;
-      var p = dwell.progress; // 0→1 over 500ms
+      var br = dwell.btnRect;
+      var p = dwell.progress;
 
-      // Warm swell — grows brighter and bigger toward trigger
-      var swellR = r.width / 2 + 12 + p * 25;
-      var swellA = 0.15 + p * 0.4;
-      var sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, swellR);
-      sg.addColorStop(0, 'rgba(255, 220, 160, ' + swellA + ')');
-      sg.addColorStop(0.6, 'rgba(200, 165, 110, ' + (swellA * 0.4) + ')');
-      sg.addColorStop(1, 'rgba(200, 165, 110, 0)');
-      ctx.fillStyle = sg;
+      // Outer glow — warm amber, grows with progress
+      var glowPad = 4 + p * 8;
+      var glowA = 0.1 + p * 0.25;
+      ctx.fillStyle = 'rgba(200, 165, 110, ' + glowA + ')';
       ctx.beginPath();
-      ctx.arc(cx, cy, swellR, 0, Math.PI * 2);
+      ctx.roundRect(br.left - glowPad, br.top - glowPad, br.width + glowPad * 2, br.height + glowPad * 2, 8);
       ctx.fill();
+
+      // Inner box — brighter, distinct
+      var boxA = 0.2 + p * 0.35;
+      ctx.fillStyle = 'rgba(255, 220, 160, ' + boxA + ')';
+      ctx.beginPath();
+      ctx.roundRect(br.left - 2, br.top - 2, br.width + 4, br.height + 4, 6);
+      ctx.fill();
+
+      // Border — crisp edge so you know exactly which button
+      ctx.strokeStyle = 'rgba(255, 230, 180, ' + (0.3 + p * 0.5) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(br.left - 2, br.top - 2, br.width + 4, br.height + 4, 6);
+      ctx.stroke();
     }
   };
 
