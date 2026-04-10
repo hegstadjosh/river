@@ -11,6 +11,7 @@ import { registerMove } from './tools/move.js';
 import { registerLook } from './tools/look.js';
 import { registerBranch } from './tools/branch.js';
 import { registerSweep } from './tools/sweep.js';
+import { registerPlan } from './tools/plan.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,7 @@ async function main() {
   registerLook(mcpServer, state);
   registerBranch(mcpServer, state);
   registerSweep(mcpServer, state);
+  registerPlan(mcpServer, state);
 
   // Connect MCP FIRST — Claude Code needs the handshake immediately
   const transport = new StdioServerTransport();
