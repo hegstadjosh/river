@@ -45,6 +45,10 @@ window.River = {};
   // ── State ───────────────────────────────────────────────────────────
 
   R.state = null;
+  R.tasks = [];
+  R.planMode = false;
+  R.planLanes = [];
+  R.planTimeframe = null;
   R.selectedId = null;
   R.dragging = null;
   R.resizing = null;

@@ -143,7 +143,7 @@
 
     for (var j = 0; j < sorted.length; j++) {
       var task = sorted[j];
-      if (R.planHoverLane >= 0 && task.ctx.lane !== R.planHoverLane) {
+      if (R.planHoverLane >= 0 && task.ctx && task.ctx.lane !== R.planHoverLane) {
         ctx.save();
         ctx.globalAlpha = 0.7;
         R.drawBlob(task, t);
