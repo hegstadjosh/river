@@ -23,13 +23,13 @@
     fieldBot: 0,       // pixel Y where the field ends
     fieldH: 0,
     stageStartT: 0,    // for fade-in
-    justAdvanced: false // prevents instant re-trigger
+    lastInField: false  // tracks if cursor was in the field
   };
 
   R.wizardState = wiz;
 
-  // Field height in pixels
-  var FIELD_H = 48;
+  // Field height — tall enough you can't miss it
+  var FIELD_H = 80;
 
   // ── Preset Definitions ────────────────────────────────────────────
 
@@ -98,7 +98,7 @@
     wiz.fieldH = FIELD_H;
     wiz.selectedIdx = -1;
     wiz.stageStartT = performance.now();
-    wiz.justAdvanced = true;
+    wiz.lastInField = false;
     wiz.zones = computeZones(STAGE_PRESETS[0]());
     // Hide the DOM horizon bar so the Canvas field is visible
     if (horizonBar) horizonBar.style.opacity = '0';
@@ -122,31 +122,28 @@
   R.wizardMouseMove = function (mx, my) {
     if (!wiz.active || wiz.stage > 2) return;
 
-    var inField = my >= wiz.fieldTop && my <= wiz.fieldBot;
+    // Always update which zone the cursor is over (based on X)
+    var newIdx = -1;
+    for (var i = 0; i < wiz.zones.length; i++) {
+      var z = wiz.zones[i];
+      if (mx >= z.x && mx < z.x + z.w) { newIdx = i; break; }
+    }
 
-    if (inField) {
-      wiz.justAdvanced = false;
+    // If cursor is in or near the field vertically, select the zone
+    var inField = my >= wiz.fieldTop - 20 && my <= wiz.fieldBot + 20;
+    if (inField && newIdx >= 0 && newIdx !== wiz.selectedIdx) {
+      wiz.selectedIdx = newIdx;
+      applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
+      wiz.lastInField = true;
+    }
 
-      // Find which zone the cursor is in
-      var newIdx = -1;
-      for (var i = 0; i < wiz.zones.length; i++) {
-        var z = wiz.zones[i];
-        if (mx >= z.x && mx < z.x + z.w) {
-          newIdx = i;
-          break;
-        }
-      }
+    // Track when cursor was last in the field
+    if (inField) wiz.lastInField = true;
 
-      if (newIdx !== wiz.selectedIdx && newIdx >= 0) {
-        wiz.selectedIdx = newIdx;
-        // IMMEDIATELY transform the task
-        applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
-      }
-    } else if (my > wiz.fieldBot && !wiz.justAdvanced) {
-      // Exited below the field — advance to next stage
-      advanceStage();
-    } else if (my < wiz.fieldTop && !wiz.justAdvanced) {
-      // Exited above — also advance (they're sweeping back up for next stage)
+    // Advance stage when cursor exits below the field
+    // (they've swept through and continued downward)
+    if (my > wiz.fieldBot + 20 && wiz.lastInField) {
+      wiz.lastInField = false;
       advanceStage();
     }
   };
@@ -174,7 +171,7 @@
     wiz.stage++;
     wiz.selectedIdx = -1;
     wiz.stageStartT = performance.now();
-    wiz.justAdvanced = true;
+    wiz.lastInField = false;
 
     if (wiz.stage <= 2) {
       wiz.zones = computeZones(STAGE_PRESETS[wiz.stage]());
