@@ -75,10 +75,7 @@
 
   var horizonBar = document.getElementById('horizon-bar');
   var wizardEl = document.getElementById('wizard-field');
-  var wizardLabel = wizardEl.querySelector('.wizard-field-label');
   var wizardZonesEl = wizardEl.querySelector('.wizard-field-zones');
-  var wizardDotsContainer = wizardEl.querySelector('.wizard-field-dots');
-  var wizardDots = wizardDotsContainer.querySelectorAll('span');
 
   R.wizardActivate = function (taskId) {
     wiz.active = true;
@@ -122,8 +119,6 @@
   }
 
   function renderWizardDOM() {
-    wizardLabel.textContent = STAGE_LABELS[wiz.stage];
-
     var presets = wiz.zones;
     var isEnergy = wiz.stage === 2;
     var isCommitment = wiz.stage === 1;
@@ -154,10 +149,6 @@
       wizardZonesEl.appendChild(zone);
     }
 
-    // Update dots
-    for (var d = 0; d < wizardDots.length; d++) {
-      wizardDots[d].classList.toggle('done', d <= wiz.stage);
-    }
   }
 
   R.wizardIsActive = function () { return wiz.active && wiz.stage >= 0 && wiz.stage <= 2; };
