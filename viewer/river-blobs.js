@@ -51,6 +51,10 @@
       hw = Math.max(8, durationPx / 2);
       hh = Math.min(hw, Math.max(14, hw * 0.6));
       hh = Math.min(hh, 60);
+      // Clamp to lane height
+      if (a.ctx && a.ctx.type === 'lane' && R.planLaneHeight) {
+        hh = Math.min(hh, R.planLaneHeight() * 0.4);
+      }
     } else {
       hw = 18; hh = 18;
     }
