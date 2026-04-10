@@ -77,7 +77,8 @@
   var wizardEl = document.getElementById('wizard-field');
   var wizardLabel = wizardEl.querySelector('.wizard-field-label');
   var wizardZonesEl = wizardEl.querySelector('.wizard-field-zones');
-  var wizardDots = wizardEl.querySelectorAll('.wizard-field-dots span');
+  var wizardDotsContainer = wizardEl.querySelector('.wizard-field-dots');
+  var wizardDots = wizardDotsContainer.querySelectorAll('span');
 
   R.wizardActivate = function (taskId) {
     wiz.active = true;

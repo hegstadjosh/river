@@ -422,10 +422,12 @@ input[type="checkbox"] {
 }
 
 /* ── Wizard Field (DOM element, same style as horizon bar) ── */
+/* Must be EXACTLY the same size/shape as #horizon-bar.        */
+/* Zones sit in a single horizontal row like hz-btn buttons.   */
 
 .wizard-field {
   z-index: 6;
-  flex-direction: column;
+  gap: 12px;  /* same as #horizon-bar */
   box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
   transition: box-shadow 0.3s ease, opacity 0.15s ease;
   pointer-events: none;
@@ -435,44 +437,28 @@ input[type="checkbox"] {
   display: none;
 }
 
+/* Nav section mirrors .hz-nav — stage label + progress dots */
+.wizard-field-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-left: 1px solid rgba(200, 165, 110, 0.1);
+  padding-left: 10px;
+}
+
 .wizard-field-label {
-  font-size: 8px;
+  color: rgba(200, 165, 110, 0.55);
+  font-size: 10px;
   font-weight: 500;
   font-family: -apple-system, system-ui, sans-serif;
-  color: rgba(200, 165, 110, 0.4);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.wizard-field-zones {
-  display: flex;
-  gap: 1px;
-  width: 100%;
-}
-
-.wizard-zone {
-  flex: 1;
-  text-align: center;
-  padding: 4px 8px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 400;
-  font-family: -apple-system, system-ui, sans-serif;
-  color: rgba(200, 165, 110, 0.4);
-  background: transparent;
-  transition: all 0.1s ease;
-  white-space: nowrap;
-}
-
-.wizard-zone.active {
-  color: rgba(200, 165, 110, 0.95);
-  font-weight: 600;
-  background: rgba(200, 165, 110, 0.12);
+  letter-spacing: 0.03em;
+  user-select: none;
 }
 
 .wizard-field-dots {
   display: flex;
-  gap: 5px;
+  align-items: center;
+  gap: 3px;
 }
 
 .wizard-field-dots span {
@@ -485,6 +471,33 @@ input[type="checkbox"] {
 
 .wizard-field-dots span.done {
   background: rgba(200, 165, 110, 0.55);
+}
+
+.wizard-field-zones {
+  display: flex;
+  gap: 1px;  /* same as .hz-scales */
+}
+
+.wizard-zone {
+  /* Must match .hz-btn exactly */
+  background: transparent;
+  border: none;
+  color: rgba(200, 165, 110, 0.3);
+  font-size: 10px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  padding: 4px 8px;
+  border-radius: 5px;
+  text-align: center;
+  white-space: nowrap;
+  transition: all 0.1s ease;
+}
+
+.wizard-zone.active {
+  color: rgba(200, 165, 110, 0.95);
+  font-weight: 600;
+  background: rgba(200, 165, 110, 0.12);
 }
 
 /* ── Bar glow state ──────────────────────────────────── */
