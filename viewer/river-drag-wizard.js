@@ -28,8 +28,8 @@
 
   R.wizardState = wiz;
 
-  // Field height — tall enough you can't miss it
-  var FIELD_H = 80;
+  // Field: thin, crisp, game-like
+  var FIELD_H = 36;
 
   // ── Preset Definitions ────────────────────────────────────────────
 
@@ -188,72 +188,65 @@
   };
 
   // ── Rendering (called from frame loop) ────────────────────────────
+  // Flat, solid zones with hard walls between them. Clean. Game-like.
 
   R.drawWizardField = function (t) {
     if (!wiz.active || wiz.stage > 2) return;
 
     var ctx = R.ctx;
-    var fadeIn = Math.min(1, (performance.now() - wiz.stageStartT) / 150);
+    var fadeIn = Math.min(1, (performance.now() - wiz.stageStartT) / 120);
 
-    // Draw the field background — a warm glowing band at the surface
-    var grad = ctx.createLinearGradient(0, wiz.fieldTop - 10, 0, wiz.fieldBot + 10);
-    grad.addColorStop(0, 'rgba(200, 165, 110, 0)');
-    grad.addColorStop(0.15, 'rgba(200, 165, 110, ' + (0.03 * fadeIn) + ')');
-    grad.addColorStop(0.5, 'rgba(200, 165, 110, ' + (0.06 * fadeIn) + ')');
-    grad.addColorStop(0.85, 'rgba(200, 165, 110, ' + (0.03 * fadeIn) + ')');
-    grad.addColorStop(1, 'rgba(200, 165, 110, 0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, wiz.fieldTop - 10, R.W, wiz.fieldH + 20);
-
-    // Draw each zone as a colored glow
     for (var i = 0; i < wiz.zones.length; i++) {
       var z = wiz.zones[i];
       var isActive = i === wiz.selectedIdx;
-      var alpha = isActive ? 0.35 * fadeIn : 0.12 * fadeIn;
 
-      // Zone glow — radial gradient centered in the zone
-      var cx = z.x + z.w / 2;
-      var cy = (wiz.fieldTop + wiz.fieldBot) / 2;
-      var rx = z.w / 2;
-      var ry = wiz.fieldH / 2;
-
-      var zg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
-      zg.addColorStop(0, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + alpha + ')');
-      zg.addColorStop(0.6, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (alpha * 0.5) + ')');
-      zg.addColorStop(1, 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',0)');
-      ctx.fillStyle = zg;
+      // Flat solid fill — no gradient
+      var a = isActive ? 0.55 : 0.2;
+      ctx.fillStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (a * fadeIn) + ')';
       ctx.fillRect(z.x, wiz.fieldTop, z.w, wiz.fieldH);
 
-      // Active zone: bright border glow
-      if (isActive) {
+      // Hard wall on the right edge (except last zone)
+      if (i < wiz.zones.length - 1) {
         ctx.beginPath();
-        ctx.roundRect(z.x + 2, wiz.fieldTop + 2, z.w - 4, wiz.fieldH - 4, 8);
-        ctx.strokeStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (0.4 * fadeIn) + ')';
-        ctx.lineWidth = 2;
+        ctx.moveTo(z.x + z.w, wiz.fieldTop);
+        ctx.lineTo(z.x + z.w, wiz.fieldBot);
+        ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.15 * fadeIn) + ')';
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
 
-      // Zone label
-      ctx.font = (isActive ? '600 ' : '400 ') + '12px -apple-system, system-ui, sans-serif';
+      // Active zone: bright top/bottom border
+      if (isActive) {
+        ctx.fillStyle = 'rgba(' + z.r + ',' + z.g + ',' + z.b + ',' + (0.7 * fadeIn) + ')';
+        ctx.fillRect(z.x, wiz.fieldTop, z.w, 2);
+        ctx.fillRect(z.x, wiz.fieldBot - 2, z.w, 2);
+      }
+
+      // Label — crisp, centered
+      ctx.font = (isActive ? '600 ' : '500 ') + '11px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(255, 255, 255, ' + (isActive ? 0.9 : 0.4) * fadeIn + ')';
-      ctx.fillText(z.label, cx, cy);
+      ctx.fillStyle = 'rgba(255, 255, 255, ' + (isActive ? 0.95 : 0.5) * fadeIn + ')';
+      ctx.fillText(z.label, z.x + z.w / 2, (wiz.fieldTop + wiz.fieldBot) / 2);
     }
 
-    // Stage label above the field
+    // Top and bottom edges of the whole field
+    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.2 * fadeIn) + ')';
+    ctx.fillRect(wiz.zones[0].x, wiz.fieldTop, wiz.zones[wiz.zones.length-1].x + wiz.zones[wiz.zones.length-1].w - wiz.zones[0].x, 1);
+    ctx.fillRect(wiz.zones[0].x, wiz.fieldBot - 1, wiz.zones[wiz.zones.length-1].x + wiz.zones[wiz.zones.length-1].w - wiz.zones[0].x, 1);
+
+    // Stage label — small, above field
     ctx.font = '500 9px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.4 * fadeIn) + ')';
-    ctx.fillText(STAGE_LABELS[wiz.stage], R.W / 2, wiz.fieldTop - 4);
+    ctx.fillStyle = 'rgba(200, 165, 110, ' + (0.45 * fadeIn) + ')';
+    ctx.fillText(STAGE_LABELS[wiz.stage], R.W / 2, wiz.fieldTop - 6);
 
-    // Stage dots (show progress: ● ○ ○)
+    // Stage dots
     for (var d = 0; d < 3; d++) {
       ctx.beginPath();
-      ctx.arc(R.W / 2 - 12 + d * 12, wiz.fieldBot + 10, 2.5, 0, Math.PI * 2);
+      ctx.arc(R.W / 2 - 10 + d * 10, wiz.fieldBot + 8, 2, 0, Math.PI * 2);
       ctx.fillStyle = d <= wiz.stage
-        ? 'rgba(200, 165, 110, ' + (0.5 * fadeIn) + ')'
+        ? 'rgba(200, 165, 110, ' + (0.6 * fadeIn) + ')'
         : 'rgba(200, 165, 110, ' + (0.15 * fadeIn) + ')';
       ctx.fill();
     }
