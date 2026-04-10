@@ -169,40 +169,45 @@
     if (!wiz.active || wiz.stage > 2) return;
 
     updateFieldRect();
-    var inField = my >= wiz.fieldTop && my <= wiz.fieldBot;
+
+    // Always track which zone the cursor is over (by X position),
+    // even if the cursor isn't vertically inside the field.
+    // This handles fast swipes that jump over the field in one frame.
+    var zoneEls = wizardZonesEl.querySelectorAll('.wizard-zone');
+    var newIdx = -1;
+    for (var i = 0; i < zoneEls.length; i++) {
+      var zr = zoneEls[i].getBoundingClientRect();
+      if (mx >= zr.left && mx < zr.right) { newIdx = i; break; }
+    }
+    // Fallback: if cursor is left of all zones pick first, right of all pick last
+    if (newIdx < 0 && zoneEls.length > 0) {
+      var firstR = zoneEls[0].getBoundingClientRect();
+      var lastR = zoneEls[zoneEls.length - 1].getBoundingClientRect();
+      if (mx < firstR.left) newIdx = 0;
+      else if (mx >= lastR.right) newIdx = zoneEls.length - 1;
+    }
+
+    if (newIdx >= 0 && newIdx !== wiz.selectedIdx) {
+      wiz.selectedIdx = newIdx;
+      applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
+      renderWizardDOM();
+    }
+
+    // Stage advancement on boundary crossing.
+    // Detects crossing even if cursor jumps from far above to far below.
     var above = my < wiz.fieldTop;
     var below = my > wiz.fieldBot;
 
-    // While in the field: find which zone by checking DOM element positions
-    if (inField) {
-      var zoneEls = wizardZonesEl.querySelectorAll('.wizard-zone');
-      var newIdx = -1;
-      for (var i = 0; i < zoneEls.length; i++) {
-        var zr = zoneEls[i].getBoundingClientRect();
-        if (mx >= zr.left && mx < zr.right) { newIdx = i; break; }
-      }
-      if (newIdx >= 0 && newIdx !== wiz.selectedIdx) {
-        wiz.selectedIdx = newIdx;
-        applyZoneToTask(wiz.stage, wiz.zones[newIdx].value);
-        renderWizardDOM();
-      }
-    }
-
-    // Zigzag stage advancement:
-    // Stage 0 (duration):  starts above, advance when exits BELOW (dragging down)
-    // Stage 1 (commitment): starts below, advance when exits ABOVE (dragging up)
-    // Stage 2 (energy):     starts above, advance when exits BELOW (dragging down → land in river)
-    var exitDir = null;
-    if (below && wiz.lastSide !== 'below') exitDir = 'below';
-    if (above && wiz.lastSide !== 'above') exitDir = 'above';
+    var crossedDown = below && wiz.lastSide === 'above';
+    var crossedUp = above && wiz.lastSide === 'below';
 
     if (above) wiz.lastSide = 'above';
     if (below) wiz.lastSide = 'below';
 
     var shouldAdvance = false;
-    if (wiz.stage === 0 && exitDir === 'below') shouldAdvance = true;  // dragged down through duration
-    if (wiz.stage === 1 && exitDir === 'above') shouldAdvance = true;  // dragged back up through commitment
-    if (wiz.stage === 2 && exitDir === 'below') shouldAdvance = true;  // dragged down through energy → done
+    if (wiz.stage === 0 && crossedDown) shouldAdvance = true;
+    if (wiz.stage === 1 && crossedUp) shouldAdvance = true;
+    if (wiz.stage === 2 && crossedDown) shouldAdvance = true;
 
     if (shouldAdvance) advanceStage();
   };
