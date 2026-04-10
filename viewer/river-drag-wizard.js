@@ -291,6 +291,12 @@
       }
     }
 
+    // Update all buttons — the one being hovered gets the active look
+    var hzBtns = document.querySelectorAll('.hz-btn');
+    for (var b = 0; b < hzBtns.length; b++) {
+      hzBtns[b].classList.toggle('hz-btn-preview', hzBtns[b] === found);
+    }
+
     if (found) {
       if (dwell.btnEl === found && !dwell.triggered) {
         var elapsed = performance.now() - dwell.startTime;
@@ -299,6 +305,8 @@
         if (elapsed >= 500) {
           dwell.triggered = true;
           dwell.progress = 1;
+          // Remove preview, do the real switch
+          found.classList.remove('hz-btn-preview');
           R.scrollHours = 0;
           R.setHorizon(Number(found.dataset.hours));
         }
@@ -319,6 +327,9 @@
   };
 
   R.dwellReset = function () {
+    // Clear all preview states
+    var btns = document.querySelectorAll('.hz-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('hz-btn-preview');
     dwell.btnEl = null;
     dwell.btnRect = null;
     dwell.progress = 0;
