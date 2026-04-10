@@ -6,14 +6,9 @@
   var R = window.River;
 
   // ── Plan Mode State ────────────────────────────────────────────────
-  R.planMode = false;
-  R.planLanes = [];       // array of { label, tasks: [] }
-  R.planTimeframe = null;  // e.g. '6h', 'day', '3d'
+  // R.planMode, R.planLanes, R.planTimeframe — set by R.sync() in river-store.js
   R.planHoverLane = -1;    // which lane the mouse is over (-1 = none)
-  R.planAnimTasks = [];    // animated task objects for plan mode
   R.planStreaks = [];       // per-lane flow streaks (array of arrays)
-
-  R.planCloneGhost = null;
 
   // ── Layout Helpers ─────────────────────────────────────────────────
 
@@ -64,90 +59,6 @@
       }
       R.planStreaks.push(streaks);
     }
-  };
-
-  // ── Sync plan tasks into animated objects ──────────────────────────
-
-  R.syncPlanTasks = function () {
-    if (!R.planMode || !R.planLanes) return;
-
-    var allPlanTasks = [];
-    for (var lane = 0; lane < R.planLanes.length; lane++) {
-      var tasks = R.planLanes[lane].tasks || [];
-      for (var ti = 0; ti < tasks.length; ti++) {
-        var t = tasks[ti];
-        t._lane = lane; // tag with lane index
-        allPlanTasks.push(t);
-      }
-    }
-
-    var map = {};
-    for (var i = 0; i < allPlanTasks.length; i++) {
-      var key = allPlanTasks[i].id + '_L' + allPlanTasks[i]._lane;
-      map[key] = allPlanTasks[i];
-    }
-
-    // Remove gone tasks
-    R.planAnimTasks = R.planAnimTasks.filter(function (a) {
-      return map[a.id + '_L' + a._lane];
-    });
-
-    var existing = {};
-    for (var j = 0; j < R.planAnimTasks.length; j++) {
-      existing[R.planAnimTasks[j].id + '_L' + R.planAnimTasks[j]._lane] = j;
-    }
-
-    for (var k = 0; k < allPlanTasks.length; k++) {
-      var t = allPlanTasks[k];
-      var key = t.id + '_L' + t._lane;
-      var bounds = R.planLaneBounds(t._lane);
-      var tgt = R.planTaskTarget(t, bounds);
-
-      if (existing[key] !== undefined) {
-        var a = R.planAnimTasks[existing[key]];
-        a.name = t.name; a.mass = t.mass; a.solidity = t.solidity;
-        a.fixed = t.fixed; a.alive = t.alive; a.tags = t.tags; a.energy = t.energy;
-        a.position = t.position; a.anchor = t.anchor; a._lane = t._lane;
-        a.tx = tgt.x;
-        a.ty = (a.customY !== undefined) ? a.customY : tgt.y;
-      } else {
-        R.planAnimTasks.push({
-          id: t.id, name: t.name, mass: t.mass, solidity: t.solidity,
-          fixed: t.fixed, alive: t.alive, tags: t.tags, energy: t.energy,
-          position: t.position, anchor: t.anchor, _lane: t._lane,
-          x: tgt.x, y: tgt.y, tx: tgt.x, ty: tgt.y, vx: 0, vy: 0
-        });
-      }
-    }
-  };
-
-  R.planTaskTarget = function (t, bounds) {
-    var x = R.hoursToX(t.position || 0);
-    var spread = (bounds.bottom - bounds.top) * 0.15;
-    var y = bounds.midY + (R.hashFrac(t.id, 'ry') - 0.5) * 2 * spread;
-    return { x: x, y: y };
-  };
-
-  // ── Hit test for plan mode tasks ───────────────────────────────────
-
-  R.planHitTest = function (mx, my) {
-    for (var i = R.planAnimTasks.length - 1; i >= 0; i--) {
-      var a = R.planAnimTasks[i];
-      var d = R.taskStretch(a);
-      var hitHW = Math.max(R.MIN_HIT, d.hw + 5);
-      var hitHH = Math.max(R.MIN_HIT, d.hh + 5);
-      if (Math.abs(mx - a.x) <= hitHW && Math.abs(my - a.y) <= hitHH) return a;
-    }
-    return null;
-  };
-
-  // ── Find plan anim task ────────────────────────────────────────────
-
-  R.findPlanTask = function (id, lane) {
-    for (var i = 0; i < R.planAnimTasks.length; i++) {
-      if (R.planAnimTasks[i].id === id && R.planAnimTasks[i]._lane === lane) return R.planAnimTasks[i];
-    }
-    return null;
   };
 
   // ── Drawing: Plan Mode ─────────────────────────────────────────────
@@ -223,7 +134,8 @@
     }
 
     // ── Draw plan tasks (sorted same as normal) ──
-    var sorted = R.planAnimTasks.slice().sort(function (a, b) {
+    var allLaneTasks = R.laneTasks();
+    var sorted = allLaneTasks.slice().sort(function (a, b) {
       if (a.alive !== b.alive) return a.alive ? 1 : -1;
       if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
       return 0;
@@ -231,12 +143,7 @@
 
     for (var j = 0; j < sorted.length; j++) {
       var task = sorted[j];
-      // Dim tasks not in the active lane
-      var originalDim = null;
-      if (R.planHoverLane >= 0 && task._lane !== R.planHoverLane) {
-        // We temporarily reduce alpha by adjusting solidity visual
-        // Actually, drawBlob uses the animTasks array for alive check,
-        // so we just draw with a dimming ctx
+      if (R.planHoverLane >= 0 && task.ctx.lane !== R.planHoverLane) {
         ctx.save();
         ctx.globalAlpha = 0.7;
         R.drawBlob(task, t);
@@ -308,22 +215,6 @@
       }
     }
     return -1;
-  };
-
-  // ── Spring physics for plan tasks (called from frame loop) ─────────
-
-  R.planPhysicsStep = function () {
-    for (var i = 0; i < R.planAnimTasks.length; i++) {
-      var a = R.planAnimTasks[i];
-      // Skip if being dragged
-      if (R.dragging && R.dragging.id === a.id && R.dragging.planLane === a._lane && R.dragging.moved) continue;
-      a.vx += (a.tx - a.x) * R.SPRING_K;
-      a.vy += (a.ty - a.y) * R.SPRING_K;
-      a.vx *= R.DAMPING;
-      a.vy *= R.DAMPING;
-      a.x += a.vx;
-      a.y += a.vy;
-    }
   };
 
   // ── Plan indicator DOM toggle ──────────────────────────────────────

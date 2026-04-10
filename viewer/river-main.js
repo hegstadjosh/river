@@ -36,8 +36,8 @@
     R.recalcScale();
     R.sync();
     // Snap all tasks to their new positions immediately — no spring animation
-    for (var i = 0; i < R.animTasks.length; i++) {
-      var a = R.animTasks[i];
+    for (var i = 0; i < R.tasks.length; i++) {
+      var a = R.tasks[i];
       // Skip the task being dragged
       if (R.dragging && R.dragging.id === a.id) continue;
       a.x = a.tx;
@@ -168,9 +168,9 @@
     dt = Math.min(dt, 0.1);
     R.lastTime = t;
 
-    // Spring physics — fluid, damped, organic (cloud + river tasks)
-    for (var i = 0; i < R.animTasks.length; i++) {
-      var a = R.animTasks[i];
+    // Spring physics — fluid, damped, organic (all tasks)
+    for (var i = 0; i < R.tasks.length; i++) {
+      var a = R.tasks[i];
       if (R.dragging && R.dragging.id === a.id && R.dragging.moved) continue;
       a.vx += (a.tx - a.x) * R.SPRING_K;
       a.vy += (a.ty - a.y) * R.SPRING_K;
@@ -180,53 +180,42 @@
       a.y += a.vy;
     }
 
-    // Plan mode physics
-    if (R.planMode && R.planPhysicsStep) R.planPhysicsStep();
-
     // Draw the world
     R.drawWorld(t);
 
-    if (R.planMode) {
-      // Plan mode: subtler main streaks, plan handles its own per-lane streaks
-      R.drawStreaks(dt);
-      R.drawNowLine(t);
-      R.drawTimeMarkers();
+    // Always draw streaks, now line, time markers
+    R.drawStreaks(dt);
+    R.drawNowLine(t);
+    R.drawTimeMarkers();
 
+    if (R.planMode) {
       // Draw plan mode lanes, lane tasks, commit buttons
       R.drawPlanMode(t, dt);
-
-      // Cloud tasks still render normally (the palette)
-      var cloudSorted = R.animTasks.filter(function (a) {
-        return a.position === null || a.position === undefined;
-      }).sort(function (a, b) {
-        if (a.alive !== b.alive) return a.alive ? 1 : -1;
-        return 0;
-      });
-
-      for (var ci = 0; ci < cloudSorted.length; ci++) {
-        R.drawBlob(cloudSorted[ci], t);
-      }
     } else {
-      // Normal mode — unchanged
-      R.drawStreaks(dt);
-      R.drawNowLine(t);
-      R.drawTimeMarkers();
-
-      var sorted = R.animTasks.slice().sort(function (a, b) {
+      // Normal mode — draw river tasks with culling
+      var riverSorted = R.riverTasks().sort(function (a, b) {
         if (a.alive !== b.alive) return a.alive ? 1 : -1;
         if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
         return 0;
       });
 
-      for (var j = 0; j < sorted.length; j++) {
-        var task = sorted[j];
-        if (task.position !== null && task.position !== undefined) {
-          var screenX = R.hoursToX(task.position);
-          var cullHW = R.taskStretch(task).hw + 50;
-          if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
-        }
+      for (var j = 0; j < riverSorted.length; j++) {
+        var task = riverSorted[j];
+        var screenX = R.hoursToX(task.position);
+        var cullHW = R.taskStretch(task).hw + 50;
+        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
         R.drawBlob(task, t);
       }
+    }
+
+    // Cloud tasks render in both modes
+    var cloudSorted = R.cloudTasks().sort(function (a, b) {
+      if (a.alive !== b.alive) return a.alive ? 1 : -1;
+      return 0;
+    });
+
+    for (var ci = 0; ci < cloudSorted.length; ci++) {
+      R.drawBlob(cloudSorted[ci], t);
     }
 
     // ── Wizard glowing field ──
@@ -239,12 +228,6 @@
     // ── Keep panel attached to selected task ──
     if (R.selectedId && !document.getElementById('panel').classList.contains('hidden')) {
       var selTask = R.findTask(R.selectedId);
-      if (!selTask && R.planMode) {
-        // Check plan tasks too
-        for (var pi = 0; pi < R.planAnimTasks.length; pi++) {
-          if (R.planAnimTasks[pi].id === R.selectedId) { selTask = R.planAnimTasks[pi]; break; }
-        }
-      }
       if (selTask) R.positionPanel(selTask);
     }
 
