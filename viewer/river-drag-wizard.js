@@ -42,10 +42,10 @@
 
   function commitmentPresets() {
     return [
-      { value: 0.15, label: 'wisp',   r: 200, g: 165, b: 110 },  // barely there
-      { value: 0.40, label: 'maybe',  r: 210, g: 170, b: 105 },
-      { value: 0.70, label: 'likely', r: 220, g: 175, b: 95 },
-      { value: 0.95, label: 'locked', r: 235, g: 190, b: 80 }    // crystalline
+      { value: 0.40, label: 'maybe',    r: 200, g: 165, b: 110 },
+      { value: 0.60, label: 'likely',   r: 210, g: 170, b: 105 },
+      { value: 0.80, label: 'solid',    r: 220, g: 175, b: 95 },
+      { value: 0.95, label: 'locked',   r: 235, g: 190, b: 80 }
     ];
   }
 
