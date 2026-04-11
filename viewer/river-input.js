@@ -30,6 +30,7 @@
     var visible = R.visibleTasks();
     for (var i = visible.length - 1; i >= 0; i--) {
       var a = visible[i];
+      if (R.planMode && a.ctx && a.ctx.lane === 0) continue;
       var d = R.taskStretch(a);
       var grabHW = Math.max(R.MIN_HIT, d.hw);
       var grabHH = Math.max(R.MIN_HIT, d.hh);
@@ -95,6 +96,11 @@
         zone = 'river';
       } else {
         zone = 'cloud';
+      }
+      // Lane 0 (lane 1) is read-only — show panel on click, but don't allow drag
+      if (R.planMode && zone === 'plan' && planLane === 0) {
+        R.showPanel(hit, e.clientX, e.clientY);
+        return;
       }
       R.dragging = {
         id: hit.id,
@@ -289,9 +295,9 @@
 
       if (e.clientY < boundary) {
         R.moveToCloud(d.id, d.planLane);
-      } else if (dropLane >= 0 && dropLane !== d.planLane) {
+      } else if (dropLane >= 0 && dropLane !== d.planLane && dropLane !== 0) {
         R.moveToLane(d.id, d.planLane, dropLane, dropHours);
-      } else if (dropLane >= 0) {
+      } else if (dropLane >= 0 && dropLane !== 0) {
         R.savePosition(d.id, dropHours);
       }
       return;
@@ -300,7 +306,7 @@
     // Plan mode: cloud task dropped into a lane
     if (R.planMode && d.zone === 'cloud' && d.moved) {
       var dropLane = R.planLaneAt(e.clientY);
-      if (dropLane >= 0) {
+      if (dropLane >= 0 && dropLane !== 0) {
         var a = R.findTask(d.id);
         if (a) {
           var dd2 = R.taskStretch(a);
@@ -398,6 +404,7 @@
     // Plan mode: double-click in a lane creates a task there
     if (R.planMode) {
       var lane = R.planLaneAt(e.clientY);
+      if (lane === 0) return; // lane 1 is read-only
       if (lane >= 0) {
         quickAddLane = lane;
         quickAddPos = (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;

@@ -113,13 +113,14 @@
 
       // ── Lane label ──
       var laneData = R.planLanes[i];
-      if (laneData && laneData.label) {
+      var label = (laneData && laneData.label) ? laneData.label : (i === 0 ? 'current' : '');
+      if (label) {
         ctx.save();
         ctx.font = '400 11px -apple-system, system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.45 : 0.25) + ')';
-        ctx.fillText(laneData.label, 16, bounds.midY);
+        ctx.fillText(label, 16, bounds.midY);
         ctx.restore();
       }
 
@@ -143,9 +144,11 @@
 
     for (var j = 0; j < sorted.length; j++) {
       var task = sorted[j];
-      if (R.planHoverLane >= 0 && task.ctx && task.ctx.lane !== R.planHoverLane) {
+      var isReadonly = task.ctx && task.ctx.lane === 0;
+      var dimForHover = R.planHoverLane >= 0 && task.ctx && task.ctx.lane !== R.planHoverLane;
+      if (isReadonly || dimForHover) {
         ctx.save();
-        ctx.globalAlpha = 0.7;
+        ctx.globalAlpha = isReadonly ? 0.5 : 0.7;
         R.drawBlob(task, t);
         ctx.restore();
       } else {
@@ -169,6 +172,7 @@
     for (var i = 0; i < R.planLaneCount(); i++) {
       var laneData = R.planLanes[i];
       if (!laneData || !laneData.tasks || laneData.tasks.length === 0) continue;
+      if (laneData.readonly) continue;
 
       var bounds = R.planLaneBounds(i);
       var btnW = 68, btnH = 24;
@@ -215,6 +219,28 @@
       }
     }
     return -1;
+  };
+
+  // ── Plan Window Outline ────────────────────────────────────────────
+
+  R.drawPlanWindowOutline = function (t) {
+    if (!R.planWindowStart || !R.planWindowEnd || !R.state) return;
+    var ctx = R.ctx;
+    var now = new Date(R.state.now);
+    var startHours = (new Date(R.planWindowStart).getTime() - now.getTime()) / 3600000;
+    var endHours = (new Date(R.planWindowEnd).getTime() - now.getTime()) / 3600000;
+    var leftX = R.hoursToX(startHours);
+    var rightX = R.hoursToX(endHours);
+    var top = R.surfaceY();
+    var bottom = R.H - 20;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(leftX, top, rightX - leftX, bottom - top, 6);
+    ctx.strokeStyle = 'rgba(200, 165, 110, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
   };
 
   // ── Plan indicator DOM toggle ──────────────────────────────────────

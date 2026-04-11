@@ -189,6 +189,7 @@
     if (R.planMode) {
       // Draw plan mode lanes, lane tasks, commit buttons
       R.drawPlanMode(t, dt);
+      if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
       // Normal mode — draw river tasks with culling
       var riverSorted = R.riverTasks().sort(function (a, b) {
