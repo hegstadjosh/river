@@ -347,4 +347,19 @@
     R.deleteTask(R.selectedId);
     R.hidePanel();
   });
+
+  document.getElementById('panel-copy').addEventListener('click', function () {
+    if (!R.selectedId) return;
+    var a = R.findTask(R.selectedId);
+    if (a) {
+      R.post('put', {
+        name: a.name,
+        mass: a.mass,
+        solidity: a.solidity,
+        energy: a.energy,
+        tags: a.tags
+      });
+    }
+    R.hidePanel();
+  });
 })();

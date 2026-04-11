@@ -380,19 +380,25 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-.panel-dissolve {
+.panel-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.panel-action {
+  flex: 1;
   background: rgba(212, 170, 110, 0.08);
   border: 1px solid rgba(212, 170, 110, 0.12);
   border-radius: 6px;
   color: rgba(212, 196, 176, 0.5);
-  font-size: 12px;
+  font-size: 11px;
   padding: 6px 0;
   cursor: pointer;
   transition: all 0.15s ease;
   letter-spacing: 0.03em;
 }
 
-.panel-dissolve:hover {
+.panel-action:hover {
   background: rgba(212, 170, 110, 0.15);
   color: rgba(212, 196, 176, 0.8);
   border-color: rgba(212, 170, 110, 0.25);
@@ -431,44 +437,6 @@ input[type="checkbox"] {
   background: rgba(200, 165, 110, 0.14);
 }
 
-/* ── Context Menu ─────────────────────────────────────── */
-
-.ctx-menu {
-  position: absolute;
-  z-index: 20;
-  min-width: 100px;
-  padding: 4px;
-  border-radius: 8px;
-  background: rgba(20, 17, 14, 0.9);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(200, 165, 110, 0.12);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-}
-
-.ctx-menu.hidden {
-  display: none;
-}
-
-.ctx-item {
-  display: block;
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: rgba(200, 165, 110, 0.7);
-  font-size: 12px;
-  font-family: -apple-system, system-ui, sans-serif;
-  padding: 6px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.1s ease;
-}
-
-.ctx-item:hover {
-  background: rgba(200, 165, 110, 0.1);
-  color: rgba(200, 165, 110, 0.95);
-}
 
 /* ── Wizard Field (DOM element, same style as horizon bar) ── */
 /* Must be EXACTLY the same size/shape as #horizon-bar.        */

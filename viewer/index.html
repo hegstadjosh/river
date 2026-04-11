@@ -32,12 +32,7 @@
 
   <button id="plan-btn" class="plan-btn">plan</button>
 
-  <div id="ctx-menu" class="ctx-menu hidden">
-    <button class="ctx-item" id="ctx-copy">Copy</button>
-    <button class="ctx-item" id="ctx-delete">Dissolve</button>
-  </div>
-
-  <input type="text" id="quick-add" class="quick-add hidden" placeholder="new thought..." spellcheck="false">
+<input type="text" id="quick-add" class="quick-add hidden" placeholder="new thought..." spellcheck="false">
 
   <div id="panel" class="panel hidden">
     <label class="panel-label">
@@ -76,7 +71,10 @@
       <input type="checkbox" id="panel-fixed">
       Pinned
     </label>
-    <button id="panel-dissolve" class="panel-dissolve">Dissolve</button>
+    <div class="panel-actions">
+      <button id="panel-copy" class="panel-action">Copy</button>
+      <button id="panel-dissolve" class="panel-action panel-action-dissolve">Dissolve</button>
+    </div>
   </div>
 
   <script src="river-core.js"></script>

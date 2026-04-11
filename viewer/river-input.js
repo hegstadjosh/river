@@ -380,51 +380,7 @@
     }
   });
 
-  // ── Context Menu ──────────────────────────────────────────────────
-  var ctxMenu = document.getElementById('ctx-menu');
-  var ctxCopy = document.getElementById('ctx-copy');
-  var ctxDelete = document.getElementById('ctx-delete');
-  var ctxTaskId = null;
-
-  function hideCtx() { ctxMenu.classList.add('hidden'); ctxTaskId = null; }
-
-  R.canvas.addEventListener('contextmenu', function (e) {
-    e.preventDefault();
-    var hit = R.hitTest(e.clientX, e.clientY);
-    if (!hit) { hideCtx(); return; }
-
-    ctxTaskId = hit.id;
-    ctxMenu.style.left = e.clientX + 'px';
-    ctxMenu.style.top = e.clientY + 'px';
-    ctxMenu.classList.remove('hidden');
-  });
-
-  ctxCopy.addEventListener('click', function () {
-    if (!ctxTaskId) return;
-    // Copy = create a new task with the same properties in the cloud
-    var a = R.findTask(ctxTaskId);
-    if (a) {
-      R.post('put', {
-        name: a.name + ' (copy)',
-        mass: a.mass,
-        solidity: a.solidity,
-        energy: a.energy,
-        tags: a.tags
-      });
-    }
-    hideCtx();
-  });
-
-  ctxDelete.addEventListener('click', function () {
-    if (!ctxTaskId) return;
-    R.deleteTask(ctxTaskId);
-    hideCtx();
-  });
-
-  // Hide context menu on any click elsewhere
-  document.addEventListener('click', function (e) {
-    if (!ctxMenu.contains(e.target)) hideCtx();
-  });
+  R.canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   // ── Quick Add (double-click) ────────────────────────────────────────
   // Double-click empty space -> input appears -> type name -> task created
