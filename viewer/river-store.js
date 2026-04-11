@@ -102,9 +102,8 @@
   R.visibleTasks = function () {
     var base;
     if (R.planMode) {
-      base = R.tasks.filter(function (t) {
-        return t.ctx && (t.ctx.type === 'lane' || (t.ctx.type === 'main' && (t.position === null || t.position === undefined)));
-      });
+      // All tasks: lane tasks + cloud tasks + river tasks (visible outside plan window)
+      base = R.tasks.slice();
     } else {
       base = R.mainTasks();
     }
