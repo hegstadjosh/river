@@ -34,7 +34,7 @@ describe('Plan Mode', () => {
 
       const lane1 = plan.lanes.find((l) => l.number === 1)!;
       expect(lane1.taskCount).toBe(1);
-      expect(lane1.readonly).toBe(true);
+      expect(lane1.readonly).toBe(false);
 
       for (let i = 2; i <= 5; i++) {
         const lane = plan.lanes.find((l) => l.number === i)!;
@@ -91,11 +91,6 @@ describe('Plan Mode', () => {
       expect(lane2!.taskCount).toBe(1);
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.fillLane(1, [{ name: 'X' }])).toThrow('Lane 1 is read-only');
-    });
-
     it('throws when plan mode is not active', () => {
       expect(() => state.fillLane(2, [{ name: 'X' }])).toThrow('Plan mode is not active');
     });
@@ -115,11 +110,6 @@ describe('Plan Mode', () => {
   });
 
   describe('commitLane', () => {
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.commitLane(1)).toThrow('Lane 1 is read-only');
-    });
-
     it('merges lane tasks to main and ends plan mode', () => {
       state.putTask({ name: 'Main task', position: 1.0 });
 
@@ -213,7 +203,7 @@ describe('Plan Mode', () => {
 
       const lane1 = plan.lanes.find((l) => l.number === 1)!;
       expect(lane1.taskCount).toBe(1);
-      expect(lane1.readonly).toBe(true);
+      expect(lane1.readonly).toBe(false);
 
       const lane3 = plan.lanes.find((l) => l.number === 3)!;
       expect(lane3.taskCount).toBe(1);
@@ -244,10 +234,6 @@ describe('Plan Mode', () => {
       expect(tasks.cloud[0].name).toBe('Cloud task');
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.putTaskInLane(1, 'Nope', 1.0)).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('addToLane', () => {
@@ -278,11 +264,6 @@ describe('Plan Mode', () => {
       expect(mainTask).toBeNull();
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      const task = state.putTask({ name: 'Main task', position: 1.0 });
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.addToLane(1, task.id, 2.0, true)).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('removeFromLane', () => {
@@ -301,10 +282,6 @@ describe('Plan Mode', () => {
       expect(allNames).toEqual(['Keep']);
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.removeFromLane(1, 'any-id')).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('laneToCloud', () => {
@@ -329,10 +306,6 @@ describe('Plan Mode', () => {
       expect(() => state.laneToCloud(2, 'nonexistent')).toThrow('not found');
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.laneToCloud(1, 'any-id')).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('updateTaskInLane', () => {
@@ -368,10 +341,6 @@ describe('Plan Mode', () => {
       expect(updated.position!).toBeLessThan(6.0);
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.updateTaskInLane(1, 'any-id', { mass: 10 })).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('moveBetweenLanes', () => {
@@ -396,12 +365,6 @@ describe('Plan Mode', () => {
       expect(() => state.moveBetweenLanes(2, 3, 'nonexistent', 1.0)).toThrow('not found');
     });
 
-    it('throws when target is lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      const filled = state.fillLane(2, [{ name: 'Blocked', position: 1.0 }]);
-      const taskId = filled.tasks[0].id;
-      expect(() => state.moveBetweenLanes(2, 1, taskId, 1.0)).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('repositionInLane', () => {
@@ -419,10 +382,6 @@ describe('Plan Mode', () => {
       expect(task.position!).toBeLessThan(9.0);
     });
 
-    it('throws on lane 1 (read-only)', () => {
-      state.startPlan(windowStart, windowEnd);
-      expect(() => state.repositionInLane(1, 'any-id', 1.0)).toThrow('Lane 1 is read-only');
-    });
   });
 
   describe('lane validation', () => {
