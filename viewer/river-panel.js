@@ -441,7 +441,15 @@
     if (!R.selectedId) return;
     for (var i = 0; i < R.selectedIds.length; i++) {
       var a = R.findTask(R.selectedIds[i]);
-      if (a) {
+      if (!a) continue;
+      if (a.ctx && a.ctx.type === 'lane') {
+        // Copy within the same lane
+        R.post('plan_lane_put', {
+          lane: a.ctx.lane,
+          name: a.name,
+          position: a.position != null ? a.position + a.mass / 120 : null
+        });
+      } else {
         R.post('put', {
           name: a.name,
           mass: a.mass,
