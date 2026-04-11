@@ -63,14 +63,16 @@
       btn.addEventListener('click', (function (mass) {
         return function () {
           if (!R.selectedId) return;
-          var a = R.findTask(R.selectedId);
-          var changes = { mass: mass };
-          // Keep start time fixed: shift center by half the mass delta
-          if (a && a.position !== null && a.position !== undefined) {
-            var massDiffH = (mass - a.mass) / 60;
-            changes.position = a.position + massDiffH / 2;
+          for (var j = 0; j < R.selectedIds.length; j++) {
+            var a = R.findTask(R.selectedIds[j]);
+            if (!a) continue;
+            var changes = { mass: mass };
+            if (a.position !== null && a.position !== undefined) {
+              var massDiffH = (mass - a.mass) / 60;
+              changes.position = a.position + massDiffH / 2;
+            }
+            R.save(R.selectedIds[j], changes);
           }
-          R.save(R.selectedId, changes);
           panelDurInput.value = R.formatDuration(mass);
           R.renderPresetButtons(mass);
         };
@@ -174,13 +176,16 @@
 
   R.applyDuration = function (parsed) {
     if (!parsed || !R.selectedId) return;
-    var a = R.findTask(R.selectedId);
-    var changes = { mass: parsed };
-    if (a && a.position !== null && a.position !== undefined) {
-      var massDiffH = (parsed - a.mass) / 60;
-      changes.position = a.position + massDiffH / 2;
+    for (var i = 0; i < R.selectedIds.length; i++) {
+      var a = R.findTask(R.selectedIds[i]);
+      if (!a) continue;
+      var changes = { mass: parsed };
+      if (a.position !== null && a.position !== undefined) {
+        var massDiffH = (parsed - a.mass) / 60;
+        changes.position = a.position + massDiffH / 2;
+      }
+      R.save(R.selectedIds[i], changes);
     }
-    R.save(R.selectedId, changes);
     panelDurInput.value = R.formatDuration(parsed);
     R.renderPresetButtons(parsed);
   };
@@ -189,24 +194,58 @@
 
   R.showPanel = function (a, sx, sy) {
     R.selectedId = a.id;
-    panelName.value = a.name;
-    panelDurInput.value = R.formatDuration(a.mass);
-    R.renderPresetButtons(a.mass);
-    panelSolidity.value = Math.round(a.solidity * 100);
-    var panelEnergy = document.getElementById('panel-energy');
-    panelEnergy.value = Math.round((a.energy != null ? a.energy : 0.5) * 100);
-    panelBackToCloud.checked = !a.fixed;
+    var isMulti = R.selectedIds.length > 1;
 
-    // Show start/end for river tasks
-    if (a.position !== null && a.position !== undefined && R.state) {
-      var now = new Date(R.state.now);
-      var centerMs = now.getTime() + a.position * 3600000;
-      var halfDurMs = a.mass * 30000;
-      panelStart.value = R.fmtCompact(new Date(centerMs - halfDurMs));
-      panelEnd.value = R.fmtCompact(new Date(centerMs + halfDurMs));
-      panelTimes.style.display = '';
-    } else {
+    if (isMulti) {
+      panelName.value = R.selectedIds.length + ' tasks';
+      panelName.readOnly = true;
+
+      var totalMass = 0, totalSol = 0, totalNrg = 0;
+      for (var i = 0; i < R.selectedIds.length; i++) {
+        var t = R.findTask(R.selectedIds[i]);
+        if (t) {
+          totalMass += t.mass;
+          totalSol += t.solidity;
+          totalNrg += (t.energy != null ? t.energy : 0.5);
+        }
+      }
+      var n = R.selectedIds.length;
+      panelDurInput.value = R.formatDuration(Math.round(totalMass / n));
+      R.renderPresetButtons(Math.round(totalMass / n));
+      panelSolidity.value = Math.round((totalSol / n) * 100);
+      var panelEnergy = document.getElementById('panel-energy');
+      panelEnergy.value = Math.round((totalNrg / n) * 100);
+
+      var allFixed = true, allCloud = true;
+      for (var j = 0; j < R.selectedIds.length; j++) {
+        var t2 = R.findTask(R.selectedIds[j]);
+        if (t2) {
+          if (t2.fixed) allCloud = false;
+          if (!t2.fixed) allFixed = false;
+        }
+      }
+      panelBackToCloud.checked = allCloud;
       panelTimes.style.display = 'none';
+    } else {
+      panelName.value = a.name;
+      panelName.readOnly = false;
+      panelDurInput.value = R.formatDuration(a.mass);
+      R.renderPresetButtons(a.mass);
+      panelSolidity.value = Math.round(a.solidity * 100);
+      var panelEnergy = document.getElementById('panel-energy');
+      panelEnergy.value = Math.round((a.energy != null ? a.energy : 0.5) * 100);
+      panelBackToCloud.checked = !a.fixed;
+
+      if (a.position !== null && a.position !== undefined && R.state) {
+        var now = new Date(R.state.now);
+        var centerMs = now.getTime() + a.position * 3600000;
+        var halfDurMs = a.mass * 30000;
+        panelStart.value = R.fmtCompact(new Date(centerMs - halfDurMs));
+        panelEnd.value = R.fmtCompact(new Date(centerMs + halfDurMs));
+        panelTimes.style.display = '';
+      } else {
+        panelTimes.style.display = 'none';
+      }
     }
 
     if (R.rebuildPanelTags) R.rebuildPanelTags();
@@ -252,13 +291,13 @@
     panel.style.top = py + 'px';
   };
 
-  R.hidePanel = function () { panel.classList.add('hidden'); R.selectedId = null; };
+  R.hidePanel = function () { panel.classList.add('hidden'); R.selectedId = null; R.selectedIds = []; };
 
   // ── Panel Events ───────────────────────────────────────────────────
 
   var nameTimer = null;
   panelName.addEventListener('input', function () {
-    if (!R.selectedId) return;
+    if (!R.selectedId || panelName.readOnly) return;
     clearTimeout(nameTimer);
     nameTimer = setTimeout(function () {
       R.save(R.selectedId, { name: panelName.value });
@@ -278,7 +317,10 @@
 
   panelSolidity.addEventListener('input', function () {
     if (!R.selectedId) return;
-    R.save(R.selectedId, { solidity: Number(panelSolidity.value) / 100 });
+    var val = Number(panelSolidity.value) / 100;
+    for (var i = 0; i < R.selectedIds.length; i++) {
+      R.save(R.selectedIds[i], { solidity: val });
+    }
   });
 
   startIcon.addEventListener('click', function() {
@@ -338,29 +380,39 @@
 
   document.getElementById('panel-energy').addEventListener('input', function () {
     if (!R.selectedId) return;
-    R.save(R.selectedId, { energy: Number(this.value) / 100 });
+    var val = Number(this.value) / 100;
+    for (var i = 0; i < R.selectedIds.length; i++) {
+      R.save(R.selectedIds[i], { energy: val });
+    }
   });
   panelBackToCloud.addEventListener('change', function () {
     if (!R.selectedId) return;
-    R.save(R.selectedId, { fixed: !panelBackToCloud.checked });
+    var fixed = !panelBackToCloud.checked;
+    for (var i = 0; i < R.selectedIds.length; i++) {
+      R.save(R.selectedIds[i], { fixed: fixed });
+    }
   });
   panelDissolve.addEventListener('click', function () {
     if (!R.selectedId) return;
-    R.deleteTask(R.selectedId);
+    for (var i = 0; i < R.selectedIds.length; i++) {
+      R.deleteTask(R.selectedIds[i]);
+    }
     R.hidePanel();
   });
 
   document.getElementById('panel-copy').addEventListener('click', function () {
     if (!R.selectedId) return;
-    var a = R.findTask(R.selectedId);
-    if (a) {
-      R.post('put', {
-        name: a.name,
-        mass: a.mass,
-        solidity: a.solidity,
-        energy: a.energy,
-        tags: a.tags
-      });
+    for (var i = 0; i < R.selectedIds.length; i++) {
+      var a = R.findTask(R.selectedIds[i]);
+      if (a) {
+        R.post('put', {
+          name: a.name,
+          mass: a.mass,
+          solidity: a.solidity,
+          energy: a.energy,
+          tags: a.tags
+        });
+      }
     }
     R.hidePanel();
   });

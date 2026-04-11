@@ -424,15 +424,32 @@
   R.rebuildPanelTags = function () {
     var container = document.getElementById('panel-tags');
     if (!container) return;
-    var task = R.findTask(R.selectedId);
-    if (!task) return;
     container.innerHTML = '';
-    var taskTags = task.tags || [];
+
+    var isMulti = R.selectedIds.length > 1;
+    var tasks = [];
+    for (var k = 0; k < R.selectedIds.length; k++) {
+      var tk = R.findTask(R.selectedIds[k]);
+      if (tk) tasks.push(tk);
+    }
+    if (!tasks.length) return;
+
+    var unionTags = [];
+    if (isMulti) {
+      for (var u = 0; u < tasks.length; u++) {
+        var tt = tasks[u].tags || [];
+        for (var v = 0; v < tt.length; v++) {
+          if (unionTags.indexOf(tt[v]) < 0) unionTags.push(tt[v]);
+        }
+      }
+    } else {
+      unionTags = (tasks[0].tags || []).slice();
+    }
 
     for (var i = 0; i < R.allTags.length; i++) {
       (function (tag) {
         if (tag === 'N/A') return;
-        var hasTag = taskTags.indexOf(tag) >= 0;
+        var hasTag = unionTags.indexOf(tag) >= 0;
         var check = document.createElement('div');
         check.className = 'panel-tag-check' + (hasTag ? '' : ' off');
         var dot = document.createElement('div');
@@ -444,11 +461,17 @@
         check.appendChild(dot);
         check.appendChild(name);
         check.addEventListener('click', function () {
-          var tags = (task.tags || []).slice();
-          var idx = tags.indexOf(tag);
-          if (idx >= 0) { tags.splice(idx, 1); } else { tags.push(tag); }
-          R.save(R.selectedId, { tags: tags });
-          task.tags = tags;
+          for (var m = 0; m < tasks.length; m++) {
+            var tags = (tasks[m].tags || []).slice();
+            var idx = tags.indexOf(tag);
+            if (hasTag) {
+              if (idx >= 0) tags.splice(idx, 1);
+            } else {
+              if (idx < 0) tags.push(tag);
+            }
+            R.save(tasks[m].id, { tags: tags });
+            tasks[m].tags = tags;
+          }
           R.rebuildPanelTags();
         });
         container.appendChild(check);
