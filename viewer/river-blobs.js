@@ -198,12 +198,12 @@
     ctx.filter = 'none';
 
     // Selection ring
-    if (R.selectedId === a.id) {
+    if (R.isSelected && R.isSelected(a.id)) {
+      ctx.strokeStyle = 'rgba(200, 165, 110, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
       ctx.beginPath();
-      ctx.roundRect(x - hw - 5, y - hh - 5, hw * 2 + 10, hh * 2 + 10, cornerR + 3);
-      ctx.strokeStyle = 'rgba(200, 165, 110, 0.35)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 5]);
+      ctx.roundRect(x - hw - 3, y - hh - 3, (hw + 3) * 2, (hh + 3) * 2, rectness > 0.3 ? 4 : (hw + 3));
       ctx.stroke();
       ctx.setLineDash([]);
     }

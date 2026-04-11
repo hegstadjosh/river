@@ -30,7 +30,6 @@
     var visible = R.visibleTasks();
     for (var i = visible.length - 1; i >= 0; i--) {
       var a = visible[i];
-      if (R.planMode && a.ctx && a.ctx.lane === 0) continue;
       var d = R.taskStretch(a);
       var grabHW = Math.max(R.MIN_HIT, d.hw);
       var grabHH = Math.max(R.MIN_HIT, d.hh);
@@ -502,7 +501,6 @@
     // Plan mode: double-click in a lane creates a task there
     if (R.planMode) {
       var lane = R.planLaneAt(e.clientY);
-      if (lane === 0) return; // lane 1 is read-only
       if (lane >= 0) {
         quickAddLane = lane;
         quickAddPos = (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;

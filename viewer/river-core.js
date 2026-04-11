@@ -51,6 +51,8 @@ window.River = {};
   R.planWindowStart = null;
   R.planWindowEnd = null;
   R.selectedId = null;
+  R.selectedIds = [];
+  R.isSelected = function (id) { return R.selectedIds.indexOf(id) >= 0; };
   R.dragging = null;
   R.resizing = null;
   R.lastTime = 0;

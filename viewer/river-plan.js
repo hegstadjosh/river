@@ -156,9 +156,8 @@
 
     for (var j = 0; j < sorted.length; j++) {
       var task = sorted[j];
-      var isReadonly = task.ctx && task.ctx.lane === 0;
       var dimForHover = R.planHoverLane >= 0 && task.ctx && task.ctx.lane !== R.planHoverLane;
-      if (isReadonly || dimForHover) {
+      if (dimForHover) {
         ctx.save();
         ctx.globalAlpha = isReadonly ? 0.5 : 0.7;
         R.drawBlob(task, t);
@@ -186,7 +185,6 @@
     for (var i = 0; i < R.planLaneCount(); i++) {
       var laneData = R.planLanes[i];
       if (!laneData || !laneData.tasks || laneData.tasks.length === 0) continue;
-      if (laneData.readonly) continue;
 
       var bounds = R.planLaneBounds(i);
       var btnW = 68, btnH = 24;

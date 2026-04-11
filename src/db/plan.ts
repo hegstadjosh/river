@@ -100,10 +100,6 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(lane);
 
-    if (lane === 1) {
-      throw new Error('Lane 1 is read-only — it shows your current plan as a reference.');
-    }
-
     const branchId = getLaneBranchId(lane);
 
     db.prepare('DELETE FROM tasks WHERE timeline_id = ?').run(branchId);
@@ -160,10 +156,6 @@ export function createPlanFns(
   function commitLane(lane: number): { committed: number; taskCount: number } {
     assertPlanActive();
     assertValidLane(lane);
-
-    if (lane === 1) {
-      throw new Error('Lane 1 is read-only. Commit a different lane.');
-    }
 
     const branchId = getLaneBranchId(lane);
     const mainId = getMainTimelineId();
@@ -232,7 +224,7 @@ export function createPlanFns(
           label,
           taskCount: countRow.cnt,
           branchName,
-          readonly: i === 1,
+          readonly: false,
         });
       }
     }
@@ -250,14 +242,11 @@ export function createPlanFns(
     return branch.id;
   }
 
-  function assertEditableLane(lane: number): void {
-    if (lane === 1) throw new Error('Lane 1 is read-only');
-  }
 
   function addToLane(lane: number, taskId: string, position: number | null, copy: boolean): void {
     assertPlanActive();
     assertValidLane(lane);
-    assertEditableLane(lane);
+
     const branchId = getLaneBranchId(lane);
 
     const mainId = getMainTimelineId();
@@ -285,7 +274,7 @@ export function createPlanFns(
   function removeFromLane(lane: number, taskId: string): void {
     assertPlanActive();
     assertValidLane(lane);
-    assertEditableLane(lane);
+
     const branchId = getLaneBranchId(lane);
     db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, branchId);
   }
@@ -293,7 +282,7 @@ export function createPlanFns(
   function updateTaskInLane(lane: number, taskId: string, updates: { mass?: number; solidity?: number; energy?: number; position?: number }): void {
     assertPlanActive();
     assertValidLane(lane);
-    assertEditableLane(lane);
+
     const branchId = getLaneBranchId(lane);
     const sets: string[] = [];
     const vals: unknown[] = [];
@@ -309,7 +298,7 @@ export function createPlanFns(
   function laneToCloud(lane: number, taskId: string): void {
     assertPlanActive();
     assertValidLane(lane);
-    assertEditableLane(lane);
+
     const branchId = getLaneBranchId(lane);
     const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, branchId) as TaskRow | undefined;
     if (!source) throw new Error(`Task ${taskId} not found in lane ${lane}`);
@@ -326,7 +315,7 @@ export function createPlanFns(
   function repositionInLane(lane: number, taskId: string, position: number): void {
     assertPlanActive();
     assertValidLane(lane);
-    assertEditableLane(lane);
+
     const branchId = getLaneBranchId(lane);
     const anchor = positionToAnchor(position);
     db.prepare('UPDATE tasks SET anchor = ? WHERE id = ? AND timeline_id = ?').run(anchor, taskId, branchId);
@@ -336,7 +325,7 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(fromLane);
     assertValidLane(toLane);
-    assertEditableLane(toLane);
+
     const fromBranchId = getLaneBranchId(fromLane);
     const toBranchId = getLaneBranchId(toLane);
     const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, fromBranchId) as TaskRow | undefined;
@@ -355,7 +344,7 @@ export function createPlanFns(
   function putTaskInLane(lane: number, name: string, position: number | null): void {
     assertPlanActive();
     assertValidLane(lane);
-    assertEditableLane(lane);
+
     const branchId = getLaneBranchId(lane);
     const anchor = position != null ? positionToAnchor(position) : null;
     const now = new Date().toISOString();
@@ -369,7 +358,7 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(fromLane);
     assertValidLane(toLane);
-    assertEditableLane(toLane);
+
     const fromBranchId = getLaneBranchId(fromLane);
     const toBranchId = getLaneBranchId(toLane);
     const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, fromBranchId) as TaskRow | undefined;
