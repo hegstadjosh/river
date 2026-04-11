@@ -206,7 +206,28 @@ export class RiverState {
       });
       result.plan = { ...planState, lanes: enrichedLanes };
     }
+    // Include persistent tag list
+    result.known_tags = this.getKnownTags();
     return result;
+  }
+
+  getKnownTags(): string[] {
+    const raw = this.db.prepare("SELECT value FROM meta WHERE key = 'known_tags'").get() as { value: string } | undefined;
+    const tags: string[] = raw ? JSON.parse(raw.value) : [];
+    return tags.sort();
+  }
+
+  addKnownTag(tag: string): void {
+    const tags = this.getKnownTags();
+    if (tags.indexOf(tag) < 0) {
+      tags.push(tag);
+      this.db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('known_tags', ?)").run(JSON.stringify(tags));
+    }
+  }
+
+  ensureTaskTags(taskTags: string[] | undefined): void {
+    if (!taskTags) return;
+    for (const tag of taskTags) this.addKnownTag(tag);
   }
 
   // ── Recirculation (delegated) ───────────────────────────────────

@@ -39,6 +39,7 @@ export interface LookResult {
   };
   now: string;
   timeline: string;
+  known_tags?: string[];
   plan?: PlanState;
 }
 

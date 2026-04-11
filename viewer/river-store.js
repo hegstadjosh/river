@@ -273,11 +273,12 @@
   };
 
   R.rebuildTagBar = function () {
-    var tagSet = { 'N/A': true };
-    for (var i = 0; i < R.tasks.length; i++) {
-      var tags = R.tasks[i].tags;
-      if (tags) for (var j = 0; j < tags.length; j++) tagSet[tags[j]] = true;
-    }
+    // Read persistent tags from server state
+    var serverTags = (R.state && R.state.known_tags) ? R.state.known_tags : [];
+    var tagSet = {};
+    for (var si = 0; si < serverTags.length; si++) tagSet[serverTags[si]] = true;
+    // Always include N/A
+    tagSet['N/A'] = true;
     var sorted = Object.keys(tagSet).sort(function (a, b) {
       if (a === 'N/A') return -1;
       if (b === 'N/A') return 1;
@@ -403,15 +404,7 @@
       function finish() {
         var name = inp.value.trim();
         if (name) {
-          // Tag exists now — it'll show up. If task is selected, add to it.
-          if (R.selectedId) {
-            var task = R.findTask(R.selectedId);
-            if (task) {
-              var tags = (task.tags || []).slice();
-              if (tags.indexOf(name) < 0) tags.push(name);
-              R.save(R.selectedId, { tags: tags });
-            }
-          }
+          R.post('tag_create', { name: name });
         }
         popup.remove();
       }

@@ -59,6 +59,9 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
           } else if (data.action === 'put') {
             const { action, ...rest } = data;
             state.putTask(rest);
+            if (rest.tags) state.ensureTaskTags(rest.tags);
+          } else if (data.action === 'tag_create') {
+            state.addKnownTag(data.name);
           } else if (data.action === 'delete') {
             state.deleteTask(data.id);
           } else if (data.action === 'plan_start') {
