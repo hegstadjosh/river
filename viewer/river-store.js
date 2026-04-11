@@ -236,8 +236,26 @@
   // ── Tag Filter ──────────────────────────────────────────────────────
   // Tags that are dimmed (filtered out) — tasks with these tags render at low opacity.
 
-  R.dimmedTags = {};   // { tagName: true } — dimmed tags
-  R.allTags = [];      // sorted unique tag list from all tasks
+  R.dimmedTags = {};
+  R.allTags = [];
+
+  // Warm earth-tone palette that fits the app
+  var TAG_COLORS = [
+    'rgba(200, 165, 110, 0.7)',  // amber (primary)
+    'rgba(170, 120, 90, 0.7)',   // terracotta
+    'rgba(130, 155, 110, 0.7)',  // sage
+    'rgba(165, 115, 130, 0.7)',  // dusty rose
+    'rgba(100, 145, 150, 0.7)',  // teal
+    'rgba(155, 135, 100, 0.7)',  // clay
+    'rgba(120, 130, 160, 0.7)',  // slate blue
+    'rgba(175, 145, 80, 0.7)',   // ochre
+  ];
+
+  R.tagColor = function (tag) {
+    var h = 0;
+    for (var i = 0; i < tag.length; i++) h = ((h * 31) + tag.charCodeAt(i)) >>> 0;
+    return TAG_COLORS[h % TAG_COLORS.length];
+  };
 
   R.isTaskDimmed = function (task) {
     if (!task.tags || task.tags.length === 0) return false;
@@ -260,20 +278,88 @@
     bar.innerHTML = '';
 
     for (var k = 0; k < R.allTags.length; k++) {
-      var tag = R.allTags[k];
-      var pill = document.createElement('button');
-      pill.className = 'tag-pill' + (R.dimmedTags[tag] ? ' dimmed' : ' active');
-      pill.textContent = tag;
-      pill.dataset.tag = tag;
-      pill.addEventListener('click', (function (t) {
-        return function () {
-          if (R.dimmedTags[t]) { delete R.dimmedTags[t]; }
-          else { R.dimmedTags[t] = true; }
+      (function (tag) {
+        var color = R.tagColor(tag);
+        var isDimmed = !!R.dimmedTags[tag];
+
+        var item = document.createElement('div');
+        item.className = 'tag-item' + (isDimmed ? ' dimmed' : ' active');
+        item.style.setProperty('--tag-color', color);
+
+        var swatch = document.createElement('div');
+        swatch.className = 'tag-swatch';
+        swatch.style.background = color;
+
+        var label = document.createElement('span');
+        label.className = 'tag-label';
+        label.textContent = tag;
+
+        // Click swatch to toggle filter
+        swatch.addEventListener('click', function () {
+          if (R.dimmedTags[tag]) { delete R.dimmedTags[tag]; }
+          else { R.dimmedTags[tag] = true; }
           R.rebuildTagBar();
-        };
-      })(tag));
-      bar.appendChild(pill);
+        });
+
+        // Double-click label to rename
+        label.addEventListener('dblclick', function (e) {
+          e.stopPropagation();
+          var input = document.createElement('input');
+          input.className = 'tag-label-edit';
+          input.value = tag;
+          input.type = 'text';
+          item.replaceChild(input, label);
+          input.focus();
+          input.select();
+
+          function commit() {
+            var newName = input.value.trim();
+            if (newName && newName !== tag) {
+              // Rename tag on all tasks that have it
+              for (var ti = 0; ti < R.tasks.length; ti++) {
+                var t = R.tasks[ti];
+                if (t.tags && t.tags.indexOf(tag) >= 0) {
+                  var newTags = t.tags.map(function (x) { return x === tag ? newName : x; });
+                  R.save(t.id, { tags: newTags });
+                }
+              }
+              if (R.dimmedTags[tag]) { R.dimmedTags[newName] = true; delete R.dimmedTags[tag]; }
+            }
+            R.rebuildTagBar();
+          }
+
+          input.addEventListener('blur', commit);
+          input.addEventListener('keydown', function (ke) {
+            if (ke.key === 'Enter') { ke.preventDefault(); input.blur(); }
+            if (ke.key === 'Escape') { item.replaceChild(label, input); }
+          });
+        });
+
+        item.appendChild(swatch);
+        item.appendChild(label);
+        bar.appendChild(item);
+      })(R.allTags[k]);
     }
+
+    // + button to create a new tag
+    var addBtn = document.createElement('button');
+    addBtn.className = 'tag-add';
+    addBtn.textContent = '+';
+    addBtn.title = 'New tag';
+    addBtn.addEventListener('click', function () {
+      var name = prompt('Tag name:');
+      if (!name || !name.trim()) return;
+      // If a task is selected, add the tag to it
+      if (R.selectedId) {
+        var task = R.findTask(R.selectedId);
+        if (task) {
+          var tags = (task.tags || []).slice();
+          if (tags.indexOf(name.trim()) < 0) tags.push(name.trim());
+          R.save(R.selectedId, { tags: tags });
+        }
+      }
+    });
+    bar.appendChild(addBtn);
   };
 
   // ── SSE Connection ─────────────────────────────────────────────────
