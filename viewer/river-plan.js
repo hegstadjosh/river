@@ -238,11 +238,12 @@
     // Filled tint inside the window (keep warm)
     ctx.fillStyle = 'rgba(200, 165, 110, 0.02)';
     ctx.fillRect(leftX, top, rightX - leftX, bottom - top);
-    // Red boundary lines
-    ctx.beginPath();
-    ctx.rect(leftX, top, rightX - leftX, bottom - top);
+    // Red vertical boundary lines
     ctx.strokeStyle = 'rgba(180, 70, 50, 0.4)';
     ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(leftX, top); ctx.lineTo(leftX, bottom);
+    ctx.moveTo(rightX, top); ctx.lineTo(rightX, bottom);
     ctx.stroke();
     // Red dashed lines extend into cloud zone
     ctx.beginPath();
