@@ -374,19 +374,9 @@
       updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
     }
 
-    // Send combined update
-    var hasPosition = updates.position !== undefined;
-    var hasCloudPos = updates.cloud_x !== undefined;
-    var hasAny = hasPosition || hasCloudPos || wizardWasActive;
-
-    if (hasAny) {
-      if (hasPosition && wizardWasActive) {
-        R.post('put', { id: d.id, mass: updates.mass, solidity: updates.solidity, energy: updates.energy, position: updates.position });
-      } else if (hasPosition) {
-        R.savePosition(d.id, updates.position);
-      } else {
-        R.save(d.id, updates);
-      }
+    // Send everything in one put
+    if (Object.keys(updates).length > 0) {
+      R.save(d.id, updates);
     }
   });
 
