@@ -49,7 +49,7 @@
     if (!t || !t.ctx) return;
 
     // Mark dirty — sync will skip overwriting this task until server confirms
-    t._dirty = 2; // survives 2 sync cycles (POST + SSE round-trip)
+    t._dirtyUntil = Date.now() + 3000; // survives 2 sync cycles (POST + SSE round-trip)
 
     if (t.ctx.type === 'lane') {
       var payload = { lane: t.ctx.lane, task_id: taskId };
@@ -65,7 +65,7 @@
   R.savePosition = function (taskId, position) {
     var t = R.findTask(taskId);
     if (!t || !t.ctx) return;
-    t._dirty = 2;
+    t._dirtyUntil = Date.now() + 3000;
 
     if (t.ctx.type === 'lane') {
       R.post('plan_reposition', { lane: t.ctx.lane, task_id: taskId, position: position });
@@ -200,11 +200,11 @@
       if (existingMap[sKey] !== undefined) {
         var a = R.tasks[existingMap[sKey]];
         // Skip overwriting tasks with unconfirmed local changes
-        if (a._dirty && a._dirty > 0) {
-          a._dirty--;
-          a.ctx = src.ctx; // always update context
+        if (a._dirtyUntil && Date.now() < a._dirtyUntil) {
+          a.ctx = src.ctx;
           continue;
         }
+        delete a._dirtyUntil;
         a.name = src.name;
         a.mass = src.mass;
         a.solidity = src.solidity;
