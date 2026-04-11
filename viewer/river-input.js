@@ -337,6 +337,10 @@
     var hzBar = document.getElementById('horizon-bar');
     if (hzBar) hzBar.style.pointerEvents = '';
 
+    // Always clean up wizard on any drop
+    if (d.wizardStarted && R.wizardDeactivate) R.wizardDeactivate();
+    if (R.dwellReset) R.dwellReset();
+
     // ── Plan mode drop logic ──
     if (R.planMode && d.zone === 'plan') {
       if (!d.moved) {
@@ -382,14 +386,7 @@
       }
     }
 
-    // Reset dwell on any mouseup
-    if (R.dwellReset) R.dwellReset();
-
     if (!d.moved) {
-      // Deactivate wizard if click (no drag)
-      if (R.wizardIsActive && (R.wizardIsActive() || R.wizardIsCompleted())) {
-        R.wizardDeactivate();
-      }
       if (e.shiftKey) {
         var idx = R.selectedIds.indexOf(d.id);
         if (idx >= 0) R.selectedIds.splice(idx, 1);
@@ -410,11 +407,7 @@
     if (!a) return;
     var boundary = R.surfaceY();
 
-    // ── Wizard cleanup on mouseup ──
-    // Wizard already transformed the task's properties directly.
-    // Just persist them with the move.
-    var wizardWasActive = d.wizardStarted && R.wizardDeactivate;
-    if (wizardWasActive) R.wizardDeactivate();
+    var wizardWasActive = d.wizardStarted;
 
     // Convert snapped start edge to hours-from-now
     var dd2 = R.taskStretch(a);
