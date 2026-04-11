@@ -83,6 +83,12 @@
         startMY: e.clientY,
         startX: edge.task.x,
       };
+      if (R.selectedIds.length > 1 && R.isSelected(edge.task.id)) {
+        R.resizing.group = R.selectedIds.filter(function(id) { return id !== edge.task.id; }).map(function(id) {
+          var t = R.findTask(id);
+          return t ? { id: id, startMass: t.mass, startSol: t.solidity, startEnergy: t.energy || 0.5, startPos: t.position } : null;
+        }).filter(Boolean);
+      }
       R.canvas.style.cursor = (edge.side === 'top' || edge.side === 'bottom') ? 'ns-resize' : 'ew-resize';
       return;
     }
@@ -110,6 +116,12 @@
         zone: zone,
         planLane: planLane,
       };
+      if (R.selectedIds.length > 1 && R.isSelected(hit.id)) {
+        R.dragging.group = R.selectedIds.map(function(id) {
+          var t = R.findTask(id);
+          return t ? { id: id, ox: t.x - hit.x, oy: t.y - hit.y } : null;
+        }).filter(Boolean);
+      }
     } else {
       R.hidePanel();
     }
@@ -135,6 +147,12 @@
         var deltaY = R.resizing.startMY - e.clientY;
         var newSol = Math.max(0, Math.min(1, R.resizing.startSolidity + deltaY / 80));
         a.solidity = newSol;
+        if (R.resizing.group) {
+          for (var ri = 0; ri < R.resizing.group.length; ri++) {
+            var rt = R.findTask(R.resizing.group[ri].id);
+            if (rt) rt.solidity = newSol;
+          }
+        }
         var panelSolidity = document.getElementById('panel-solidity');
         if (R.selectedId === a.id) panelSolidity.value = Math.round(newSol * 100);
         R.canvas.style.cursor = 'ns-resize';
@@ -143,6 +161,12 @@
         var deltaY = R.resizing.startMY - e.clientY;
         var newEnergy = Math.max(0, Math.min(1, R.resizing.startEnergy + deltaY / 80));
         a.energy = newEnergy;
+        if (R.resizing.group) {
+          for (var ri = 0; ri < R.resizing.group.length; ri++) {
+            var rt = R.findTask(R.resizing.group[ri].id);
+            if (rt) rt.energy = newEnergy;
+          }
+        }
         var pe = document.getElementById('panel-energy');
         if (pe && R.selectedId === a.id) pe.value = Math.round(newEnergy * 100);
         R.canvas.style.cursor = 'ns-resize';
@@ -162,6 +186,14 @@
           a.mass = Math.max(5, Math.round((newWidthPx / R.PIXELS_PER_HOUR) * 60));
           a.x = rightEdgeX - newWidthPx / 2;
           a.tx = a.x;
+        }
+        var massDelta = a.mass - R.resizing.startMass;
+        if (R.resizing.group) {
+          for (var ri = 0; ri < R.resizing.group.length; ri++) {
+            var rg = R.resizing.group[ri];
+            var rt = R.findTask(rg.id);
+            if (rt) rt.mass = Math.max(5, rg.startMass + massDelta);
+          }
         }
         // Sync panel
         var panelDurInput = document.getElementById('panel-dur-input');
@@ -242,6 +274,18 @@
       a.y = R.dragging.sy + dy;
       a.tx = a.x; a.ty = a.y;
 
+      if (R.dragging.group) {
+        for (var gi = 0; gi < R.dragging.group.length; gi++) {
+          var g = R.dragging.group[gi];
+          var gt = R.findTask(g.id);
+          if (gt && gt.id !== R.dragging.id) {
+            gt.x = a.x + g.ox;
+            gt.y = a.y + g.oy;
+            gt.tx = gt.x; gt.ty = gt.y;
+          }
+        }
+      }
+
     }
   });
 
@@ -263,6 +307,26 @@
             ? R.resizing.startPosition + massDiffHours / 2
             : R.resizing.startPosition - massDiffHours / 2;
           R.save(R.resizing.id, { mass: newMass, position: pos });
+        }
+        if (R.resizing.group) {
+          for (var ri = 0; ri < R.resizing.group.length; ri++) {
+            var rg = R.resizing.group[ri];
+            var rt = R.findTask(rg.id);
+            if (!rt) continue;
+            if (R.resizing.side === 'top') {
+              R.save(rg.id, { solidity: rt.solidity });
+            } else if (R.resizing.side === 'bottom') {
+              R.save(rg.id, { energy: rt.energy });
+            } else {
+              var rgMassDiff = (rt.mass - rg.startMass) / 60;
+              var rgPos = R.resizing.side === 'right'
+                ? (rg.startPos != null ? rg.startPos + rgMassDiff / 2 : null)
+                : (rg.startPos != null ? rg.startPos - rgMassDiff / 2 : null);
+              var rgUpdates = { mass: rt.mass };
+              if (rgPos != null) rgUpdates.position = rgPos;
+              R.save(rg.id, rgUpdates);
+            }
+          }
         }
       }
       R.resizing = null;
@@ -327,8 +391,19 @@
       if (R.wizardIsActive && (R.wizardIsActive() || R.wizardIsCompleted())) {
         R.wizardDeactivate();
       }
-      var a = R.findTask(d.id);
-      if (a) R.showPanel(a, e.clientX, e.clientY);
+      if (e.shiftKey) {
+        var idx = R.selectedIds.indexOf(d.id);
+        if (idx >= 0) R.selectedIds.splice(idx, 1);
+        else R.selectedIds.push(d.id);
+        R.selectedId = R.selectedIds[0] || null;
+      } else {
+        R.selectedIds = [d.id];
+        R.selectedId = d.id;
+      }
+      if (R.selectedIds.length > 0) {
+        var first = R.findTask(R.selectedIds[0]);
+        if (first) R.showPanel(first, e.clientX, e.clientY);
+      }
       return;
     }
 
@@ -383,6 +458,25 @@
     // Send everything in one put
     if (Object.keys(updates).length > 0) {
       R.save(d.id, updates);
+    }
+
+    if (d.group) {
+      for (var gi = 0; gi < d.group.length; gi++) {
+        var g = d.group[gi];
+        if (g.id === d.id) continue;
+        var gt = R.findTask(g.id);
+        if (!gt) continue;
+        var gUpdates = {};
+        var gBoundary = R.surfaceY();
+        var gRTop = gBoundary + 30, gRBot = R.H - 50;
+        if (gt.position != null) {
+          var gdd = R.taskStretch(gt);
+          var gStartEdge = gt.x - gdd.hw;
+          gUpdates.position = R.screenXToHours(gStartEdge) + gt.mass / 120;
+          gUpdates.river_y = Math.max(0, Math.min(1, (gt.y - gRTop) / (gRBot - gRTop)));
+        }
+        if (Object.keys(gUpdates).length > 0) R.save(g.id, gUpdates);
+      }
     }
   });
 
