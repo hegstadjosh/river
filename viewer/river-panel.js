@@ -11,7 +11,7 @@
   var panelDurations = document.getElementById('panel-durations');
   var panelDurInput = document.getElementById('panel-dur-input');
   var panelSolidity = document.getElementById('panel-solidity');
-  var panelFixed = document.getElementById('panel-fixed');
+  var panelBackToCloud = document.getElementById('panel-backtocloud');
   var panelDissolve = document.getElementById('panel-dissolve');
   var panelTimes = document.getElementById('panel-times');
   var panelStart = document.getElementById('panel-start');
@@ -195,7 +195,7 @@
     panelSolidity.value = Math.round(a.solidity * 100);
     var panelEnergy = document.getElementById('panel-energy');
     panelEnergy.value = Math.round((a.energy != null ? a.energy : 0.5) * 100);
-    panelFixed.checked = a.fixed;
+    panelBackToCloud.checked = !a.fixed;
 
     // Show start/end for river tasks
     if (a.position !== null && a.position !== undefined && R.state) {
@@ -340,9 +340,9 @@
     if (!R.selectedId) return;
     R.save(R.selectedId, { energy: Number(this.value) / 100 });
   });
-  panelFixed.addEventListener('change', function () {
+  panelBackToCloud.addEventListener('change', function () {
     if (!R.selectedId) return;
-    R.save(R.selectedId, { fixed: panelFixed.checked });
+    R.save(R.selectedId, { fixed: !panelBackToCloud.checked });
   });
   panelDissolve.addEventListener('click', function () {
     if (!R.selectedId) return;
