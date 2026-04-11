@@ -216,6 +216,8 @@
         });
       }
     }
+
+    R.rebuildTagBar();
   };
 
   // Compute target position for a task based on its context
@@ -230,6 +232,49 @@
       return (t.position !== null && t.position !== undefined) ? R.riverPos(t) : R.cloudPos(t);
     }
   }
+
+  // ── Tag Filter ──────────────────────────────────────────────────────
+  // Tags that are dimmed (filtered out) — tasks with these tags render at low opacity.
+
+  R.dimmedTags = {};   // { tagName: true } — dimmed tags
+  R.allTags = [];      // sorted unique tag list from all tasks
+
+  R.isTaskDimmed = function (task) {
+    if (!task.tags || task.tags.length === 0) return false;
+    for (var i = 0; i < task.tags.length; i++) {
+      if (R.dimmedTags[task.tags[i]]) return true;
+    }
+    return false;
+  };
+
+  R.rebuildTagBar = function () {
+    var tagSet = {};
+    for (var i = 0; i < R.tasks.length; i++) {
+      var tags = R.tasks[i].tags;
+      if (tags) for (var j = 0; j < tags.length; j++) tagSet[tags[j]] = true;
+    }
+    R.allTags = Object.keys(tagSet).sort();
+
+    var bar = document.getElementById('tag-bar');
+    if (!bar) return;
+    bar.innerHTML = '';
+
+    for (var k = 0; k < R.allTags.length; k++) {
+      var tag = R.allTags[k];
+      var pill = document.createElement('button');
+      pill.className = 'tag-pill' + (R.dimmedTags[tag] ? ' dimmed' : ' active');
+      pill.textContent = tag;
+      pill.dataset.tag = tag;
+      pill.addEventListener('click', (function (t) {
+        return function () {
+          if (R.dimmedTags[t]) { delete R.dimmedTags[t]; }
+          else { R.dimmedTags[t] = true; }
+          R.rebuildTagBar();
+        };
+      })(tag));
+      bar.appendChild(pill);
+    }
+  };
 
   // ── SSE Connection ─────────────────────────────────────────────────
 
