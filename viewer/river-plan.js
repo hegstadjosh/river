@@ -68,6 +68,18 @@
     var ctx = R.ctx;
     var laneH = R.planLaneHeight();
 
+    // ── Clip to plan window bounds ──
+    var now = new Date(R.state.now);
+    var wStartH = (new Date(R.planWindowStart).getTime() - now.getTime()) / 3600000;
+    var wEndH = (new Date(R.planWindowEnd).getTime() - now.getTime()) / 3600000;
+    var wLeftX = R.hoursToX(wStartH);
+    var wRightX = R.hoursToX(wEndH);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wLeftX, R.planRiverTop(), wRightX - wLeftX, R.planRiverHeight());
+    ctx.clip();
+
     // ── Draw lane separators (sediment layers) ──
     for (var i = 0; i < R.planLaneCount(); i++) {
       var bounds = R.planLaneBounds(i);
@@ -76,13 +88,13 @@
       var isActive = (R.planHoverLane === i);
       var bgAlpha = isActive ? 0.02 : 0.005;
       ctx.fillStyle = 'rgba(200, 165, 110, ' + bgAlpha + ')';
-      ctx.fillRect(0, bounds.top, R.W, laneH);
+      ctx.fillRect(wLeftX, bounds.top, wRightX - wLeftX, laneH);
 
       // Separator line at bottom of lane (except last)
       if (i < R.planLaneCount() - 1) {
         ctx.beginPath();
-        ctx.moveTo(40, bounds.bottom);
-        ctx.lineTo(R.W - 40, bounds.bottom);
+        ctx.moveTo(wLeftX + 40, bounds.bottom);
+        ctx.lineTo(wRightX - 40, bounds.bottom);
         ctx.strokeStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.12 : 0.06) + ')';
         ctx.lineWidth = 1;
         ctx.stroke();
@@ -120,7 +132,7 @@
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.45 : 0.25) + ')';
-        ctx.fillText(label, 16, bounds.midY);
+        ctx.fillText(label, wLeftX + 16, bounds.midY);
         ctx.restore();
       }
 
@@ -130,7 +142,7 @@
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillStyle = 'rgba(200, 165, 110, 0.15)';
-      ctx.fillText((i + 1), 16, bounds.top + 6);
+      ctx.fillText((i + 1), wLeftX + 16, bounds.top + 6);
       ctx.restore();
     }
 
@@ -156,7 +168,9 @@
       }
     }
 
-    // ── Commit buttons ──
+    ctx.restore(); // end plan window clip
+
+    // ── Commit buttons (outside clip so they're always visible) ──
     R.drawPlanCommitButtons(t);
   };
 
