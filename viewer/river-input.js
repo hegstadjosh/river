@@ -359,7 +359,8 @@
         R.moveToCloud(d.id, d.planLane);
       } else if (dropLane >= 0 && dropLane !== d.planLane) {
         R.moveToLane(d.id, d.planLane, dropLane, dropHours);
-      } else if (dropLane >= 0) {
+      } else {
+        // Same lane reposition (or dropped outside lanes — keep in original lane)
         R.savePosition(d.id, dropHours);
       }
       return;
