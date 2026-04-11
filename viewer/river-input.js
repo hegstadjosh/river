@@ -102,11 +102,6 @@
       } else {
         zone = 'cloud';
       }
-      // Lane 0 (lane 1) is read-only — show panel on click, but don't allow drag
-      if (R.planMode && zone === 'plan' && planLane === 0) {
-        R.showPanel(hit, e.clientX, e.clientY);
-        return;
-      }
       R.dragging = {
         id: hit.id,
         sx: hit.x, sy: hit.y,
@@ -362,9 +357,9 @@
 
       if (e.clientY < boundary) {
         R.moveToCloud(d.id, d.planLane);
-      } else if (dropLane >= 0 && dropLane !== d.planLane && dropLane !== 0) {
+      } else if (dropLane >= 0 && dropLane !== d.planLane) {
         R.moveToLane(d.id, d.planLane, dropLane, dropHours);
-      } else if (dropLane >= 0 && dropLane !== 0) {
+      } else if (dropLane >= 0) {
         R.savePosition(d.id, dropHours);
       }
       return;
@@ -373,7 +368,7 @@
     // Plan mode: cloud task dropped into a lane
     if (R.planMode && d.zone === 'cloud' && d.moved) {
       var dropLane = R.planLaneAt(e.clientY);
-      if (dropLane >= 0 && dropLane !== 0) {
+      if (dropLane >= 0) {
         var a = R.findTask(d.id);
         if (a) {
           var dd2 = R.taskStretch(a);
