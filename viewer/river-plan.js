@@ -232,7 +232,7 @@
     var leftX = R.hoursToX(startHours);
     var rightX = R.hoursToX(endHours);
     var top = R.surfaceY();
-    var bottom = R.H - 20;
+    var bottom = R.planRiverTop() + R.planRiverHeight();
 
     ctx.save();
     ctx.beginPath();
