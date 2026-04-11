@@ -445,6 +445,14 @@
     }
   });
 
+  // Escape exits plan mode
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && R.planMode && !quickAdd.classList.contains('hidden')) return;
+    if (e.key === 'Escape' && R.planMode) {
+      R.post('plan_end', {});
+    }
+  });
+
   quickAdd.addEventListener('blur', function () {
     quickAdd.classList.add('hidden');
   });

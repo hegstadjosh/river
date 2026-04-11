@@ -6,7 +6,7 @@
   var R = window.River;
 
   // ── Plan Mode State ────────────────────────────────────────────────
-  // R.planMode, R.planLanes, R.planTimeframe — set by R.sync() in river-store.js
+  // R.planMode, R.planLanes, R.planWindowStart, R.planWindowEnd — set by R.sync() in river-store.js
   R.planHoverLane = -1;    // which lane the mouse is over (-1 = none)
   R.planStreaks = [];       // per-lane flow streaks (array of arrays)
 
