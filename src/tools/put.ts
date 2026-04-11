@@ -13,7 +13,10 @@ export function registerPut(server: McpServer, state: RiverState): void {
         'Position is hours from now (null = cloud, unscheduled). ' +
         'Tasks can overlap in time — small tasks or multitaskable things (listening to a podcast while cooking) ' +
         'can share the same time slot. Leave breathing room between focused tasks. ' +
-        'Ask the user what they\'re considering before arranging — don\'t assume they\'ve listed everything.',
+        'Ask the user what they\'re considering before arranging — don\'t assume they\'ve listed everything.\n' +
+        'TAGS: When Claude Code is managing its own coding tasks (agents, builds, etc.), ' +
+        'create a "claude-code" tag and apply it to those tasks so they don\'t clutter the user\'s view. ' +
+        'Do NOT tag tasks when helping the user plan their own day — those are the user\'s tasks.',
       inputSchema: {
         // Single-task fields (flat)
         id: z.string().optional().describe('Task ID — omit to create, include to update'),

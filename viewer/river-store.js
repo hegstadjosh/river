@@ -96,13 +96,15 @@
   };
 
   R.visibleTasks = function () {
+    var base;
     if (R.planMode) {
-      // In plan mode: cloud tasks + all lane tasks
-      return R.tasks.filter(function (t) {
+      base = R.tasks.filter(function (t) {
         return t.ctx && (t.ctx.type === 'lane' || (t.ctx.type === 'main' && (t.position === null || t.position === undefined)));
       });
+    } else {
+      base = R.mainTasks();
     }
-    return R.mainTasks();
+    return base.filter(function (t) { return !R.isTaskHidden || !R.isTaskHidden(t); });
   };
 
   // ── Sync: merge server state into the store ────────────────────────
@@ -236,54 +238,93 @@
   // ── Tag Filter ──────────────────────────────────────────────────────
   // Tags that are dimmed (filtered out) — tasks with these tags render at low opacity.
 
-  R.dimmedTags = {};
+  R.hiddenTags = {};  // { tagName: true } — hidden tags (tasks with these don't render)
   R.allTags = [];
+  R.allOn = true;     // ALL toggle state
 
-  // Warm earth-tone palette that fits the app
   var TAG_COLORS = [
-    'rgba(200, 165, 110, 0.7)',  // amber (primary)
-    'rgba(170, 120, 90, 0.7)',   // terracotta
-    'rgba(130, 155, 110, 0.7)',  // sage
-    'rgba(165, 115, 130, 0.7)',  // dusty rose
-    'rgba(100, 145, 150, 0.7)',  // teal
-    'rgba(155, 135, 100, 0.7)',  // clay
-    'rgba(120, 130, 160, 0.7)',  // slate blue
-    'rgba(175, 145, 80, 0.7)',   // ochre
+    'rgba(200, 165, 110, 0.7)',
+    'rgba(170, 120, 90, 0.7)',
+    'rgba(130, 155, 110, 0.7)',
+    'rgba(165, 115, 130, 0.7)',
+    'rgba(100, 145, 150, 0.7)',
+    'rgba(155, 135, 100, 0.7)',
+    'rgba(120, 130, 160, 0.7)',
+    'rgba(175, 145, 80, 0.7)',
   ];
 
   R.tagColor = function (tag) {
+    if (tag === 'N/A') return 'rgba(160, 155, 145, 0.5)';
     var h = 0;
     for (var i = 0; i < tag.length; i++) h = ((h * 31) + tag.charCodeAt(i)) >>> 0;
     return TAG_COLORS[h % TAG_COLORS.length];
   };
 
-  R.isTaskDimmed = function (task) {
-    if (!task.tags || task.tags.length === 0) return false;
-    for (var i = 0; i < task.tags.length; i++) {
-      if (R.dimmedTags[task.tags[i]]) return true;
+  function effectiveTags(task) {
+    return (task.tags && task.tags.length > 0) ? task.tags : ['N/A'];
+  }
+
+  R.isTaskHidden = function (task) {
+    var tags = effectiveTags(task);
+    for (var i = 0; i < tags.length; i++) {
+      if (!R.hiddenTags[tags[i]]) return false;
     }
-    return false;
+    return true;
   };
 
   R.rebuildTagBar = function () {
-    var tagSet = {};
+    var tagSet = { 'N/A': true };
     for (var i = 0; i < R.tasks.length; i++) {
       var tags = R.tasks[i].tags;
       if (tags) for (var j = 0; j < tags.length; j++) tagSet[tags[j]] = true;
     }
-    R.allTags = Object.keys(tagSet).sort();
+    var sorted = Object.keys(tagSet).sort(function (a, b) {
+      if (a === 'N/A') return -1;
+      if (b === 'N/A') return 1;
+      return a.localeCompare(b);
+    });
+    R.allTags = sorted;
+
+    // Check if all are visible
+    R.allOn = true;
+    for (var ai = 0; ai < R.allTags.length; ai++) {
+      if (R.hiddenTags[R.allTags[ai]]) { R.allOn = false; break; }
+    }
 
     var bar = document.getElementById('tag-bar');
     if (!bar) return;
     bar.innerHTML = '';
 
+    // ALL toggle
+    var allItem = document.createElement('div');
+    allItem.className = 'tag-item' + (R.allOn ? ' active' : ' dimmed');
+    allItem.style.setProperty('--tag-color', 'rgba(200, 165, 110, 0.5)');
+    var allSwatch = document.createElement('div');
+    allSwatch.className = 'tag-swatch';
+    allSwatch.style.background = 'rgba(200, 165, 110, 0.4)';
+    var allLabel = document.createElement('span');
+    allLabel.className = 'tag-label';
+    allLabel.textContent = 'all';
+    allSwatch.addEventListener('click', function () {
+      if (R.allOn) {
+        for (var xi = 0; xi < R.allTags.length; xi++) R.hiddenTags[R.allTags[xi]] = true;
+      } else {
+        R.hiddenTags = {};
+      }
+      R.rebuildTagBar();
+    });
+    allItem.appendChild(allSwatch);
+    allItem.appendChild(allLabel);
+    bar.appendChild(allItem);
+
+    // Tag swatches
     for (var k = 0; k < R.allTags.length; k++) {
       (function (tag) {
         var color = R.tagColor(tag);
-        var isDimmed = !!R.dimmedTags[tag];
+        var isHidden = !!R.hiddenTags[tag];
 
         var item = document.createElement('div');
-        item.className = 'tag-item' + (isDimmed ? ' dimmed' : ' active');
+        item.className = 'tag-item' + (isHidden ? ' dimmed' : ' active');
         item.style.setProperty('--tag-color', color);
 
         var swatch = document.createElement('div');
@@ -294,16 +335,16 @@
         label.className = 'tag-label';
         label.textContent = tag;
 
-        // Click swatch to toggle filter
         swatch.addEventListener('click', function () {
-          if (R.dimmedTags[tag]) { delete R.dimmedTags[tag]; }
-          else { R.dimmedTags[tag] = true; }
+          if (R.hiddenTags[tag]) { delete R.hiddenTags[tag]; }
+          else { R.hiddenTags[tag] = true; }
           R.rebuildTagBar();
         });
 
         // Double-click label to rename
         label.addEventListener('dblclick', function (e) {
           e.stopPropagation();
+          if (tag === 'N/A') return;
           var input = document.createElement('input');
           input.className = 'tag-label-edit';
           input.value = tag;
@@ -311,11 +352,9 @@
           item.replaceChild(input, label);
           input.focus();
           input.select();
-
           function commit() {
             var newName = input.value.trim();
             if (newName && newName !== tag) {
-              // Rename tag on all tasks that have it
               for (var ti = 0; ti < R.tasks.length; ti++) {
                 var t = R.tasks[ti];
                 if (t.tags && t.tags.indexOf(tag) >= 0) {
@@ -323,11 +362,10 @@
                   R.save(t.id, { tags: newTags });
                 }
               }
-              if (R.dimmedTags[tag]) { R.dimmedTags[newName] = true; delete R.dimmedTags[tag]; }
+              if (R.hiddenTags[tag]) { R.hiddenTags[newName] = true; delete R.hiddenTags[tag]; }
             }
             R.rebuildTagBar();
           }
-
           input.addEventListener('blur', commit);
           input.addEventListener('keydown', function (ke) {
             if (ke.key === 'Enter') { ke.preventDefault(); input.blur(); }
@@ -341,25 +379,88 @@
       })(R.allTags[k]);
     }
 
-    // + button to create a new tag
+    // + button — inline popup
     var addBtn = document.createElement('button');
     addBtn.className = 'tag-add';
     addBtn.textContent = '+';
-    addBtn.title = 'New tag';
     addBtn.addEventListener('click', function () {
-      var name = prompt('Tag name:');
-      if (!name || !name.trim()) return;
-      // If a task is selected, add the tag to it
-      if (R.selectedId) {
-        var task = R.findTask(R.selectedId);
-        if (task) {
-          var tags = (task.tags || []).slice();
-          if (tags.indexOf(name.trim()) < 0) tags.push(name.trim());
-          R.save(R.selectedId, { tags: tags });
+      // Remove existing popup
+      var old = document.querySelector('.tag-add-popup');
+      if (old) { old.remove(); return; }
+
+      var popup = document.createElement('div');
+      popup.className = 'tag-add-popup';
+      var rect = addBtn.getBoundingClientRect();
+      popup.style.left = rect.left + 'px';
+      popup.style.top = (rect.bottom + 4) + 'px';
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.placeholder = 'tag name';
+      popup.appendChild(inp);
+      document.body.appendChild(popup);
+      inp.focus();
+
+      function finish() {
+        var name = inp.value.trim();
+        if (name) {
+          // Tag exists now — it'll show up. If task is selected, add to it.
+          if (R.selectedId) {
+            var task = R.findTask(R.selectedId);
+            if (task) {
+              var tags = (task.tags || []).slice();
+              if (tags.indexOf(name) < 0) tags.push(name);
+              R.save(R.selectedId, { tags: tags });
+            }
+          }
         }
+        popup.remove();
       }
+      inp.addEventListener('keydown', function (ke) {
+        if (ke.key === 'Enter') finish();
+        if (ke.key === 'Escape') popup.remove();
+      });
+      inp.addEventListener('blur', function () { setTimeout(function () { popup.remove(); }, 100); });
     });
     bar.appendChild(addBtn);
+
+    // Also rebuild panel tag checks if panel is open
+    if (R.selectedId) R.rebuildPanelTags();
+  };
+
+  // Panel tag checkboxes — small colored dots you click to toggle
+  R.rebuildPanelTags = function () {
+    var container = document.getElementById('panel-tags');
+    if (!container) return;
+    var task = R.findTask(R.selectedId);
+    if (!task) return;
+    container.innerHTML = '';
+    var taskTags = task.tags || [];
+
+    for (var i = 0; i < R.allTags.length; i++) {
+      (function (tag) {
+        if (tag === 'N/A') return;
+        var hasTag = taskTags.indexOf(tag) >= 0;
+        var check = document.createElement('div');
+        check.className = 'panel-tag-check' + (hasTag ? '' : ' off');
+        var dot = document.createElement('div');
+        dot.className = 'panel-tag-dot';
+        dot.style.background = R.tagColor(tag);
+        var name = document.createElement('span');
+        name.className = 'panel-tag-name';
+        name.textContent = tag;
+        check.appendChild(dot);
+        check.appendChild(name);
+        check.addEventListener('click', function () {
+          var tags = (task.tags || []).slice();
+          var idx = tags.indexOf(tag);
+          if (idx >= 0) { tags.splice(idx, 1); } else { tags.push(tag); }
+          R.save(R.selectedId, { tags: tags });
+          task.tags = tags;
+          R.rebuildPanelTags();
+        });
+        container.appendChild(check);
+      })(R.allTags[i]);
+    }
   };
 
   // ── SSE Connection ─────────────────────────────────────────────────

@@ -13,7 +13,6 @@
   var panelSolidity = document.getElementById('panel-solidity');
   var panelFixed = document.getElementById('panel-fixed');
   var panelDissolve = document.getElementById('panel-dissolve');
-  var panelTags = document.getElementById('panel-tags');
   var panelTimes = document.getElementById('panel-times');
   var panelStart = document.getElementById('panel-start');
   var panelEnd = document.getElementById('panel-end');
@@ -210,7 +209,7 @@
       panelTimes.style.display = 'none';
     }
 
-    panelTags.value = (a.tags && a.tags.length > 0) ? a.tags.join(', ') : '';
+    if (R.rebuildPanelTags) R.rebuildPanelTags();
 
     panel.classList.remove('hidden');
     R.positionPanel(a);
@@ -345,16 +344,6 @@
     if (!R.selectedId) return;
     R.save(R.selectedId, { fixed: panelFixed.checked });
   });
-  var tagsTimer = null;
-  panelTags.addEventListener('input', function () {
-    if (!R.selectedId) return;
-    clearTimeout(tagsTimer);
-    tagsTimer = setTimeout(function () {
-      var raw = panelTags.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-      R.save(R.selectedId, { tags: raw });
-    }, 500);
-  });
-
   panelDissolve.addEventListener('click', function () {
     if (!R.selectedId) return;
     R.deleteTask(R.selectedId);

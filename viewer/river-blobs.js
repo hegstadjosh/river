@@ -30,9 +30,8 @@
   R.drawBlob = function (a, t) {
     var ctx = R.ctx;
 
-    // Tag filter — dimmed tasks render at very low opacity
-    var tagDimmed = R.isTaskDimmed && R.isTaskDimmed(a);
-    if (tagDimmed) { ctx.save(); ctx.globalAlpha = 0.1; }
+    // Tag filter — hidden tasks don't render at all
+    if (R.isTaskHidden && R.isTaskHidden(a)) return;
 
     var energy = (a.energy !== undefined && a.energy !== null) ? a.energy : 0.5;
     var sol = a.solidity;
@@ -228,6 +227,5 @@
       ctx.fillText(a.name, x, y + hh + fontSize + 2);
     }
 
-    if (tagDimmed) { ctx.restore(); }
   };
 })();
