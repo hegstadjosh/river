@@ -155,16 +155,7 @@
     });
 
     for (var j = 0; j < sorted.length; j++) {
-      var task = sorted[j];
-      var dimForHover = R.planHoverLane >= 0 && task.ctx && task.ctx.lane !== R.planHoverLane;
-      if (dimForHover) {
-        ctx.save();
-        ctx.globalAlpha = isReadonly ? 0.5 : 0.7;
-        R.drawBlob(task, t);
-        ctx.restore();
-      } else {
-        R.drawBlob(task, t);
-      }
+      R.drawBlob(sorted[j], t);
     }
 
     ctx.restore(); // end plan window clip
