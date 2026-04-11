@@ -159,9 +159,6 @@
     }
 
     ctx.restore(); // end plan window clip
-
-    // ── Commit buttons (outside clip so they're always visible) ──
-    R.drawPlanCommitButtons(t);
   };
 
   // ── Commit Buttons ─────────────────────────────────────────────────

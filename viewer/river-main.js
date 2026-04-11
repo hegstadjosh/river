@@ -232,6 +232,9 @@
 
     // ── Resize / hover / drag overlays ──
     R.drawResizeOverlay(t);
+
+    // ── Plan commit buttons — drawn last so they're never covered ──
+    if (R.planMode && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
   }
 
   requestAnimationFrame(frame);
