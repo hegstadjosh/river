@@ -176,15 +176,28 @@
 
   R.applyDuration = function (parsed) {
     if (!parsed || !R.selectedId) return;
-    for (var i = 0; i < R.selectedIds.length; i++) {
-      var a = R.findTask(R.selectedIds[i]);
-      if (!a) continue;
+    if (R.selectedIds.length > 1 && R._panelAvgMass) {
+      var delta = parsed - R._panelAvgMass;
+      for (var i = 0; i < R.selectedIds.length; i++) {
+        var a = R.findTask(R.selectedIds[i]);
+        if (!a) continue;
+        var s = R._panelStarts[R.selectedIds[i]];
+        var newMass = Math.max(5, (s ? s.mass : a.mass) + delta);
+        var changes = { mass: newMass };
+        if (a.position !== null && a.position !== undefined) {
+          changes.position = a.position + (newMass - a.mass) / 120;
+        }
+        R.save(R.selectedIds[i], changes);
+      }
+    } else {
+      var a = R.findTask(R.selectedId);
+      if (!a) return;
       var changes = { mass: parsed };
       if (a.position !== null && a.position !== undefined) {
         var massDiffH = (parsed - a.mass) / 60;
         changes.position = a.position + massDiffH / 2;
       }
-      R.save(R.selectedIds[i], changes);
+      R.save(R.selectedId, changes);
     }
     panelDurInput.value = R.formatDuration(parsed);
     R.renderPresetButtons(parsed);
@@ -195,6 +208,13 @@
   R.showPanel = function (a, sx, sy) {
     R.selectedId = a.id;
     var isMulti = R.selectedIds.length > 1;
+
+    // Store starting values for additive multi-select edits
+    R._panelStarts = {};
+    for (var pi = 0; pi < R.selectedIds.length; pi++) {
+      var pt = R.findTask(R.selectedIds[pi]);
+      if (pt) R._panelStarts[pt.id] = { sol: pt.solidity, energy: pt.energy != null ? pt.energy : 0.5, mass: pt.mass };
+    }
 
     if (isMulti) {
       panelName.value = R.selectedIds.length + ' tasks';
@@ -210,9 +230,12 @@
         }
       }
       var n = R.selectedIds.length;
-      panelDurInput.value = R.formatDuration(Math.round(totalMass / n));
-      R.renderPresetButtons(Math.round(totalMass / n));
-      panelSolidity.value = Math.round((totalSol / n) * 100);
+      R._panelAvgSol = totalSol / n;
+      R._panelAvgNrg = totalNrg / n;
+      R._panelAvgMass = Math.round(totalMass / n);
+      panelDurInput.value = R.formatDuration(R._panelAvgMass);
+      R.renderPresetButtons(R._panelAvgMass);
+      panelSolidity.value = Math.round(R._panelAvgSol * 100);
       var panelEnergy = document.getElementById('panel-energy');
       panelEnergy.value = Math.round((totalNrg / n) * 100);
 
@@ -318,8 +341,15 @@
   panelSolidity.addEventListener('input', function () {
     if (!R.selectedId) return;
     var val = Number(panelSolidity.value) / 100;
-    for (var i = 0; i < R.selectedIds.length; i++) {
-      R.save(R.selectedIds[i], { solidity: val });
+    if (R.selectedIds.length > 1 && R._panelAvgSol !== undefined) {
+      var delta = val - R._panelAvgSol;
+      for (var i = 0; i < R.selectedIds.length; i++) {
+        var s = R._panelStarts[R.selectedIds[i]];
+        var newVal = s ? Math.max(0, Math.min(1, s.sol + delta)) : val;
+        R.save(R.selectedIds[i], { solidity: newVal });
+      }
+    } else {
+      R.save(R.selectedId, { solidity: val });
     }
   });
 
@@ -381,8 +411,15 @@
   document.getElementById('panel-energy').addEventListener('input', function () {
     if (!R.selectedId) return;
     var val = Number(this.value) / 100;
-    for (var i = 0; i < R.selectedIds.length; i++) {
-      R.save(R.selectedIds[i], { energy: val });
+    if (R.selectedIds.length > 1 && R._panelAvgNrg !== undefined) {
+      var delta = val - R._panelAvgNrg;
+      for (var i = 0; i < R.selectedIds.length; i++) {
+        var s = R._panelStarts[R.selectedIds[i]];
+        var newVal = s ? Math.max(0, Math.min(1, s.energy + delta)) : val;
+        R.save(R.selectedIds[i], { energy: newVal });
+      }
+    } else {
+      R.save(R.selectedId, { energy: val });
     }
   });
   panelBackToCloud.addEventListener('change', function () {
