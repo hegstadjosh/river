@@ -131,10 +131,10 @@
     if (R.planMode) {
       R.post('plan_end', {});
     } else {
-      // Lock the current visible time range as the plan window
+      // Lock the current visible time range — use actual screen edges
       var now = R.state ? new Date(R.state.now) : new Date();
-      var leftHours = R.scrollHours - R.NOW_X * R.horizonHours;
-      var rightHours = R.scrollHours + (1 - R.NOW_X) * R.horizonHours;
+      var leftHours = (0 - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
+      var rightHours = (R.W - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
       var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
       R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
