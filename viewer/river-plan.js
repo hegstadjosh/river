@@ -235,21 +235,21 @@
     var bottom = R.H;
 
     ctx.save();
-    // Filled tint inside the window
+    // Filled tint inside the window (keep warm)
     ctx.fillStyle = 'rgba(200, 165, 110, 0.02)';
     ctx.fillRect(leftX, top, rightX - leftX, bottom - top);
-    // Border
+    // Red boundary lines
     ctx.beginPath();
     ctx.rect(leftX, top, rightX - leftX, bottom - top);
-    ctx.strokeStyle = 'rgba(200, 165, 110, 0.2)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(180, 70, 50, 0.4)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    // Vertical edge lines extend into cloud zone too
+    // Red dashed lines extend into cloud zone
     ctx.beginPath();
     ctx.setLineDash([4, 4]);
     ctx.moveTo(leftX, 0); ctx.lineTo(leftX, top);
     ctx.moveTo(rightX, 0); ctx.lineTo(rightX, top);
-    ctx.strokeStyle = 'rgba(200, 165, 110, 0.1)';
+    ctx.strokeStyle = 'rgba(180, 70, 50, 0.2)';
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
