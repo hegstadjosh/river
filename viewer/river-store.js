@@ -114,7 +114,8 @@
     // ── Detect plan mode ──
     var wasPlanMode = R.planMode;
     R.planMode = !!(R.state.plan && R.state.plan.active !== false);
-    R.planTimeframe = R.planMode ? (R.state.plan.timeframe || null) : null;
+    R.planWindowStart = R.planMode ? (R.state.plan.window_start || null) : null;
+    R.planWindowEnd = R.planMode ? (R.state.plan.window_end || null) : null;
 
     // Build lane data for plan rendering
     if (R.planMode) {

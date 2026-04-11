@@ -1,49 +1,50 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { RiverState } from '../state.js';
-import { PLAN_TIMEFRAMES, PlanTaskSchema } from '../schema.js';
+import { PlanTaskSchema } from '../schema.js';
 
 export function registerPlan(server: McpServer, state: RiverState): void {
   server.registerTool(
     'plan',
     {
       description:
-        'Plan mode — explore different arrangements of your time.\n\n' +
+        'Plan mode — explore different arrangements for a specific time window.\n\n' +
         'Actions:\n' +
-        '- start: Enter plan mode with a timeframe. Creates 5 swim lanes.\n' +
-        '- fill: Populate a lane (1-5) with tasks. Replaces existing tasks in that lane.\n' +
-        '- name: Give a lane a human-readable label describing its philosophy.\n' +
-        '- commit: Accept a lane — merges its tasks into main and exits plan mode.\n' +
-        '- end: Exit plan mode without committing. All lanes are discarded.\n' +
-        '- status: Check current plan state (active, timeframe, lanes).\n\n' +
-        'IMPORTANT guidance for Claude when using plan mode:\n' +
-        '- Ask clarifying questions BEFORE generating alternatives:\n' +
-        '  "What are you trying to figure out?"\n' +
-        '  "Anything you\'re considering that isn\'t in your cloud?"\n' +
-        '  "Hard constraints — things that can\'t move?"\n' +
-        '- Generate genuinely DIFFERENT approaches, not permutations.\n' +
-        '  Each lane should embody a different philosophy (e.g., "focused blocks",\n' +
-        '  "spacious day", "front-loaded", "energy-matched").\n' +
-        '- Name each lane with its philosophy using the "name" action.\n' +
-        '- Don\'t assume the user has listed everything — suggest things they haven\'t mentioned.\n' +
-        '- Fill 3 lanes by default, leave lanes 4 and 5 empty for the user.\n' +
-        '- Use "fill" to set complete task lists, not incremental adds.\n' +
-        '- After filling lanes, summarize each approach briefly so the user can compare.',
+        '- start: Enter plan mode. Provide window_start and window_end as ISO timestamps.\n' +
+        '  Lane 1 auto-fills with current river tasks in that window (read-only reference).\n' +
+        '  Lanes 2-5 start empty.\n' +
+        '- fill: Populate a lane (2-5) with tasks. Lane 1 is read-only.\n' +
+        '- name: Give a lane a label describing its philosophy.\n' +
+        '- commit: Accept a lane — replaces ONLY main tasks within the plan window. Everything outside is untouched.\n' +
+        '- end: Exit plan mode without committing.\n' +
+        '- status: Check current plan state (window, lanes).\n\n' +
+        'IMPORTANT guidance for Claude:\n' +
+        '- Use "status" first to see lane 1 (the current arrangement) before generating alternatives.\n' +
+        '- Ask clarifying questions BEFORE generating alternatives.\n' +
+        '- Generate genuinely DIFFERENT approaches in lanes 2-4, not permutations.\n' +
+        '  Each lane should embody a different philosophy.\n' +
+        '- Name each lane with its philosophy.\n' +
+        '- Leave lane 5 empty for the user.\n' +
+        '- NEVER fill lane 1 — it is the user\'s current plan as reference.',
       inputSchema: {
         action: z
           .enum(['start', 'fill', 'name', 'commit', 'end', 'status'])
           .describe('Plan operation to perform'),
-        timeframe: z
-          .enum(PLAN_TIMEFRAMES)
+        window_start: z
+          .string()
           .optional()
-          .describe('Planning horizon (required for "start"): 6h, day, 4d, week, month, quarter, year'),
+          .describe('ISO timestamp for plan window start (required for "start")'),
+        window_end: z
+          .string()
+          .optional()
+          .describe('ISO timestamp for plan window end (required for "start")'),
         lane: z
           .number()
           .int()
           .min(1)
           .max(5)
           .optional()
-          .describe('Lane number 1-5 (required for fill, name, commit)'),
+          .describe('Lane number 1-5. Lane 1 is read-only. Required for fill, name, commit.'),
         label: z
           .string()
           .optional()
@@ -60,13 +61,13 @@ export function registerPlan(server: McpServer, state: RiverState): void {
 
         switch (args.action) {
           case 'start': {
-            if (!args.timeframe) {
+            if (!args.window_start || !args.window_end) {
               return {
-                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Timeframe is required for start (6h, day, 4d, week, month, quarter, year)' }) }],
+                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'window_start and window_end (ISO timestamps) are required for start' }) }],
                 isError: true,
               };
             }
-            result = state.startPlan(args.timeframe);
+            result = state.startPlan(args.window_start, args.window_end);
             state.notify();
             break;
           }
@@ -74,7 +75,7 @@ export function registerPlan(server: McpServer, state: RiverState): void {
           case 'fill': {
             if (args.lane === undefined) {
               return {
-                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (1-5) is required for fill' }) }],
+                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (2-5) is required for fill. Lane 1 is read-only.' }) }],
                 isError: true,
               };
             }
@@ -92,7 +93,7 @@ export function registerPlan(server: McpServer, state: RiverState): void {
           case 'name': {
             if (args.lane === undefined) {
               return {
-                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (1-5) is required for name' }) }],
+                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number is required for name' }) }],
                 isError: true,
               };
             }
@@ -110,7 +111,7 @@ export function registerPlan(server: McpServer, state: RiverState): void {
           case 'commit': {
             if (args.lane === undefined) {
               return {
-                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (1-5) is required for commit' }) }],
+                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (2-5) is required for commit. Lane 1 is read-only.' }) }],
                 isError: true,
               };
             }

@@ -125,9 +125,6 @@ export const SweepSchema = z.object({
   position: z.number().nullable().optional(),
 });
 
-export const PLAN_TIMEFRAMES = ['6h', 'day', '4d', 'week', 'month', 'quarter', 'year'] as const;
-export type PlanTimeframe = typeof PLAN_TIMEFRAMES[number];
-
 export const PlanTaskSchema = z.object({
   name: z.string().describe('Task name'),
   mass: z.number().positive().optional().describe('Duration in minutes (default 30)'),
@@ -140,26 +137,18 @@ export const PlanTaskSchema = z.object({
 
 export type PlanTaskInput = z.infer<typeof PlanTaskSchema>;
 
-export const PlanSchema = z.object({
-  action: z.enum(['start', 'fill', 'name', 'commit', 'end', 'status']),
-  timeframe: z.enum(PLAN_TIMEFRAMES).optional(),
-  lane: z.number().int().min(1).max(5).optional(),
-  label: z.string().optional(),
-  tasks: z.array(PlanTaskSchema).optional(),
-});
-
-export type PlanInput = z.infer<typeof PlanSchema>;
-
 export interface PlanLaneInfo {
   number: number;
   label: string | null;
   taskCount: number;
   branchName: string;
+  readonly: boolean;
 }
 
 export interface PlanState {
   active: boolean;
-  timeframe: PlanTimeframe | null;
+  window_start: string | null; // ISO timestamp
+  window_end: string | null;   // ISO timestamp
   lanes: PlanLaneInfo[];
 }
 

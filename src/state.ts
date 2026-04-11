@@ -12,7 +12,6 @@ import {
   type PutSingleInput,
   type PlanState,
   type PlanTaskInput,
-  type PlanTimeframe,
   DEFAULT_MASS,
   DEFAULT_SOLIDITY,
   DB_NAME,
@@ -263,8 +262,8 @@ export class RiverState {
 
   // ── Plan Mode (delegated) ────────────────────────────────────────
 
-  startPlan(timeframe: PlanTimeframe): PlanState {
-    return this.planFns.startPlan(timeframe);
+  startPlan(windowStart: string, windowEnd: string): PlanState {
+    return this.planFns.startPlan(windowStart, windowEnd);
   }
 
   fillLane(lane: number, tasks: PlanTaskInput[]): { lane: number; tasks: Task[] } {

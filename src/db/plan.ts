@@ -6,7 +6,6 @@ import {
   type PlanState,
   type PlanLaneInfo,
   type PlanTaskInput,
-  type PlanTimeframe,
   positionToAnchor,
   taskWithPosition,
   DEFAULT_MASS,
@@ -50,7 +49,7 @@ export function createPlanFns(
 
   // ── Plan operations ─────────────────────────────────────────────
 
-  function startPlan(timeframe: PlanTimeframe): PlanState {
+  function startPlan(windowStart: string, windowEnd: string): PlanState {
     const existing = getMeta('plan_mode');
     if (existing === 'true') {
       throw new Error('Plan mode is already active. End the current plan first.');
@@ -60,20 +59,38 @@ export function createPlanFns(
     const now = new Date().toISOString();
 
     db.transaction(() => {
-      // Create 5 lane branches from main
       for (let i = 1; i <= 5; i++) {
         const branchName = laneBranchName(i);
         const branchId = randomUUID();
 
-        // Create empty timeline for this lane
         db.prepare(
           'INSERT INTO timelines (id, name, parent_id, created) VALUES (?, ?, ?, ?)',
         ).run(branchId, branchName, mainId, now);
+
+        // Lane 1: snapshot of main river tasks in the window
+        if (i === 1) {
+          const tasks = db
+            .prepare('SELECT * FROM tasks WHERE timeline_id = ? AND anchor IS NOT NULL AND anchor >= ? AND anchor <= ?')
+            .all(mainId, windowStart, windowEnd) as TaskRow[];
+
+          const insert = db.prepare(
+            `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          );
+
+          for (const task of tasks) {
+            insert.run(
+              randomUUID(), branchId, task.name, task.mass, task.anchor,
+              task.solidity, task.energy, task.fixed, task.alive, task.tags,
+              task.created, task.cloud_x, task.cloud_y, task.river_y,
+            );
+          }
+        }
       }
 
-      // Set plan mode metadata
       setMeta('plan_mode', 'true');
-      setMeta('plan_timeframe', timeframe);
+      setMeta('plan_window_start', windowStart);
+      setMeta('plan_window_end', windowEnd);
     })();
 
     return getPlanState();
@@ -83,21 +100,14 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(lane);
 
-    const branchName = laneBranchName(lane);
-    const branch = db
-      .prepare('SELECT id FROM timelines WHERE name = ?')
-      .get(branchName) as { id: string } | undefined;
-
-    if (!branch) {
-      throw new Error(`Lane ${lane} branch not found. Is plan mode active?`);
+    if (lane === 1) {
+      throw new Error('Lane 1 is read-only — it shows your current plan as a reference.');
     }
 
-    const branchId = branch.id;
+    const branchId = getLaneBranchId(lane);
 
-    // Clear existing tasks in this lane
     db.prepare('DELETE FROM tasks WHERE timeline_id = ?').run(branchId);
 
-    // Insert the new tasks
     const insert = db.prepare(
       `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -124,20 +134,14 @@ export function createPlanFns(
         alive: 0,
         tags: JSON.stringify(t.tags ?? []),
         created: now,
+        cloud_x: null,
+        cloud_y: null,
+        river_y: null,
       };
 
       insert.run(
-        row.id,
-        row.timeline_id,
-        row.name,
-        row.mass,
-        row.anchor,
-        row.solidity,
-        row.energy,
-        row.fixed,
-        row.alive,
-        row.tags,
-        row.created,
+        row.id, row.timeline_id, row.name, row.mass, row.anchor,
+        row.solidity, row.energy, row.fixed, row.alive, row.tags, row.created,
       );
 
       created.push(rowToTask(row));
@@ -157,41 +161,37 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(lane);
 
-    const branchName = laneBranchName(lane);
-    const branch = db
-      .prepare('SELECT id, parent_id FROM timelines WHERE name = ?')
-      .get(branchName) as { id: string; parent_id: string } | undefined;
+    if (lane === 1) {
+      throw new Error('Lane 1 is read-only. Commit a different lane.');
+    }
 
-    if (!branch) {
-      throw new Error(`Lane ${lane} branch not found`);
+    const branchId = getLaneBranchId(lane);
+    const mainId = getMainTimelineId();
+    const windowStart = getMeta('plan_window_start');
+    const windowEnd = getMeta('plan_window_end');
+
+    if (!windowStart || !windowEnd) {
+      throw new Error('Plan window not defined');
     }
 
     let taskCount = 0;
 
     db.transaction(() => {
-      // Delete main's tasks
-      db.prepare('DELETE FROM tasks WHERE timeline_id = ?').run(branch.parent_id);
+      // Delete ONLY main tasks whose anchor falls within the plan window
+      db.prepare(
+        'DELETE FROM tasks WHERE timeline_id = ? AND anchor IS NOT NULL AND anchor >= ? AND anchor <= ?',
+      ).run(mainId, windowStart, windowEnd);
 
-      // Count tasks being committed
       const countRow = db
         .prepare('SELECT COUNT(*) as cnt FROM tasks WHERE timeline_id = ?')
-        .get(branch.id) as { cnt: number };
+        .get(branchId) as { cnt: number };
       taskCount = countRow.cnt;
 
       // Move lane's tasks to main
       db.prepare('UPDATE tasks SET timeline_id = ? WHERE timeline_id = ?')
-        .run(branch.parent_id, branch.id);
-
-      // Mark committed
-      db.prepare('UPDATE timelines SET committed_at = ? WHERE id = ?')
-        .run(new Date().toISOString(), branch.id);
-
-      // Switch back to main
-      db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
-        .run('current_timeline_id', branch.parent_id);
+        .run(mainId, branchId);
     })();
 
-    // End plan mode after committing
     cleanupPlan();
 
     return { committed: lane, taskCount };
@@ -207,10 +207,11 @@ export function createPlanFns(
     const active = getMeta('plan_mode') === 'true';
 
     if (!active) {
-      return { active: false, timeframe: null, lanes: [] };
+      return { active: false, window_start: null, window_end: null, lanes: [] };
     }
 
-    const timeframe = (getMeta('plan_timeframe') as PlanTimeframe) ?? null;
+    const windowStart = getMeta('plan_window_start');
+    const windowEnd = getMeta('plan_window_end');
     const lanes: PlanLaneInfo[] = [];
 
     for (let i = 1; i <= 5; i++) {
@@ -231,11 +232,12 @@ export function createPlanFns(
           label,
           taskCount: countRow.cnt,
           branchName,
+          readonly: i === 1,
         });
       }
     }
 
-    return { active, timeframe, lanes };
+    return { active, window_start: windowStart, window_end: windowEnd, lanes };
   }
 
   // ── Lane manipulation (viewer-driven) ───────────────────────────
@@ -248,16 +250,19 @@ export function createPlanFns(
     return branch.id;
   }
 
+  function assertEditableLane(lane: number): void {
+    if (lane === 1) throw new Error('Lane 1 is read-only');
+  }
+
   function addToLane(lane: number, taskId: string, position: number | null, copy: boolean): void {
     assertPlanActive();
     assertValidLane(lane);
+    assertEditableLane(lane);
     const branchId = getLaneBranchId(lane);
 
-    // Find source task — check main timeline first, then all lanes
     const mainId = getMainTimelineId();
     let source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, mainId) as TaskRow | undefined;
     if (!source) {
-      // Check all lane branches
       for (let i = 1; i <= 5; i++) {
         const bid = getLaneBranchId(i);
         source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, bid) as TaskRow | undefined;
@@ -272,7 +277,6 @@ export function createPlanFns(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(randomUUID(), branchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
 
-    // If not copy, remove from main cloud
     if (!copy) {
       db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, mainId);
     }
@@ -281,6 +285,7 @@ export function createPlanFns(
   function removeFromLane(lane: number, taskId: string): void {
     assertPlanActive();
     assertValidLane(lane);
+    assertEditableLane(lane);
     const branchId = getLaneBranchId(lane);
     db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, branchId);
   }
@@ -288,6 +293,7 @@ export function createPlanFns(
   function updateTaskInLane(lane: number, taskId: string, updates: { mass?: number; solidity?: number; energy?: number; position?: number }): void {
     assertPlanActive();
     assertValidLane(lane);
+    assertEditableLane(lane);
     const branchId = getLaneBranchId(lane);
     const sets: string[] = [];
     const vals: unknown[] = [];
@@ -303,6 +309,7 @@ export function createPlanFns(
   function laneToCloud(lane: number, taskId: string): void {
     assertPlanActive();
     assertValidLane(lane);
+    assertEditableLane(lane);
     const branchId = getLaneBranchId(lane);
     const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, branchId) as TaskRow | undefined;
     if (!source) throw new Error(`Task ${taskId} not found in lane ${lane}`);
@@ -319,6 +326,7 @@ export function createPlanFns(
   function repositionInLane(lane: number, taskId: string, position: number): void {
     assertPlanActive();
     assertValidLane(lane);
+    assertEditableLane(lane);
     const branchId = getLaneBranchId(lane);
     const anchor = positionToAnchor(position);
     db.prepare('UPDATE tasks SET anchor = ? WHERE id = ? AND timeline_id = ?').run(anchor, taskId, branchId);
@@ -328,6 +336,7 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(fromLane);
     assertValidLane(toLane);
+    assertEditableLane(toLane);
     const fromBranchId = getLaneBranchId(fromLane);
     const toBranchId = getLaneBranchId(toLane);
     const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, fromBranchId) as TaskRow | undefined;
@@ -346,6 +355,7 @@ export function createPlanFns(
   function putTaskInLane(lane: number, name: string, position: number | null): void {
     assertPlanActive();
     assertValidLane(lane);
+    assertEditableLane(lane);
     const branchId = getLaneBranchId(lane);
     const anchor = position != null ? positionToAnchor(position) : null;
     const now = new Date().toISOString();
@@ -359,6 +369,7 @@ export function createPlanFns(
     assertPlanActive();
     assertValidLane(fromLane);
     assertValidLane(toLane);
+    assertEditableLane(toLane);
     const fromBranchId = getLaneBranchId(fromLane);
     const toBranchId = getLaneBranchId(toLane);
     const source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, fromBranchId) as TaskRow | undefined;
@@ -387,7 +398,6 @@ export function createPlanFns(
 
   function cleanupPlan(): void {
     db.transaction(() => {
-      // Delete all lane branches and their tasks
       for (let i = 1; i <= 5; i++) {
         const branchName = laneBranchName(i);
         const branch = db
@@ -400,15 +410,13 @@ export function createPlanFns(
           db.prepare('DELETE FROM timelines WHERE id = ?').run(branch.id);
         }
 
-        // Clean up lane labels
         deleteMeta(`plan_lane_${i}_label`);
       }
 
-      // Clean up plan meta
       deleteMeta('plan_mode');
-      deleteMeta('plan_timeframe');
+      deleteMeta('plan_window_start');
+      deleteMeta('plan_window_end');
 
-      // Ensure we're on main
       const mainId = getMainTimelineId();
       db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
         .run('current_timeline_id', mainId);

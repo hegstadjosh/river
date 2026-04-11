@@ -62,7 +62,7 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
           } else if (data.action === 'delete') {
             state.deleteTask(data.id);
           } else if (data.action === 'plan_start') {
-            state.startPlan(data.timeframe);
+            state.startPlan(data.window_start, data.window_end);
           } else if (data.action === 'plan_end') {
             state.endPlan();
           } else if (data.action === 'plan_commit') {

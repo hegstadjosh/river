@@ -131,15 +131,13 @@
     if (R.planMode) {
       R.post('plan_end', {});
     } else {
-      var tf = 'day';
-      if (R.horizonHours <= 6) tf = '6h';
-      else if (R.horizonHours <= 24) tf = 'day';
-      else if (R.horizonHours <= 96) tf = '4d';
-      else if (R.horizonHours <= 168) tf = 'week';
-      else if (R.horizonHours <= 720) tf = 'month';
-      else if (R.horizonHours <= 2160) tf = 'quarter';
-      else tf = 'year';
-      R.post('plan_start', { timeframe: tf });
+      // Lock the current visible time range as the plan window
+      var now = R.state ? new Date(R.state.now) : new Date();
+      var leftHours = R.scrollHours - R.NOW_X * R.horizonHours;
+      var rightHours = R.scrollHours + (1 - R.NOW_X) * R.horizonHours;
+      var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
+      var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
+      R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
     }
   });
 
