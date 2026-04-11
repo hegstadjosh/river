@@ -232,14 +232,26 @@
     var leftX = R.hoursToX(startHours);
     var rightX = R.hoursToX(endHours);
     var top = R.surfaceY();
-    var bottom = R.planRiverTop() + R.planRiverHeight();
+    var bottom = R.H;
 
     ctx.save();
+    // Filled tint inside the window
+    ctx.fillStyle = 'rgba(200, 165, 110, 0.02)';
+    ctx.fillRect(leftX, top, rightX - leftX, bottom - top);
+    // Border
     ctx.beginPath();
-    ctx.roundRect(leftX, top, rightX - leftX, bottom - top, 6);
-    ctx.strokeStyle = 'rgba(200, 165, 110, 0.25)';
-    ctx.lineWidth = 1.5;
+    ctx.rect(leftX, top, rightX - leftX, bottom - top);
+    ctx.strokeStyle = 'rgba(200, 165, 110, 0.2)';
+    ctx.lineWidth = 1;
     ctx.stroke();
+    // Vertical edge lines extend into cloud zone too
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(leftX, 0); ctx.lineTo(leftX, top);
+    ctx.moveTo(rightX, 0); ctx.lineTo(rightX, top);
+    ctx.strokeStyle = 'rgba(200, 165, 110, 0.1)';
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   };
 

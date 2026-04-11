@@ -147,10 +147,12 @@
         var deltaY = R.resizing.startMY - e.clientY;
         var newSol = Math.max(0, Math.min(1, R.resizing.startSolidity + deltaY / 80));
         a.solidity = newSol;
+        var solDelta = newSol - R.resizing.startSolidity;
         if (R.resizing.group) {
           for (var ri = 0; ri < R.resizing.group.length; ri++) {
-            var rt = R.findTask(R.resizing.group[ri].id);
-            if (rt) rt.solidity = newSol;
+            var rg = R.resizing.group[ri];
+            var rt = R.findTask(rg.id);
+            if (rt) rt.solidity = Math.max(0, Math.min(1, rg.startSol + solDelta));
           }
         }
         var panelSolidity = document.getElementById('panel-solidity');
@@ -161,10 +163,12 @@
         var deltaY = R.resizing.startMY - e.clientY;
         var newEnergy = Math.max(0, Math.min(1, R.resizing.startEnergy + deltaY / 80));
         a.energy = newEnergy;
+        var engDelta = newEnergy - R.resizing.startEnergy;
         if (R.resizing.group) {
           for (var ri = 0; ri < R.resizing.group.length; ri++) {
-            var rt = R.findTask(R.resizing.group[ri].id);
-            if (rt) rt.energy = newEnergy;
+            var rg = R.resizing.group[ri];
+            var rt = R.findTask(rg.id);
+            if (rt) rt.energy = Math.max(0, Math.min(1, rg.startEnergy + engDelta));
           }
         }
         var pe = document.getElementById('panel-energy');

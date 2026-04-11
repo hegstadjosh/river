@@ -219,13 +219,59 @@
       }
     }
 
+    spreadLaneTasks();
     R.rebuildTagBar();
   };
+
+  // After sync, spread overlapping lane tasks vertically
+  function spreadLaneTasks() {
+    if (!R.planMode || !R.planLaneBounds) return;
+    for (var lane = 0; lane < 5; lane++) {
+      var tasks = R.tasksInLane(lane);
+      if (tasks.length < 2) continue;
+      var bounds = R.planLaneBounds(lane);
+      var pad = 4;
+      var laneH = bounds.bottom - bounds.top - pad * 2;
+
+      // Sort by position (time)
+      tasks.sort(function (a, b) { return (a.position || 0) - (b.position || 0); });
+
+      // Find overlap groups — tasks whose time ranges intersect
+      var groups = [];
+      var cur = [tasks[0]];
+      var curEnd = (tasks[0].position || 0) + tasks[0].mass / 60;
+      for (var i = 1; i < tasks.length; i++) {
+        var tStart = tasks[i].position || 0;
+        if (tStart < curEnd) {
+          cur.push(tasks[i]);
+          curEnd = Math.max(curEnd, tStart + tasks[i].mass / 60);
+        } else {
+          groups.push(cur);
+          cur = [tasks[i]];
+          curEnd = tStart + tasks[i].mass / 60;
+        }
+      }
+      groups.push(cur);
+
+      // For each group, spread tasks vertically within the lane
+      for (var gi = 0; gi < groups.length; gi++) {
+        var g = groups[gi];
+        if (g.length === 1) {
+          g[0].ty = bounds.midY;
+          continue;
+        }
+        var slotH = laneH / g.length;
+        for (var si = 0; si < g.length; si++) {
+          g[si].ty = bounds.top + pad + slotH * si + slotH / 2;
+        }
+      }
+    }
+  }
 
   // Compute target position for a task based on its context
   function computeTarget(t) {
     if (t.ctx.type === 'lane') {
-      // Plan lane task — centered in lane
+      // Plan lane task — initial center, spreadLaneTasks adjusts after
       var bounds = R.planLaneBounds ? R.planLaneBounds(t.ctx.lane) : { midY: R.H * 0.6 };
       var x = R.hoursToX(t.position || 0);
       return { x: x, y: bounds.midY || R.H * 0.6 };
