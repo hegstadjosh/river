@@ -478,16 +478,45 @@
   // Double-click empty space -> input appears -> type name -> task created
   // In cloud zone: creates a cloud task. In river zone: creates at that time position.
 
+  var quickAddWrap = document.getElementById('quick-add-wrap');
   var quickAdd = document.getElementById('quick-add');
+  var quickAddTagsEl = document.getElementById('quick-add-tags');
   var quickAddPos = null; // null = cloud, number = hours from now
   var quickAddLane = -1;  // -1 = not in a plan lane
+  var quickAddSelectedTag = null;
+
+  function buildQuickAddTags() {
+    quickAddTagsEl.innerHTML = '';
+    quickAddSelectedTag = null;
+    var tags = (R.allTags || []).filter(function (t) { return t !== 'N/A'; });
+    for (var i = 0; i < tags.length; i++) {
+      (function (tag) {
+        var btn = document.createElement('button');
+        btn.className = 'quick-add-tag';
+        btn.textContent = tag;
+        btn.style.color = R.tagColor(tag);
+        btn.addEventListener('mousedown', function (e) {
+          e.preventDefault(); // don't blur the input
+          if (quickAddSelectedTag === tag) {
+            quickAddSelectedTag = null;
+            btn.classList.remove('selected');
+          } else {
+            quickAddSelectedTag = tag;
+            var all = quickAddTagsEl.querySelectorAll('.quick-add-tag');
+            for (var j = 0; j < all.length; j++) all[j].classList.remove('selected');
+            btn.classList.add('selected');
+          }
+        });
+        quickAddTagsEl.appendChild(btn);
+      })(tags[i]);
+    }
+  }
 
   R.canvas.addEventListener('dblclick', function (e) {
     if (R.hitTest(e.clientX, e.clientY)) return;
 
     var sY = R.surfaceY();
 
-    // Plan mode: double-click in a lane creates a task there
     if (R.planMode) {
       var lane = R.planLaneAt(e.clientY);
       if (lane >= 0) {
@@ -506,40 +535,47 @@
         : null;
     }
 
-    quickAdd.style.left = (e.clientX - 100) + 'px';
-    quickAdd.style.top = (e.clientY - 18) + 'px';
-    quickAdd.classList.remove('hidden');
+    quickAddWrap.style.left = (e.clientX - 100) + 'px';
+    quickAddWrap.style.top = (e.clientY - 18) + 'px';
+    quickAddWrap.classList.remove('hidden');
     quickAdd.value = '';
     quickAdd.focus();
+    buildQuickAddTags();
   });
 
   quickAdd.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && quickAdd.value.trim()) {
       if (quickAddLane >= 0) {
-        // Create task directly in plan lane
         R.post('plan_lane_put', { lane: quickAddLane, name: quickAdd.value.trim(), position: quickAddPos });
       } else {
         var payload = { name: quickAdd.value.trim() };
         if (quickAddPos !== null) payload.position = quickAddPos;
+        if (quickAddSelectedTag) payload.tags = [quickAddSelectedTag];
         R.post('put', payload);
       }
-      quickAdd.classList.add('hidden');
+      quickAddWrap.classList.add('hidden');
       quickAdd.value = '';
+      quickAddSelectedTag = null;
     } else if (e.key === 'Escape') {
-      quickAdd.classList.add('hidden');
+      quickAddWrap.classList.add('hidden');
     }
   });
 
   // Escape exits plan mode
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && R.planMode && !quickAdd.classList.contains('hidden')) return;
+    if (e.key === 'Escape' && R.planMode && !quickAddWrap.classList.contains('hidden')) return;
     if (e.key === 'Escape' && R.planMode) {
       R.post('plan_end', {});
     }
   });
 
   quickAdd.addEventListener('blur', function () {
-    quickAdd.classList.add('hidden');
+    // Delay so tag clicks register before blur hides the wrapper
+    setTimeout(function () {
+      if (!quickAddWrap.contains(document.activeElement)) {
+        quickAddWrap.classList.add('hidden');
+      }
+    }, 150);
   });
 
   // ── Resize Overlay Rendering ────────────────────────────────────────

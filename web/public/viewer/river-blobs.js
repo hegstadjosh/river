@@ -218,7 +218,17 @@
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
+    // Color label by tag (N/A or no tags = warm white)
+    var labelColor = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
+    if (a.tags && a.tags.length > 0 && a.tags[0] !== 'N/A' && R.tagColor) {
+      // Parse the tag color and apply the label alpha
+      var tc = R.tagColor(a.tags[0]);
+      var m = tc.match(/[\d.]+/g);
+      if (m && m.length >= 3) {
+        labelColor = 'rgba(' + m[0] + ', ' + m[1] + ', ' + m[2] + ', ' + labelA.toFixed(3) + ')';
+      }
+    }
+    ctx.fillStyle = labelColor;
 
     var nameW = ctx.measureText(a.name).width;
     if (nameW < hw * 1.8) {

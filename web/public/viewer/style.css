@@ -125,30 +125,55 @@ canvas {
 
 /* ── Quick Add ──────────────────────────────────────── */
 
-.quick-add {
+.quick-add-wrap {
   position: absolute;
   z-index: 15;
   width: 200px;
-  padding: 8px 12px;
   border-radius: 8px;
   background: rgba(25, 21, 18, 0.85);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(200, 165, 110, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.15s ease;
+  overflow: hidden;
+}
+.quick-add-wrap.hidden { display: none; }
+
+.quick-add {
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
   color: #d4c4b0;
   font-size: 13px;
   font-family: -apple-system, system-ui, sans-serif;
   outline: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  transition: opacity 0.15s ease;
 }
+.quick-add::placeholder { color: rgba(200, 165, 110, 0.3); }
 
-.quick-add.hidden {
-  display: none;
+.quick-add-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 6px;
+  border-top: 1px solid rgba(200, 165, 110, 0.08);
 }
+.quick-add-tags:empty { display: none; }
 
-.quick-add::placeholder {
-  color: rgba(200, 165, 110, 0.3);
+.quick-add-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid rgba(200, 165, 110, 0.12);
+  background: transparent;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.quick-add-tag.selected {
+  border-color: rgba(200, 165, 110, 0.4);
+  background: rgba(200, 165, 110, 0.1);
 }
 
 .panel-times {
