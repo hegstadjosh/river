@@ -1,0 +1,703 @@
+/* River — warm dark theme */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #1a1614;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: #d4c4b0;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: default;
+}
+
+/* ── Horizon Bar ────────────────────────────────────── */
+
+/* ── Shared bar component ──────────────────────────── */
+/* Every bar in the app uses this. One source of truth. */
+
+.river-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(35% - 18px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: rgba(20, 17, 14, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(200, 165, 110, 0.1);
+  /* Width/height set dynamically by JS so wizard matches horizon exactly */
+}
+
+.hz-scales {
+  display: flex;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.hz-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: rgba(200, 165, 110, 0.3);
+  font-size: 10px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  transform: scale(1);
+  text-align: center;
+}
+
+.hz-btn:hover {
+  color: rgba(200, 165, 110, 0.6);
+  background: rgba(200, 165, 110, 0.06);
+}
+
+.hz-btn.active {
+  color: rgba(200, 165, 110, 0.85);
+  background: rgba(200, 165, 110, 0.12);
+}
+
+.hz-btn.hz-btn-preview,
+.hz-arrow.hz-btn-preview {
+  color: rgba(200, 165, 110, 0.95);
+  background: rgba(200, 165, 110, 0.18);
+  box-shadow: 0 0 8px rgba(200, 165, 110, 0.2);
+  transform: scale(1.15);
+}
+
+.hz-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-left: 1px solid rgba(200, 165, 110, 0.1);
+  padding-left: 10px;
+  flex: 0 0 120px;
+}
+
+.hz-arrow {
+  background: transparent;
+  border: none;
+  color: rgba(200, 165, 110, 0.4);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+
+.hz-arrow:hover {
+  color: rgba(200, 165, 110, 0.75);
+  background: rgba(200, 165, 110, 0.08);
+}
+
+.hz-label {
+  color: rgba(200, 165, 110, 0.55);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  min-width: 72px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ── Quick Add ──────────────────────────────────────── */
+
+.quick-add {
+  position: absolute;
+  z-index: 15;
+  width: 200px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(25, 21, 18, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(200, 165, 110, 0.25);
+  color: #d4c4b0;
+  font-size: 13px;
+  font-family: -apple-system, system-ui, sans-serif;
+  outline: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.15s ease;
+}
+
+.quick-add.hidden {
+  display: none;
+}
+
+.quick-add::placeholder {
+  color: rgba(200, 165, 110, 0.3);
+}
+
+.panel-times {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.time-group {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  min-width: 0;
+}
+
+.time-pick {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(200, 165, 110, 0.15);
+  color: rgba(200, 165, 110, 0.75);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
+  padding: 2px 0;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+
+.time-group:first-child .time-pick { text-align: left; }
+.time-group:last-child .time-pick { text-align: right; }
+
+.time-pick:focus {
+  border-color: rgba(200, 165, 110, 0.5);
+  color: #d4c4b0;
+}
+
+.time-picker-hidden {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.time-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 1px;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.time-icon:hover {
+  opacity: 0.6;
+}
+
+.time-arrow {
+  color: rgba(200, 165, 110, 0.2);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Click Panel ─────────────────────────────────────── */
+
+.panel {
+  position: absolute;
+  z-index: 10;
+  width: 200px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(30, 24, 20, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 170, 110, 0.18);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 0.15s ease;
+}
+
+.panel.hidden {
+  display: none;
+}
+
+.panel-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(212, 196, 176, 0.55);
+  text-transform: uppercase;
+}
+
+.panel-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+}
+
+.panel-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(212, 170, 110, 0.15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #d4c4b0;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.panel-input:focus {
+  border-color: rgba(212, 170, 110, 0.4);
+}
+
+.dur-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dur-title {
+  /* inherits panel-label styling */
+}
+
+.dur-input {
+  width: 52px;
+  text-align: right;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(200, 165, 110, 0.15);
+  color: rgba(200, 165, 110, 0.8);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, system-ui, sans-serif;
+  padding: 0 0 1px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.dur-input:focus {
+  border-color: rgba(200, 165, 110, 0.5);
+  color: #d4c4b0;
+}
+
+.dur-input::placeholder {
+  color: rgba(200, 165, 110, 0.25);
+}
+
+.panel-durations {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.dur-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 165, 110, 0.1);
+  border-radius: 5px;
+  color: rgba(200, 165, 110, 0.4);
+  font-size: 11px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-weight: 500;
+  padding: 5px 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dur-btn:hover {
+  background: rgba(200, 165, 110, 0.08);
+  color: rgba(200, 165, 110, 0.7);
+}
+
+.dur-btn.active {
+  background: rgba(200, 165, 110, 0.14);
+  border-color: rgba(200, 165, 110, 0.3);
+  color: rgba(200, 165, 110, 0.9);
+}
+
+.panel-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+  accent-color: #d4aa6e;
+}
+
+.panel-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d4aa6e;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.panel-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d4aa6e;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="checkbox"] {
+  accent-color: #d4aa6e;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.panel-action {
+  flex: 1;
+  background: rgba(212, 170, 110, 0.08);
+  border: 1px solid rgba(212, 170, 110, 0.12);
+  border-radius: 6px;
+  color: rgba(212, 196, 176, 0.5);
+  font-size: 11px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.03em;
+}
+
+.panel-action:hover {
+  background: rgba(212, 170, 110, 0.15);
+  color: rgba(212, 196, 176, 0.8);
+  border-color: rgba(212, 170, 110, 0.25);
+}
+
+/* ── Tag Filter Bar (top-left corner) ────────────── */
+
+.tag-bar {
+  position: absolute;
+  top: 8px;
+  left: 16px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.tag-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.tag-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  transition: all 0.25s ease;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.06);
+}
+
+.tag-item:hover .tag-swatch {
+  transform: scale(1.15);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.1),
+              0 0 8px var(--tag-color);
+}
+
+.tag-item.active .tag-swatch {
+  opacity: 1;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.08),
+              0 0 6px var(--tag-color);
+}
+
+.tag-item.dimmed .tag-swatch {
+  opacity: 0.15;
+  box-shadow: none;
+}
+
+.tag-label {
+  font-size: 8px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: rgba(200, 165, 110, 0.35);
+  text-align: center;
+  max-width: 42px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+  user-select: none;
+}
+
+.tag-item.active .tag-label {
+  color: rgba(200, 165, 110, 0.6);
+}
+
+.tag-item:hover .tag-label {
+  color: rgba(200, 165, 110, 0.7);
+}
+
+.tag-label-edit {
+  font-size: 8px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: rgba(200, 165, 110, 0.8);
+  background: rgba(200, 165, 110, 0.08);
+  border: 1px solid rgba(200, 165, 110, 0.2);
+  border-radius: 3px;
+  text-align: center;
+  width: 42px;
+  padding: 0 2px;
+  outline: none;
+}
+
+.tag-add {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px dashed rgba(200, 165, 110, 0.15);
+  background: transparent;
+  color: rgba(200, 165, 110, 0.2);
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tag-add:hover {
+  border-color: rgba(200, 165, 110, 0.35);
+  color: rgba(200, 165, 110, 0.5);
+  background: rgba(200, 165, 110, 0.06);
+}
+
+.panel-tag-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.panel-tag-check {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: rgba(200, 165, 110, 0.04);
+}
+
+.panel-tag-check:hover {
+  background: rgba(200, 165, 110, 0.08);
+}
+
+.panel-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  transition: opacity 0.15s ease;
+}
+
+.panel-tag-check.off .panel-tag-dot {
+  opacity: 0.2;
+}
+
+.panel-tag-name {
+  font-size: 10px;
+  font-family: -apple-system, system-ui, sans-serif;
+  color: rgba(200, 165, 110, 0.6);
+}
+
+.panel-tag-check.off .panel-tag-name {
+  color: rgba(200, 165, 110, 0.25);
+}
+
+.tag-add-popup {
+  position: absolute;
+  z-index: 10;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(25, 21, 18, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(200, 165, 110, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.tag-add-popup input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(200, 165, 110, 0.2);
+  color: rgba(200, 165, 110, 0.8);
+  font-size: 10px;
+  font-family: -apple-system, system-ui, sans-serif;
+  outline: none;
+  width: 70px;
+  padding: 2px 0;
+}
+
+.tag-add-popup input::placeholder {
+  color: rgba(200, 165, 110, 0.25);
+}
+
+.tag-add-popup input:focus {
+  border-color: rgba(200, 165, 110, 0.4);
+}
+
+/* ── Plan Button (top-right corner) ───────────────── */
+
+.plan-btn {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 5;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(200, 165, 110, 0.06);
+  border: 1px solid rgba(200, 165, 110, 0.12);
+  color: rgba(200, 165, 110, 0.4);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.plan-btn:hover {
+  color: rgba(200, 165, 110, 0.7);
+  border-color: rgba(200, 165, 110, 0.25);
+  background: rgba(200, 165, 110, 0.1);
+}
+
+.plan-btn.active {
+  color: rgba(200, 165, 110, 0.9);
+  border-color: rgba(200, 165, 110, 0.3);
+  background: rgba(200, 165, 110, 0.14);
+}
+
+
+/* ── Wizard Field (DOM element, same style as horizon bar) ── */
+/* Must be EXACTLY the same size/shape as #horizon-bar.        */
+/* Zones sit in a single horizontal row like hz-btn buttons.   */
+
+.wizard-field {
+  z-index: 6;
+  gap: 0;
+  padding: 3px;
+  box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
+  transition: box-shadow 0.3s ease, opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.wizard-field.hidden {
+  display: none;
+}
+
+.wizard-field-zones {
+  display: flex;
+  gap: 1px;  /* same as .hz-scales */
+  flex: 1;
+  min-width: 0;
+}
+
+.wizard-zone {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: rgba(200, 165, 110, 0.3);
+  font-size: 10px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  padding: 4px 8px;
+  border-radius: 5px;
+  text-align: center;
+  white-space: nowrap;
+  transition: all 0.1s ease;
+}
+
+.wizard-zone + .wizard-zone {
+  border-left: 1px solid rgba(200, 165, 110, 0.12);
+  border-radius: 0;
+}
+
+.wizard-zone:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.wizard-zone:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.wizard-zone.active {
+  color: rgba(200, 165, 110, 0.95);
+  font-weight: 600;
+  background: rgba(200, 165, 110, 0.12);
+}
+
+/* ── Bar glow state ──────────────────────────────────── */
+
+.river-bar-glow {
+  box-shadow: 0 0 12px rgba(200, 165, 110, 0.15);
+  transition: box-shadow 0.3s ease;
+}
+
+/* ── Dwell Timeframe Switcher ───────────────────────── */
+
+.hz-btn-dwell {
+  transform: scale(1.3);
+  color: rgba(200, 165, 110, 0.95) !important;
+  background: rgba(200, 165, 110, 0.18) !important;
+  box-shadow: 0 0 16px rgba(200, 165, 110, 0.25);
+  transition: transform 0.3s ease, color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hz-btn-trigger {
+  transform: scale(1.0);
+  color: rgba(200, 165, 110, 1) !important;
+  background: rgba(200, 165, 110, 0.2) !important;
+  transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
