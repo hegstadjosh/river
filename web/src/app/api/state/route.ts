@@ -3,6 +3,9 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { WebState } from '@/lib/river/state'
 
+// Cache ensured user IDs in-memory so we don't query timelines on every request
+const ensuredUsers = new Set<string>()
+
 async function getAuthedState() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -25,7 +28,13 @@ async function getAuthedState() {
   if (!user) return null
 
   const state = new WebState(supabase, user.id)
-  await state.ensureUser()
+
+  // Only check/create main timeline once per server lifecycle
+  if (!ensuredUsers.has(user.id)) {
+    await state.ensureUser()
+    ensuredUsers.add(user.id)
+  }
+
   return state
 }
 
@@ -50,7 +59,7 @@ export async function POST(request: Request) {
     switch (action) {
       case 'put': {
         const { action: _, ...rest } = data
-        const task = await state.putTask(rest)
+        await state.putTask(rest)
         if (rest.tags) await state.ensureTaskTags(rest.tags)
         break
       }
@@ -73,62 +82,42 @@ export async function POST(request: Request) {
         await state.commitLane((data.lane ?? 0) + 1)
         break
       case 'plan_lane_put':
-        await state.putTaskInLane(
-          (data.lane ?? 0) + 1,
-          data.name,
-          data.position ?? null,
-        )
+        await state.putTaskInLane((data.lane ?? 0) + 1, data.name, data.position ?? null)
         break
       case 'plan_update_task':
         await state.updateTaskInLane((data.lane ?? 0) + 1, data.task_id, {
-          mass: data.mass,
-          solidity: data.solidity,
-          energy: data.energy,
-          position: data.position,
+          mass: data.mass, solidity: data.solidity, energy: data.energy, position: data.position,
         })
         break
       case 'plan_to_cloud':
         await state.laneToCloud((data.lane ?? 0) + 1, data.task_id)
         break
       case 'plan_add':
-        await state.addToLane(
-          (data.lane ?? 0) + 1,
-          data.task_id,
-          data.position ?? null,
-          !!data.copy,
-        )
+        await state.addToLane((data.lane ?? 0) + 1, data.task_id, data.position ?? null, !!data.copy)
         break
       case 'plan_remove':
         await state.removeFromLane((data.lane ?? 0) + 1, data.task_id)
         break
       case 'plan_reposition':
-        await state.repositionInLane(
-          (data.lane ?? 0) + 1,
-          data.task_id,
-          data.position,
-        )
+        await state.repositionInLane((data.lane ?? 0) + 1, data.task_id, data.position)
         break
       case 'plan_move':
         await state.moveBetweenLanes(
-          (data.from_lane ?? 0) + 1,
-          (data.to_lane ?? 0) + 1,
-          data.task_id,
-          data.position,
+          (data.from_lane ?? 0) + 1, (data.to_lane ?? 0) + 1, data.task_id, data.position,
         )
         break
       case 'plan_copy':
         await state.copyBetweenLanes(
-          (data.from_lane ?? 0) + 1,
-          (data.to_lane ?? 0) + 1,
-          data.task_id,
-          data.position,
+          (data.from_lane ?? 0) + 1, (data.to_lane ?? 0) + 1, data.task_id, data.position,
         )
         break
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
     }
 
-    return NextResponse.json({ ok: true })
+    // Return full state after mutation so viewer updates instantly
+    const result = await state.look()
+    return NextResponse.json(result)
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 400 })
   }

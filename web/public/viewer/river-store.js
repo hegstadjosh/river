@@ -543,8 +543,8 @@
   };
 
   R.connectSSE = function () {
-    // Poll every 1 second instead of SSE
-    setInterval(function () { R.fetchState(); }, 1000);
+    // Background poll as fallback — mutations return state instantly via R.post()
+    setInterval(function () { R.fetchState(); }, 5000);
   };
 
   // Wait for auth token before fetching (token arrives via postMessage)

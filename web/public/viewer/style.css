@@ -701,3 +701,98 @@ input[type="checkbox"] {
   background: rgba(200, 165, 110, 0.2) !important;
   transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
+
+/* ── Hamburger Menu ─────────────────────────────────────────── */
+
+.menu-btn {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  width: 32px;
+  height: 32px;
+  background: rgba(200, 165, 110, 0.08);
+  border: 1px solid rgba(200, 165, 110, 0.12);
+  border-radius: 6px;
+  color: rgba(200, 165, 110, 0.5);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.menu-btn:hover {
+  background: rgba(200, 165, 110, 0.15);
+  color: rgba(200, 165, 110, 0.8);
+}
+.menu-icon { line-height: 1; }
+.menu-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  background: rgb(200, 120, 80);
+  border-radius: 50%;
+  display: none;
+}
+.menu-dot.active { display: block; }
+
+.menu-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 190;
+  width: 220px;
+  height: 100vh;
+  background: rgba(23, 22, 26, 0.95);
+  backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(200, 165, 110, 0.08);
+  padding: 52px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform: translateX(0);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.menu-sidebar.hidden {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: rgba(200, 165, 110, 0.6);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.menu-item:hover {
+  background: rgba(200, 165, 110, 0.08);
+  color: rgba(200, 165, 110, 0.9);
+}
+.menu-item-icon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  opacity: 0.6;
+}
+.menu-badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(200, 120, 80, 0.2);
+  color: rgb(200, 120, 80);
+}
+.menu-badge.hidden { display: none; }

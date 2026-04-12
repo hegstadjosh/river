@@ -30,6 +30,23 @@
     <div class="wizard-field-zones"></div>
   </div>
 
+  <!-- Hamburger menu -->
+  <button id="menu-btn" class="menu-btn" title="Menu">
+    <span class="menu-icon">&#9776;</span>
+    <span id="menu-dot" class="menu-dot"></span>
+  </button>
+  <div id="menu-sidebar" class="menu-sidebar hidden">
+    <a id="menu-mcp" class="menu-item" href="/mcp" target="_top">
+      <span class="menu-item-icon">&#9881;</span>
+      MCP Setup
+      <span id="menu-mcp-badge" class="menu-badge">set up</span>
+    </a>
+    <button id="menu-signout" class="menu-item">
+      <span class="menu-item-icon">&#8594;</span>
+      Sign out
+    </button>
+  </div>
+
   <div id="tag-bar" class="tag-bar"></div>
   <button id="plan-btn" class="plan-btn">plan</button>
 
@@ -88,11 +105,41 @@
     window.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'auth-token') {
         window._riverAuthToken = e.data.token;
-        // Trigger initial fetch once we have the token
         if (window.River && window.River.fetchState) {
           window.River.fetchState();
         }
+        // Check if user has API keys — show dot if not
+        fetch('/api/keys', { headers: { 'Authorization': 'Bearer ' + e.data.token } })
+          .then(function(r) { return r.json(); })
+          .catch(function() { return []; })
+          .then(function(keys) {
+            var hasKeys = Array.isArray(keys) && keys.length > 0;
+            var dot = document.getElementById('menu-dot');
+            var badge = document.getElementById('menu-mcp-badge');
+            if (dot) dot.className = hasKeys ? 'menu-dot' : 'menu-dot active';
+            if (badge) badge.className = hasKeys ? 'menu-badge hidden' : 'menu-badge';
+          });
       }
+    });
+
+    // Hamburger menu toggle
+    document.addEventListener('DOMContentLoaded', function() {
+      var btn = document.getElementById('menu-btn');
+      var sidebar = document.getElementById('menu-sidebar');
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        sidebar.classList.toggle('hidden');
+      });
+      // Close sidebar on click outside
+      document.addEventListener('click', function(e) {
+        if (!sidebar.contains(e.target) && e.target !== btn) {
+          sidebar.classList.add('hidden');
+        }
+      });
+      // Sign out — tell parent page
+      document.getElementById('menu-signout').addEventListener('click', function() {
+        window.parent.postMessage({ type: 'sign-out' }, '*');
+      });
     });
   </script>
   <script src="river-core.js"></script>

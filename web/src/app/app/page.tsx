@@ -20,7 +20,6 @@ export default function AppPage() {
       }
       setReady(true)
 
-      // Send token to iframe once it loads
       const iframe = iframeRef.current
       if (iframe) {
         iframe.onload = () => {
@@ -46,44 +45,36 @@ export default function AppPage() {
       }
     )
 
-    return () => subscription.unsubscribe()
-  }, [router])
+    // Listen for sign-out message from iframe
+    function handleMessage(e: MessageEvent) {
+      if (e.data?.type === 'sign-out') {
+        supabase.auth.signOut().then(() => router.push('/'))
+      }
+    }
+    window.addEventListener('message', handleMessage)
 
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/')
-  }
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [router])
 
   if (!ready) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: '#17161a' }}
-      >
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#17161a' }}>
         <p style={{ color: 'rgba(200, 165, 110, 0.4)' }}>loading...</p>
       </div>
     )
   }
 
   return (
-    <div className="relative w-screen h-screen" style={{ background: '#17161a' }}>
+    <div className="w-screen h-screen" style={{ background: '#17161a' }}>
       <iframe
         ref={iframeRef}
         src="/viewer/index.html"
         className="w-full h-full border-0"
         allow="fullscreen"
       />
-      <button
-        onClick={handleLogout}
-        className="absolute top-3 right-24 text-xs px-3 py-1 rounded transition-opacity opacity-30 hover:opacity-80 cursor-pointer z-10"
-        style={{
-          color: 'rgb(200, 165, 110)',
-          background: 'rgba(200, 165, 110, 0.1)',
-        }}
-      >
-        sign out
-      </button>
     </div>
   )
 }

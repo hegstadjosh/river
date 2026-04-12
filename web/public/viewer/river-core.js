@@ -94,6 +94,14 @@ window.River = {};
     fetch('/api/state', {
       method: 'POST', headers: R.authHeaders(),
       body: JSON.stringify(Object.assign({ action: action }, data))
+    }).then(function (r) {
+      return r.json();
+    }).then(function (d) {
+      // Server returns full state after mutations — apply it immediately
+      if (d && d.river !== undefined) {
+        R.state = d;
+        R.sync();
+      }
     }).catch(function () {});
   };
 
