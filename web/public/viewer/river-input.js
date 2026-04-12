@@ -482,6 +482,8 @@
   var quickAdd = document.getElementById('quick-add');
   var quickAddTagsEl = document.getElementById('quick-add-tags');
   var quickAddPos = null; // null = cloud, number = hours from now
+  var quickAddClickX = 0; // raw clientX of the double-click
+  var quickAddClickY = 0; // raw clientY of the double-click
   var quickAddLane = -1;  // -1 = not in a plan lane
   var quickAddSelectedTag = null;
 
@@ -516,6 +518,8 @@
     if (R.hitTest(e.clientX, e.clientY)) return;
 
     var sY = R.surfaceY();
+    quickAddClickX = e.clientX;
+    quickAddClickY = e.clientY;
 
     if (R.planMode) {
       var lane = R.planLaneAt(e.clientY);
@@ -549,7 +553,19 @@
         R.post('plan_lane_put', { lane: quickAddLane, name: quickAdd.value.trim(), position: quickAddPos });
       } else {
         var payload = { name: quickAdd.value.trim() };
-        if (quickAddPos !== null) payload.position = quickAddPos;
+        if (quickAddPos !== null) {
+          // River task — include position and river_y so it appears at the click location
+          payload.position = quickAddPos;
+          var rTop = R.surfaceY() + 30;
+          var rBot = R.H - 50;
+          payload.river_y = Math.max(0, Math.min(1, (quickAddClickY - rTop) / (rBot - rTop)));
+        } else {
+          // Cloud task — include cloud_x and cloud_y so it appears at the click location
+          var cTop = R.cloudTopY();
+          var cBot = R.surfaceY() - 50;
+          payload.cloud_x = Math.max(0, Math.min(1, (quickAddClickX - R.W * 0.15) / (R.W * 0.7)));
+          payload.cloud_y = Math.max(0, Math.min(1, (quickAddClickY - cTop) / (cBot - cTop)));
+        }
         if (quickAddSelectedTag) payload.tags = [quickAddSelectedTag];
         R.post('put', payload);
       }
