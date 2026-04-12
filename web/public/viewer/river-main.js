@@ -129,7 +129,16 @@
   var planBtn = document.getElementById('plan-btn');
   planBtn.addEventListener('click', function () {
     if (R.planMode) {
-      R.post('plan_end', {});
+      R.post('plan_end', {}, function () {
+        // Optimistic: exit plan mode immediately
+        R.planMode = false;
+        R.planLanes = [];
+        R.planWindowStart = null;
+        R.planWindowEnd = null;
+        // Remove lane tasks from local store
+        R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
+        if (R.updatePlanIndicator) R.updatePlanIndicator();
+      });
     } else {
       // Lock the current visible time range — use actual screen edges
       var now = R.state ? new Date(R.state.now) : new Date();
@@ -137,7 +146,16 @@
       var rightHours = (R.W - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
       var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
-      R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
+      R.post('plan_start', { window_start: windowStart, window_end: windowEnd }, function () {
+        // Optimistic: enter plan mode immediately with empty lanes
+        R.planMode = true;
+        R.planWindowStart = windowStart;
+        R.planWindowEnd = windowEnd;
+        R.planLanes = [];
+        for (var i = 0; i < 5; i++) R.planLanes.push({ label: '', tasks: [] });
+        if (R.initPlanStreaks) R.initPlanStreaks();
+        if (R.updatePlanIndicator) R.updatePlanIndicator();
+      });
     }
   });
 

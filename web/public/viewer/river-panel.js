@@ -444,18 +444,34 @@
       if (!a) continue;
       if (a.ctx && a.ctx.type === 'lane') {
         // Copy within the same lane
+        var copyLane = a.ctx.lane;
+        var copyName = a.name;
+        var copyPos = a.position != null ? a.position + a.mass / 120 : null;
         R.post('plan_lane_put', {
-          lane: a.ctx.lane,
-          name: a.name,
-          position: a.position != null ? a.position + a.mass / 120 : null
+          lane: copyLane, name: copyName, position: copyPos
+        }, function (tasks) {
+          var bounds = R.planLaneBounds ? R.planLaneBounds(copyLane) : { midY: R.H * 0.6 };
+          var tx = R.hoursToX ? R.hoursToX(copyPos || 0) : R.W * 0.5;
+          tasks.push({
+            id: '_temp_' + Date.now(), name: copyName, mass: 30, solidity: 0.3, energy: 0.5,
+            fixed: false, alive: false, tags: [], position: copyPos, anchor: null,
+            ctx: { type: 'lane', lane: copyLane }, _dirtyUntil: Date.now() + 5000,
+            x: tx, y: bounds.midY || R.H * 0.6, tx: tx, ty: bounds.midY || R.H * 0.6, vx: 0, vy: 0
+          });
         });
       } else {
-        R.post('put', {
-          name: a.name,
-          mass: a.mass,
-          solidity: a.solidity,
-          energy: a.energy,
-          tags: a.tags
+        var copyData = {
+          name: a.name, mass: a.mass, solidity: a.solidity, energy: a.energy, tags: a.tags
+        };
+        R.post('put', copyData, function (tasks) {
+          var pos = R.cloudPos ? R.cloudPos({ name: copyData.name, mass: copyData.mass }) : { x: R.W * 0.5, y: R.H * 0.15 };
+          tasks.push({
+            id: '_temp_' + Date.now(), name: copyData.name, mass: copyData.mass,
+            solidity: copyData.solidity, energy: copyData.energy,
+            fixed: false, alive: false, tags: copyData.tags || [], position: null, anchor: null,
+            ctx: { type: 'main' }, _dirtyUntil: Date.now() + 5000,
+            x: pos.x, y: pos.y, tx: pos.x, ty: pos.y, vx: 0, vy: 0
+          });
         });
       }
     }

@@ -61,7 +61,21 @@
     if (R.planMode) {
       var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
       if (commitLane >= 0) {
-        R.post('plan_commit', { lane: commitLane });
+        var cl = commitLane;
+        R.post('plan_commit', { lane: cl }, function () {
+          // Optimistic: exit plan mode and merge lane tasks into main
+          var laneTasks = R.tasks.filter(function (t) { return t.ctx && t.ctx.type === 'lane' && t.ctx.lane === cl; });
+          for (var i = 0; i < laneTasks.length; i++) {
+            laneTasks[i].ctx = { type: 'main' };
+            laneTasks[i]._dirtyUntil = Date.now() + 5000;
+          }
+          R.planMode = false;
+          R.planLanes = [];
+          R.planWindowStart = null;
+          R.planWindowEnd = null;
+          R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
+          if (R.updatePlanIndicator) R.updatePlanIndicator();
+        });
         return;
       }
     }
@@ -550,7 +564,21 @@
   quickAdd.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && quickAdd.value.trim()) {
       if (quickAddLane >= 0) {
-        R.post('plan_lane_put', { lane: quickAddLane, name: quickAdd.value.trim(), position: quickAddPos });
+        var lanePayload = { lane: quickAddLane, name: quickAdd.value.trim(), position: quickAddPos };
+        var laneName = lanePayload.name;
+        var lanePos = lanePayload.position;
+        var laneNum = quickAddLane;
+        R.post('plan_lane_put', lanePayload, function (tasks) {
+          var tempId = '_temp_' + Date.now();
+          var bounds = R.planLaneBounds ? R.planLaneBounds(laneNum) : { midY: R.H * 0.6 };
+          var tx = R.hoursToX ? R.hoursToX(lanePos || 0) : R.W * 0.5;
+          tasks.push({
+            id: tempId, name: laneName, mass: 30, solidity: 0.3, energy: 0.5,
+            fixed: false, alive: false, tags: [], position: lanePos, anchor: null,
+            ctx: { type: 'lane', lane: laneNum }, _dirtyUntil: Date.now() + 5000,
+            x: tx, y: bounds.midY || R.H * 0.6, tx: tx, ty: bounds.midY || R.H * 0.6, vx: 0, vy: 0
+          });
+        });
       } else {
         var payload = { name: quickAdd.value.trim() };
         if (quickAddPos !== null) {
@@ -567,7 +595,31 @@
           payload.cloud_y = Math.max(0, Math.min(1, (quickAddClickY - cTop) / (cBot - cTop)));
         }
         if (quickAddSelectedTag) payload.tags = [quickAddSelectedTag];
-        R.post('put', payload);
+        // Optimistic: insert a temporary task at the click location
+        var optName = payload.name;
+        var optPos = payload.position || null;
+        var optTags = payload.tags || [];
+        var optCloudX = payload.cloud_x;
+        var optCloudY = payload.cloud_y;
+        var optClickX = quickAddClickX;
+        var optClickY = quickAddClickY;
+        R.post('put', payload, function (tasks) {
+          var tempId = '_temp_' + Date.now();
+          var tx, ty;
+          if (optPos !== null) {
+            tx = R.hoursToX ? R.hoursToX(optPos) : R.W * 0.5;
+            ty = optClickY;
+          } else {
+            tx = optClickX;
+            ty = optClickY;
+          }
+          tasks.push({
+            id: tempId, name: optName, mass: 30, solidity: 0.3, energy: 0.5,
+            fixed: false, alive: false, tags: optTags, position: optPos, anchor: null,
+            ctx: { type: 'main' }, _dirtyUntil: Date.now() + 5000,
+            x: tx, y: ty, tx: tx, ty: ty, vx: 0, vy: 0
+          });
+        });
       }
       quickAddWrap.classList.add('hidden');
       quickAdd.value = '';
@@ -581,7 +633,14 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && R.planMode && !quickAddWrap.classList.contains('hidden')) return;
     if (e.key === 'Escape' && R.planMode) {
-      R.post('plan_end', {});
+      R.post('plan_end', {}, function () {
+        R.planMode = false;
+        R.planLanes = [];
+        R.planWindowStart = null;
+        R.planWindowEnd = null;
+        R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
+        if (R.updatePlanIndicator) R.updatePlanIndicator();
+      });
     }
   });
 

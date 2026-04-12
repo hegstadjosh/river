@@ -49,16 +49,21 @@
     if (!t || !t.ctx) return;
 
     // Mark dirty — sync will skip overwriting this task until server confirms
-    t._dirtyUntil = Date.now() + 3000; // survives 2 sync cycles (POST + SSE round-trip)
+    t._dirtyUntil = Date.now() + 3000;
+
+    // Optimistic: apply changes locally NOW
+    var optimistic = function () {
+      for (var k in changes) { if (changes.hasOwnProperty(k)) t[k] = changes[k]; }
+    };
 
     if (t.ctx.type === 'lane') {
       var payload = { lane: t.ctx.lane, task_id: taskId };
       for (var k in changes) payload[k] = changes[k];
-      R.post('plan_update_task', payload);
+      R.post('plan_update_task', payload, optimistic);
     } else {
       var payload = { id: taskId };
       for (var k in changes) payload[k] = changes[k];
-      R.post('put', payload);
+      R.post('put', payload, optimistic);
     }
   };
 
@@ -67,10 +72,13 @@
     if (!t || !t.ctx) return;
     t._dirtyUntil = Date.now() + 3000;
 
+    // Optimistic: update position locally NOW
+    var optimistic = function () { t.position = position; };
+
     if (t.ctx.type === 'lane') {
-      R.post('plan_reposition', { lane: t.ctx.lane, task_id: taskId, position: position });
+      R.post('plan_reposition', { lane: t.ctx.lane, task_id: taskId, position: position }, optimistic);
     } else {
-      R.post('move', { id: taskId, position: position });
+      R.post('move', { id: taskId, position: position }, optimistic);
     }
   };
 
@@ -78,10 +86,17 @@
     var t = R.findTask(taskId);
     if (!t || !t.ctx) return;
 
+    // Optimistic: remove from local store NOW
+    var optimistic = function (tasks) {
+      for (var i = tasks.length - 1; i >= 0; i--) {
+        if (tasks[i].id === taskId) { tasks.splice(i, 1); break; }
+      }
+    };
+
     if (t.ctx.type === 'lane') {
-      R.post('plan_remove', { lane: t.ctx.lane, task_id: taskId });
+      R.post('plan_remove', { lane: t.ctx.lane, task_id: taskId }, optimistic);
     } else {
-      R.post('delete', { id: taskId });
+      R.post('delete', { id: taskId }, optimistic);
     }
   };
 

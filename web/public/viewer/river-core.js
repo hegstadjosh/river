@@ -90,14 +90,20 @@ window.River = {};
     return h;
   };
 
-  R.post = function (action, data) {
+  // ── Optimistic post ─────────────────────────────────────────────
+  // Apply local changes IMMEDIATELY, then fire-and-forget to server.
+  // Server response triggers a full reconciliation via sync().
+  // optimisticFn(R.tasks) — mutate the task array in place before fetch.
+  R.post = function (action, data, optimisticFn) {
+    if (optimisticFn) {
+      try { optimisticFn(R.tasks); } catch (e) { console.error('optimistic update failed', e); }
+    }
     fetch('/api/state', {
       method: 'POST', headers: R.authHeaders(),
       body: JSON.stringify(Object.assign({ action: action }, data))
     }).then(function (r) {
       return r.json();
     }).then(function (d) {
-      // Server returns full state after mutations — apply it immediately
       if (d && d.river !== undefined) {
         R.state = d;
         R.sync();
