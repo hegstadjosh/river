@@ -1,51 +1,70 @@
 # River — Build Progress
 
-## Status: COMPLETE (v0.4.0 — Window-Locked Plan Mode)
+## Status: IN PROGRESS (v0.5.0 — Web Deployment)
+
+## Deployment URL
+**https://river-silk.vercel.app**
 
 ## What's Built
 
-### Backend (src/)
-- **MCP server**: 6 tools (put, move, look, branch, sweep, plan)
-- **SQLite storage**: tasks with energy, cloud_x/cloud_y, river_y, timelines, meta
-- **Modular architecture**: state.ts composes 8 db modules
-- **HTTP API**: 14 plan actions + core CRUD
-- **50 tests**: 13 core CRUD + 37 plan mode operations
+### Web Application (web/)
+- **Next.js 16** app on Vercel with Tailwind CSS
+- **Supabase project**: "River" (jgbcahwfompeeihxjszb) in us-east-1
+- **Postgres schema**: tasks, timelines, timeline_tasks, meta — all with RLS
+- **Auth**: Email/password via Supabase Auth (`@supabase/ssr`)
+- **State layer**: Full port of SQLite backend to Supabase (WebState class)
+- **API route**: `/api/state` handles all 16 viewer actions (put, move, delete, plan_*, tag_create)
+- **Viewer**: Copied to `public/viewer/` with polling (replaces SSE) and auth token passing
 
-### Viewer (viewer/)
-- **11 modular JS files** sharing `window.River` namespace via unified task store
-- **Unified task store** (`river-store.js`): one array, selectors, save/delete/position, SSE, sync
-- **No duplicate code paths**: one physics loop, one hit test, one save path
+### Remote MCP Server
+- **Route**: `/api/mcp/[transport]` via `mcp-handler` library
+- **API key auth**: `river_` prefix + 56-char hex, stored in `api_keys` table
+- **6 tools**: look, put, move, sweep, plan, branch — all operate on per-user data
+- **Context resource**: `river://context` gives agents full situational awareness
+- **Setup page**: `/mcp` with key generation and copy-paste configs for Claude Code/Desktop
 
-### Architecture
-- **One task array** (`R.tasks`) with `ctx` field: `{type:'main'}` or `{type:'lane', lane:N}`
-- **Selectors**: findTask, mainTasks, riverTasks, cloudTasks, tasksInLane, laneTasks, visibleTasks
-- **Single save path**: `R.save(id, changes)` resolves HTTP action from task context
-- **Persistent positions**: cloud_x/cloud_y and river_y stored in DB (no more customY hack)
+### Landing Page
+- Dark warm palette matching viewer (`#17161a`, amber `rgb(200, 165, 110)`)
+- Instrument Serif + IBM Plex Sans typography
+- Sections: hero, problem, three dimensions, cloud/river, Claude integration, CTA
+- Real viewer screenshot embedded
 
-### Plan Mode v2 (Window-Locked)
-- Click "Plan" to lock current visible time range as the plan window
-- **Lane 1**: read-only snapshot of current river tasks in window (labeled "current")
-- **Lanes 2-4**: Claude fills via MCP, or user fills manually
-- **Lane 5**: empty scratch lane for user
-- **Window-scoped commit**: "Use this" only replaces tasks within the plan window — everything outside untouched
-- **Plan window outline**: warm border on river showing the locked time range, visible at all zoom/scroll
-- **Lane 1 protections**: no drag, no resize handles, no commit button, no quick-add, dimmer rendering
-- **Escape key** exits plan mode
-- **MCP tool** rejects lane 1 modifications, includes window_start/window_end in status
+### Pages
+| Route | Status | Description |
+|-------|--------|-------------|
+| `/` | Live | Landing page |
+| `/login` | Live | Email/password auth |
+| `/app` | Live | Canvas viewer (iframe, auth-gated) |
+| `/mcp` | Live | MCP setup with API key management |
+| `/auth/callback` | Live | OAuth/email confirmation callback |
+| `/api/state` | Live | Task CRUD endpoint |
+| `/api/mcp/[transport]` | Live | Remote MCP server |
+| `/api/keys` | Live | API key CRUD |
 
-### Features
-- 3 task dimensions: duration (horizontal), commitment (shape), energy (color)
-- 4 drag handles per task: left/right=duration, top=commitment, bottom=energy
-- Horizon selector: 6h, day, 4d, week, month, quarter, year
-- Horizontal scrolling + frame navigation
-- Sticky snap-to-grid on visible time boundaries
-- Double-click to create tasks (in cloud, river, or plan lanes)
-- Cloud-to-river drag wizard (duration→commitment→energy in one gesture)
-- Drag-to-horizon timeframe switch (dwell 0.5s to zoom)
-- Persistent cloud positions (arrangeable, saved to DB)
-- Persistent river Y positions (vertical arrangement saved to DB)
-- Detail panel with start/end times, duration presets, energy slider
+## What's Next
+- [ ] Confirm email for test account and verify full auth flow
+- [ ] Add `SUPABASE_SERVICE_ROLE_KEY` to Vercel env for MCP auth
+- [ ] Test canvas viewer end-to-end (create tasks, drag, plan mode)
+- [ ] Test MCP connection from Claude Code
+- [ ] Set up email confirmation (or disable for dev)
+
+## Architectural Decisions
+- **Static viewer in iframe** over React wrapper — avoids SSR issues with `window` globals
+- **Polling (1s)** over SSE — Vercel serverless can't hold long connections
+- **Email/password** over Google OAuth — simpler setup per user preference
+- **mcp-handler** for MCP transport — same pattern as AlignEd project
+- **Service role client** for MCP auth — API key lookup bypasses RLS
 
 ## Known Issues
-- Module load order in index.html is fragile (no enforcement)
-- R.planMode still checked in river-input.js for genuinely plan-specific behaviors (lane detection, commit buttons)
+- Email confirmation required for new accounts (Supabase default) — need to either disable or users confirm via email
+- `SUPABASE_SERVICE_ROLE_KEY` not yet on Vercel — MCP auth won't work until added
+- Middleware deprecation warning from Next.js 16 (wants "proxy" convention instead)
+
+## Local MCP Server (unchanged)
+v0.4.0 COMPLETE — see previous PROGRESS.md entries. The local SQLite-based MCP server at `/Users/josh/river` is independent of the web deployment.
+
+## Git Log (recent)
+- fcd539a: feat: add landing page, MCP setup page, and viewer screenshot
+- a88a0fd: feat: add remote MCP server with API key auth
+- 7edd4d3: feat: scaffold Next.js web app with Supabase auth and state layer
+- 8ba3c8c: docs: add web deployment spec and viewer screenshots
