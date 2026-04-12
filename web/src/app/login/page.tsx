@@ -56,7 +56,7 @@ function LoginContent() {
             River
           </h1>
           <p className="text-sm" style={{ color: amberDim }}>
-            time flows, not ticks
+            vibe scheduling
           </p>
         </div>
 

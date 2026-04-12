@@ -15,7 +15,7 @@ const ibmPlex = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "River — time flows, not ticks",
+  title: "River — vibe scheduling",
   description:
     "A physics-based spatial task scheduler where tasks are organic shapes that drift in a river of time. No red, no overdue, no shame.",
 };
