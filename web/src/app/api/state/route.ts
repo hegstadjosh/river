@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { WebState } from '@/lib/river/state'
 
-// Cache ensured user IDs in-memory so we don't query timelines on every request
+// Cache ensured user IDs so we don't query timelines on every request
 const ensuredUsers = new Set<string>()
 
 async function getAuthedState() {
@@ -24,15 +24,16 @@ async function getAuthedState() {
     },
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  // Use getSession (reads JWT locally) instead of getUser (hits auth server)
+  // Middleware already validated the session on every request
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
 
-  const state = new WebState(supabase, user.id)
+  const state = new WebState(supabase, session.user.id)
 
-  // Only check/create main timeline once per server lifecycle
-  if (!ensuredUsers.has(user.id)) {
+  if (!ensuredUsers.has(session.user.id)) {
     await state.ensureUser()
-    ensuredUsers.add(user.id)
+    ensuredUsers.add(session.user.id)
   }
 
   return state
