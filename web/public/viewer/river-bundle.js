@@ -3446,8 +3446,16 @@ window.River = {};
     quickAddClickX = e.clientX;
     quickAddClickY = e.clientY;
 
-    if (R.planMode) {
-      // Only target a lane if click is inside the plan window (both X and Y)
+    if (R.isMobile) {
+      // Mobile: cloud is BELOW surfaceY, river is ABOVE
+      quickAddLane = -1;
+      if (e.clientY > sY) {
+        quickAddPos = null; // cloud task
+      } else {
+        quickAddPos = R.screenYToHours ? R.screenYToHours(e.clientY) : 0; // river task
+      }
+    } else if (R.planMode) {
+      // Desktop plan mode: only target a lane if click is inside the plan window
       var lane = R.planLaneAt(e.clientY);
       var inPlanX = false;
       if (R.planWindowStart && R.planWindowEnd && R.state) {
@@ -3505,15 +3513,28 @@ window.River = {};
         if (quickAddPos !== null) {
           // River task — include position and river_y so it appears at the click location
           payload.position = quickAddPos;
-          var rTop = R.surfaceY() + 30;
-          var rBot = R.H - 50;
-          payload.river_y = Math.max(0, Math.min(1, (quickAddClickY - rTop) / (rBot - rTop)));
+          if (R.isMobile) {
+            // Mobile: X is scatter axis, river is 0 to surfaceY
+            payload.river_y = Math.max(0, Math.min(1, (quickAddClickX - 20) / (R.W - 40)));
+          } else {
+            var rTop = R.surfaceY() + 30;
+            var rBot = R.H - 50;
+            payload.river_y = Math.max(0, Math.min(1, (quickAddClickY - rTop) / (rBot - rTop)));
+          }
         } else {
           // Cloud task — include cloud_x and cloud_y so it appears at the click location
-          var cTop = R.cloudTopY();
-          var cBot = R.surfaceY() - 50;
-          payload.cloud_x = Math.max(0, Math.min(1, (quickAddClickX - R.W * 0.15) / (R.W * 0.7)));
-          payload.cloud_y = Math.max(0, Math.min(1, (quickAddClickY - cTop) / (cBot - cTop)));
+          if (R.isMobile) {
+            // Mobile: cloud is below surfaceY
+            var mcTop = R.cloudTopY();
+            var mcBot = R.H - 20;
+            payload.cloud_x = Math.max(0, Math.min(1, (quickAddClickX - R.W * 0.1) / (R.W * 0.8)));
+            payload.cloud_y = Math.max(0, Math.min(1, (quickAddClickY - mcTop) / (mcBot - mcTop)));
+          } else {
+            var cTop = R.cloudTopY();
+            var cBot = R.surfaceY() - 50;
+            payload.cloud_x = Math.max(0, Math.min(1, (quickAddClickX - R.W * 0.15) / (R.W * 0.7)));
+            payload.cloud_y = Math.max(0, Math.min(1, (quickAddClickY - cTop) / (cBot - cTop)));
+          }
         }
         if (quickAddSelectedTag) payload.tags = [quickAddSelectedTag];
         // Optimistic: insert a temporary task at the click location
@@ -4031,7 +4052,7 @@ window.River = {};
   // Cloud zone: full width, BOTTOM strip (thumb-reachable)
   // CLAMPED: cloud tasks must stay below surfaceY
   function mCloudPos(task) {
-    var top = mSurfaceY() + 20;
+    var top = mSurfaceY() + HORIZON_BAR_H + 10; // below the timeframe bar
     var bot = R.H - 20;
     var cx = Math.max(0, Math.min(1, (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx')));
     var cy = Math.max(0, Math.min(1, (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy')));
@@ -4041,7 +4062,7 @@ window.River = {};
     };
   }
 
-  function mCloudTopY() { return mSurfaceY() + 10; }
+  function mCloudTopY() { return mSurfaceY() + HORIZON_BAR_H + 10; }
 
   // Convert screen Y to hours-from-now (inverse of mHoursToY)
   function mScreenYToHours(screenY) {

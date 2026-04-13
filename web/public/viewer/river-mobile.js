@@ -57,7 +57,7 @@
   // Cloud zone: full width, BOTTOM strip (thumb-reachable)
   // CLAMPED: cloud tasks must stay below surfaceY
   function mCloudPos(task) {
-    var top = mSurfaceY() + 20;
+    var top = mSurfaceY() + HORIZON_BAR_H + 10; // below the timeframe bar
     var bot = R.H - 20;
     var cx = Math.max(0, Math.min(1, (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx')));
     var cy = Math.max(0, Math.min(1, (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy')));
@@ -67,7 +67,7 @@
     };
   }
 
-  function mCloudTopY() { return mSurfaceY() + 10; }
+  function mCloudTopY() { return mSurfaceY() + HORIZON_BAR_H + 10; }
 
   // Convert screen Y to hours-from-now (inverse of mHoursToY)
   function mScreenYToHours(screenY) {
