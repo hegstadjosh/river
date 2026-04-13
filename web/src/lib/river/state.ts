@@ -240,7 +240,7 @@ export class WebState {
     if (planActive) {
       // Fetch lane data — parallelize lane queries
       const lanePromises = []
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 4; i++) {
         lanePromises.push(this.getLaneFast(i))
       }
       const laneResults = await Promise.all(lanePromises)
@@ -320,10 +320,10 @@ export class WebState {
     const mainId = await this.getMainTimelineId()
     const now = new Date().toISOString()
 
-    // Create all 5 lane branches in parallel
+    // Create all 4 lane branches in parallel
     const branchInserts = []
     const branchIds: string[] = []
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 4; i++) {
       const branchId = crypto.randomUUID()
       branchIds.push(branchId)
       branchInserts.push({
@@ -386,7 +386,7 @@ export class WebState {
 
     const lanes: PlanLaneInfo[] = []
     const laneQueries = []
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 4; i++) {
       laneQueries.push(
         this.supabase.from('timelines').select('id')
           .eq('user_id', this.userId).eq('name', laneBranchName(i)).maybeSingle()
@@ -501,7 +501,7 @@ export class WebState {
       .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', mainId).maybeSingle()
 
     if (mainTask) { source = mainTask } else {
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 4; i++) {
         const bid = await this.getLaneBranchId(i).catch(() => null)
         if (!bid) continue
         const { data } = await this.supabase.from('tasks').select('*')
@@ -602,7 +602,6 @@ export class WebState {
       this.deleteMeta('plan_lane_2_label'),
       this.deleteMeta('plan_lane_3_label'),
       this.deleteMeta('plan_lane_4_label'),
-      this.deleteMeta('plan_lane_5_label'),
     ])
 
     const mainId = await this.getMainTimelineId()

@@ -141,7 +141,8 @@
     if (R.planMode) {
       R.planLanes = [];
       var lanes = R.state.plan.lanes || [];
-      for (var li = 0; li < 5; li++) {
+      var laneCount = R.planLaneCount ? R.planLaneCount() : 4;
+      for (var li = 0; li < laneCount; li++) {
         R.planLanes.push(lanes[li] || { label: '', tasks: [] });
       }
       if (!wasPlanMode && R.initPlanStreaks) R.initPlanStreaks();
@@ -249,7 +250,8 @@
   // After sync, spread overlapping lane tasks vertically
   function spreadLaneTasks() {
     if (!R.planMode || !R.planLaneBounds) return;
-    for (var lane = 0; lane < 5; lane++) {
+    var laneCount = R.planLaneCount ? R.planLaneCount() : 4;
+    for (var lane = 0; lane < laneCount; lane++) {
       var tasks = R.tasksInLane(lane);
       if (tasks.length < 2) continue;
       var bounds = R.planLaneBounds(lane);
@@ -281,11 +283,13 @@
         var g = groups[gi];
         if (g.length === 1) {
           g[0].ty = bounds.midY;
+          g[0]._laneSlotH = laneH; // full lane height available
           continue;
         }
         var slotH = laneH / g.length;
         for (var si = 0; si < g.length; si++) {
           g[si].ty = bounds.top + pad + slotH * si + slotH / 2;
+          g[si]._laneSlotH = slotH; // constrain blob height to slot
         }
       }
     }
@@ -630,7 +634,7 @@
         // Plan state — IMPORTANT: only call R.sync() ONCE, after all data is ready
         if (planActive) {
           // Fetch lane tasks in parallel
-          var laneNums = [1, 2, 3, 4, 5];
+          var laneNums = [1, 2, 3, 4];
           var lanePromises = laneNums.map(function (n) {
             return sb.from('timelines').select('id')
               .eq('user_id', uid).eq('name', '_plan_lane_' + n).maybeSingle()

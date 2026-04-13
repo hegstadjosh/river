@@ -741,9 +741,10 @@ window.River = {};
       hw = Math.max(8, durationPx / 2);
       hh = Math.min(hw, Math.max(14, hw * 0.6));
       hh = Math.min(hh, 60);
-      // Clamp to lane height (small margin for separator lines)
-      if (a.ctx && a.ctx.type === 'lane' && R.planLaneHeight) {
-        hh = Math.min(hh, (R.planLaneHeight() - 4) / 2);
+      // Clamp to lane slot height (accounts for overlap spreading)
+      if (a.ctx && a.ctx.type === 'lane') {
+        var maxH = a._laneSlotH ? (a._laneSlotH - 4) / 2 : (R.planLaneHeight ? (R.planLaneHeight() - 4) / 2 : hh);
+        hh = Math.min(hh, maxH);
       }
     } else {
       hw = 18; hh = 18;
@@ -939,7 +940,7 @@ window.River = {};
 
   // ── Layout Helpers ─────────────────────────────────────────────────
 
-  R.planLaneCount = function () { return 5; };
+  R.planLaneCount = function () { return 4; };
 
   R.planRiverTop = function () { return R.surfaceY() + 5; };
 
@@ -1010,19 +1011,22 @@ window.River = {};
     // ── Draw lane separators (sediment layers) ──
     for (var i = 0; i < R.planLaneCount(); i++) {
       var bounds = R.planLaneBounds(i);
-
-      // Lane background — active lane is brighter
+      var isCurrent = (i === 0);
       var isActive = (R.planHoverLane === i);
-      var bgAlpha = isActive ? 0.02 : 0.005;
+      var laneData = R.planLanes[i];
+      var label = (laneData && laneData.label) ? laneData.label : '';
+
+      // Lane background — current lane slightly brighter
+      var bgAlpha = isCurrent ? (isActive ? 0.04 : 0.02) : (isActive ? 0.02 : 0.005);
       ctx.fillStyle = 'rgba(200, 165, 110, ' + bgAlpha + ')';
       ctx.fillRect(wLeftX, bounds.top, wRightX - wLeftX, laneH);
 
-      // Separator line at bottom of lane (except last)
+      // Separator line at bottom of lane (except last) — more visible
       if (i < R.planLaneCount() - 1) {
         ctx.beginPath();
-        ctx.moveTo(wLeftX + 40, bounds.bottom);
-        ctx.lineTo(wRightX - 40, bounds.bottom);
-        ctx.strokeStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.12 : 0.06) + ')';
+        ctx.moveTo(wLeftX, bounds.bottom);
+        ctx.lineTo(wRightX, bounds.bottom);
+        ctx.strokeStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.25 : 0.15) + ')';
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -1050,26 +1054,26 @@ window.River = {};
         }
       }
 
-      // ── Lane label ──
-      var laneData = R.planLanes[i];
-      var label = (laneData && laneData.label) ? laneData.label : (i === 0 ? 'current' : '');
-      if (label) {
-        ctx.save();
-        ctx.font = '400 11px -apple-system, system-ui, sans-serif';
+      // ── Lane labels on LEFT edge of plan area ──
+      ctx.save();
+      if (isCurrent) {
+        // Current lane: prominent label + left accent bar
+        ctx.font = '600 12px -apple-system, system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.45 : 0.25) + ')';
-        ctx.fillText(label, wLeftX + 16, bounds.midY);
-        ctx.restore();
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.6)';
+        ctx.fillText('current', wLeftX + 12, bounds.midY);
+        // Left edge accent bar
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.2)';
+        ctx.fillRect(wLeftX, bounds.top + 2, 3, laneH - 4);
+      } else {
+        // Other lanes: number + optional label
+        ctx.font = '500 11px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.4 : 0.2) + ')';
+        ctx.fillText(label || ('lane ' + (i + 1)), wLeftX + 12, bounds.midY);
       }
-
-      // ── Lane number (faint) ──
-      ctx.save();
-      ctx.font = '500 10px -apple-system, system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(200, 165, 110, 0.15)';
-      ctx.fillText((i + 1), wLeftX + 16, bounds.top + 6);
       ctx.restore();
     }
 
@@ -1116,23 +1120,23 @@ window.River = {};
       ctx.beginPath();
       ctx.roundRect(btnX, btnY, btnW, btnH, 6);
       ctx.fillStyle = isHover
-        ? 'rgba(200, 165, 110, 0.18)'
-        : 'rgba(200, 165, 110, 0.08)';
+        ? 'rgba(180, 70, 50, 0.25)'
+        : 'rgba(180, 70, 50, 0.12)';
       ctx.fill();
       ctx.strokeStyle = isHover
-        ? 'rgba(200, 165, 110, 0.35)'
-        : 'rgba(200, 165, 110, 0.15)';
+        ? 'rgba(180, 70, 50, 0.5)'
+        : 'rgba(180, 70, 50, 0.3)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Button text
-      ctx.font = '500 10px -apple-system, system-ui, sans-serif';
+      // Button text — bright red
+      ctx.font = '600 10px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = isHover
-        ? 'rgba(200, 165, 110, 0.85)'
-        : 'rgba(200, 165, 110, 0.45)';
-      ctx.fillText('Use this', btnX + btnW / 2, btnY + btnH / 2);
+        ? 'rgba(220, 90, 60, 0.95)'
+        : 'rgba(180, 70, 50, 0.7)';
+      ctx.fillText('Use lane', btnX + btnW / 2, btnY + btnH / 2);
       ctx.restore();
     }
   };
@@ -1347,7 +1351,8 @@ window.River = {};
     if (R.planMode) {
       R.planLanes = [];
       var lanes = R.state.plan.lanes || [];
-      for (var li = 0; li < 5; li++) {
+      var laneCount = R.planLaneCount ? R.planLaneCount() : 4;
+      for (var li = 0; li < laneCount; li++) {
         R.planLanes.push(lanes[li] || { label: '', tasks: [] });
       }
       if (!wasPlanMode && R.initPlanStreaks) R.initPlanStreaks();
@@ -1455,7 +1460,8 @@ window.River = {};
   // After sync, spread overlapping lane tasks vertically
   function spreadLaneTasks() {
     if (!R.planMode || !R.planLaneBounds) return;
-    for (var lane = 0; lane < 5; lane++) {
+    var laneCount = R.planLaneCount ? R.planLaneCount() : 4;
+    for (var lane = 0; lane < laneCount; lane++) {
       var tasks = R.tasksInLane(lane);
       if (tasks.length < 2) continue;
       var bounds = R.planLaneBounds(lane);
@@ -1487,11 +1493,13 @@ window.River = {};
         var g = groups[gi];
         if (g.length === 1) {
           g[0].ty = bounds.midY;
+          g[0]._laneSlotH = laneH; // full lane height available
           continue;
         }
         var slotH = laneH / g.length;
         for (var si = 0; si < g.length; si++) {
           g[si].ty = bounds.top + pad + slotH * si + slotH / 2;
+          g[si]._laneSlotH = slotH; // constrain blob height to slot
         }
       }
     }
@@ -1836,7 +1844,7 @@ window.River = {};
         // Plan state — IMPORTANT: only call R.sync() ONCE, after all data is ready
         if (planActive) {
           // Fetch lane tasks in parallel
-          var laneNums = [1, 2, 3, 4, 5];
+          var laneNums = [1, 2, 3, 4];
           var lanePromises = laneNums.map(function (n) {
             return sb.from('timelines').select('id')
               .eq('user_id', uid).eq('name', '_plan_lane_' + n).maybeSingle()
@@ -3747,7 +3755,16 @@ window.River = {};
       var rightHours = (R.W - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
       var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
-      R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
+      R.post('plan_start', { window_start: windowStart, window_end: windowEnd }, function () {
+        // Optimistic: show plan mode visuals immediately (server fills lane data)
+        R.planMode = true;
+        R.planWindowStart = windowStart;
+        R.planWindowEnd = windowEnd;
+        R.planLanes = [];
+        for (var i = 0; i < R.planLaneCount(); i++) R.planLanes.push({ label: '', tasks: [] });
+        if (R.initPlanStreaks) R.initPlanStreaks();
+        if (R.updatePlanIndicator) R.updatePlanIndicator();
+      });
     }
   });
 

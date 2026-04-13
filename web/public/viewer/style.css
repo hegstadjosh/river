@@ -434,7 +434,7 @@ input[type="checkbox"] {
 .tag-bar {
   position: absolute;
   top: 8px;
-  left: 34px;
+  left: 16px;
   z-index: 5;
   display: flex;
   gap: 10px;
@@ -615,7 +615,7 @@ input[type="checkbox"] {
 .plan-btn {
   position: absolute;
   top: 8px;
-  right: 16px;
+  right: 50px;
   z-index: 5;
   padding: 4px 10px;
   border-radius: 6px;
@@ -730,35 +730,35 @@ input[type="checkbox"] {
 /* ── Hamburger Menu ─────────────────────────────────────────── */
 
 .menu-btn {
-  position: fixed;
+  position: absolute;
   top: 8px;
-  left: 8px;
+  right: 16px;
   z-index: 200;
-  width: 18px;
-  height: 18px;
-  background: transparent;
-  border: none;
-  border-radius: 5px;
-  color: rgba(200, 165, 110, 0.35);
-  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(200, 165, 110, 0.06);
+  border: 1px solid rgba(200, 165, 110, 0.12);
+  color: rgba(200, 165, 110, 0.4);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: -apple-system, system-ui, sans-serif;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
   transition: background 0.2s, color 0.2s;
 }
 .menu-btn:hover {
-  background: rgba(200, 165, 110, 0.08);
+  background: rgba(200, 165, 110, 0.1);
   color: rgba(200, 165, 110, 0.7);
 }
 .menu-icon { line-height: 1; }
 .menu-dot {
   position: absolute;
-  top: -1px;
-  right: -1px;
-  width: 5px;
-  height: 5px;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
   background: rgb(200, 120, 80);
   border-radius: 50%;
   display: none;

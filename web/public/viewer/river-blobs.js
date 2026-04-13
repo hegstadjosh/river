@@ -55,9 +55,10 @@
       hw = Math.max(8, durationPx / 2);
       hh = Math.min(hw, Math.max(14, hw * 0.6));
       hh = Math.min(hh, 60);
-      // Clamp to lane height (small margin for separator lines)
-      if (a.ctx && a.ctx.type === 'lane' && R.planLaneHeight) {
-        hh = Math.min(hh, (R.planLaneHeight() - 4) / 2);
+      // Clamp to lane slot height (accounts for overlap spreading)
+      if (a.ctx && a.ctx.type === 'lane') {
+        var maxH = a._laneSlotH ? (a._laneSlotH - 4) / 2 : (R.planLaneHeight ? (R.planLaneHeight() - 4) / 2 : hh);
+        hh = Math.min(hh, maxH);
       }
     } else {
       hw = 18; hh = 18;

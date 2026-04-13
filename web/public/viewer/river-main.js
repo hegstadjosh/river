@@ -137,7 +137,16 @@
       var rightHours = (R.W - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
       var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
-      R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
+      R.post('plan_start', { window_start: windowStart, window_end: windowEnd }, function () {
+        // Optimistic: show plan mode visuals immediately (server fills lane data)
+        R.planMode = true;
+        R.planWindowStart = windowStart;
+        R.planWindowEnd = windowEnd;
+        R.planLanes = [];
+        for (var i = 0; i < R.planLaneCount(); i++) R.planLanes.push({ label: '', tasks: [] });
+        if (R.initPlanStreaks) R.initPlanStreaks();
+        if (R.updatePlanIndicator) R.updatePlanIndicator();
+      });
     }
   });
 

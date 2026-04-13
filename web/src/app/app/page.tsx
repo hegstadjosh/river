@@ -139,9 +139,9 @@ export default function AppPage() {
         <div className="wizard-field-zones" />
       </div>
 
-      {/* Hamburger menu */}
-      <button id="menu-btn" className="menu-btn" title="Menu" suppressHydrationWarning>
-        <span className="menu-icon">&#9776;</span>
+      {/* Settings menu */}
+      <button id="menu-btn" className="menu-btn" title="Settings" suppressHydrationWarning>
+        <span className="menu-icon">&#9881;</span>
         <span id="menu-dot" className="menu-dot" />
       </button>
       <div id="menu-sidebar" className="menu-sidebar hidden">
