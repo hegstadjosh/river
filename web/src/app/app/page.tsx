@@ -20,31 +20,67 @@ export default function AppPage() {
       }
       setReady(true)
 
-      // Preload state and timeline ID in parallel with iframe load
-      const statePromise = fetch('/api/state', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      })
-        .then(r => r.ok ? r.json() : null)
-        .catch(() => null)
+      // Query Supabase DIRECTLY for preload — no API route, no cold start
+      const uid = session.user.id
 
-      const timelinePromise = Promise.resolve(
+      const tidPromise = Promise.resolve(
         supabase
-          .from('meta')
-          .select('value')
-          .eq('key', 'current_timeline_id')
+          .from('meta').select('value')
+          .eq('user_id', uid).eq('key', 'current_timeline_id')
           .single()
           .then(({ data }) => data?.value ?? null)
       ).catch(() => null)
 
+      const statePromise = tidPromise.then(async (tid) => {
+        if (!tid) return null
+        const now = new Date()
+        const nowIso = now.toISOString()
+
+        const [riverRes, cloudRes, tagsRes, planRes] = await Promise.all([
+          supabase.from('tasks').select('*')
+            .eq('user_id', uid).eq('timeline_id', tid)
+            .not('anchor', 'is', null).order('anchor', { ascending: true }),
+          supabase.from('tasks').select('*')
+            .eq('user_id', uid).eq('timeline_id', tid)
+            .is('anchor', null),
+          supabase.from('meta').select('value')
+            .eq('user_id', uid).eq('key', 'known_tags').maybeSingle(),
+          supabase.from('meta').select('value')
+            .eq('user_id', uid).eq('key', 'plan_mode').maybeSingle(),
+        ])
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const withPos = (t: any) => ({
+          ...t,
+          position: t.anchor ? (new Date(t.anchor).getTime() - Date.now()) / 3600000 : null,
+          tags: t.tags || [],
+        })
+
+        const river = (riverRes.data ?? []).map(withPos)
+        const cloud = (cloudRes.data ?? []).map(withPos)
+
+        const endOf4h = new Date(now.getTime() + 4 * 3600000)
+        const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999)
+        const usedNext4h = river.filter(t => t.anchor && new Date(t.anchor as string) >= now && new Date(t.anchor as string) <= endOf4h)
+          .reduce((s, t) => s + (t.mass as number), 0)
+        const usedRoD = river.filter(t => t.anchor && new Date(t.anchor as string) >= now && new Date(t.anchor as string) <= endOfDay)
+          .reduce((s, t) => s + (t.mass as number), 0)
+
+        return {
+          river, cloud,
+          breathing_room: { next_4h: Math.max(0, 240 - usedNext4h), rest_of_day: Math.max(0, (endOfDay.getTime() - now.getTime()) / 60000 - usedRoD) },
+          now: nowIso, timeline: 'main',
+          known_tags: tagsRes.data ? JSON.parse(tagsRes.data.value).sort() : [],
+          plan: planRes.data?.value === 'true' ? { active: true } : undefined,
+        }
+      }).catch(() => null)
+
       const iframe = iframeRef.current
       if (iframe) {
         iframe.onload = async () => {
-          const [preloadedState, timelineId] = await Promise.all([statePromise, timelinePromise])
+          const [preloadedState, timelineId] = await Promise.all([statePromise, tidPromise])
           iframe.contentWindow?.postMessage(
-            { type: 'auth-token', token: session.access_token, state: preloadedState, userId: session.user.id, timelineId },
+            { type: 'auth-token', token: session.access_token, state: preloadedState, userId: uid, timelineId },
             window.location.origin
           )
         }
