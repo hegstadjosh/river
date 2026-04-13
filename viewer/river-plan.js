@@ -19,7 +19,7 @@
   R.planRiverHeight = function () { return R.H - R.planRiverTop() - 30; };
 
   // Current lane (0) gets 40% of height, rest split evenly
-  var CURRENT_LANE_RATIO = 0.40;
+  var CURRENT_LANE_RATIO = 0.33;
 
   R.planLaneHeight = function (i) {
     var total = R.planRiverHeight();
