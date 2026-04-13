@@ -93,8 +93,7 @@ export default function McpSetupPage() {
       mcpServers: {
         river: {
           command: 'npx',
-          args: ['-y', 'mcp-remote', sseUrl],
-          env: { MCP_HEADERS: `Authorization:Bearer ${displayToken}` },
+          args: ['-y', 'mcp-remote', sseUrl, '--header', `Authorization: Bearer ${displayToken}`],
         },
       },
     }, null, 2),
@@ -218,8 +217,8 @@ export default function McpSetupPage() {
         />
 
         <ConfigBlock
-          title="Claude Desktop"
-          description="Add to claude_desktop_config.json — uses mcp-remote bridge"
+          title="Claude Desktop &amp; ChatGPT"
+          description="Add to claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js. Restart Claude Desktop after saving. Also works with any MCP client that supports stdio."
           config={configs.claudeDesktop}
           configKey="claudeDesktop"
           copied={copied}
