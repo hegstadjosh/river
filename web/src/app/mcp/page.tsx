@@ -93,7 +93,7 @@ export default function McpSetupPage() {
       mcpServers: {
         river: {
           command: 'npx',
-          args: ['-y', 'mcp-remote', sseUrl, '--header', `Authorization: Bearer ${displayToken}`],
+          args: ['-y', 'mcp-remote', sseUrl, '--transport', 'sse-only', '--header', `Authorization: Bearer ${displayToken}`],
         },
       },
     }, null, 2),
