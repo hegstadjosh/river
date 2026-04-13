@@ -698,10 +698,9 @@
     setInterval(function () { R.fetchState(); }, 30000);
   };
 
-  // Wait for Supabase client before connecting
-  // (postMessage handler calls R.fetchState() when token arrives)
-  setTimeout(function () {
-    if (!R.state) R.fetchState();
-    if (window._riverSB) R.connectSSE();
-  }, 1000);
+  // Initialization is handled by the parent page (app/page.tsx):
+  // 1. Parent sets window globals (_riverSB, _riverUserId, _riverTimelineId)
+  // 2. Parent applies preloaded state via R.state + R.sync()
+  // 3. Parent calls R.connectSSE() to start Realtime
+  // No auto-init here — avoids race conditions with the parent.
 })();
