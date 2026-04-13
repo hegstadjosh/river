@@ -78,6 +78,7 @@
   var wizardZonesEl = wizardEl.querySelector('.wizard-field-zones');
 
   R.wizardActivate = function (taskId) {
+    if (R.isMobile) return; // no wizard on mobile
     wiz.active = true;
     wiz.stage = 0;
     wiz.taskId = taskId;

@@ -131,9 +131,9 @@
   R.sync = function () {
     if (!R.state) return;
 
-    // ── Detect plan mode ──
+    // ── Detect plan mode (disabled on mobile) ──
     var wasPlanMode = R.planMode;
-    R.planMode = !!(R.state.plan && R.state.plan.active !== false);
+    R.planMode = R.isMobile ? false : !!(R.state.plan && R.state.plan.active !== false);
     R.planWindowStart = R.planMode ? (R.state.plan.window_start || null) : null;
     R.planWindowEnd = R.planMode ? (R.state.plan.window_end || null) : null;
 

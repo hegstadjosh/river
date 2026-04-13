@@ -1366,9 +1366,9 @@ window.River = {};
   R.sync = function () {
     if (!R.state) return;
 
-    // ── Detect plan mode ──
+    // ── Detect plan mode (disabled on mobile) ──
     var wasPlanMode = R.planMode;
-    R.planMode = !!(R.state.plan && R.state.plan.active !== false);
+    R.planMode = R.isMobile ? false : !!(R.state.plan && R.state.plan.active !== false);
     R.planWindowStart = R.planMode ? (R.state.plan.window_start || null) : null;
     R.planWindowEnd = R.planMode ? (R.state.plan.window_end || null) : null;
 
@@ -2507,6 +2507,7 @@ window.River = {};
   var wizardZonesEl = wizardEl.querySelector('.wizard-field-zones');
 
   R.wizardActivate = function (taskId) {
+    if (R.isMobile) return; // no wizard on mobile
     wiz.active = true;
     wiz.stage = 0;
     wiz.taskId = taskId;
@@ -3784,6 +3785,7 @@ window.River = {};
   // ── Plan Mode Button ──────────────────────────────────────────────
   var planBtn = document.getElementById('plan-btn');
   planBtn.addEventListener('click', function () {
+    if (R.isMobile) return; // no plan mode on mobile
     if (R.planMode) {
       R.post('plan_end', {});
     } else {
@@ -3920,7 +3922,7 @@ window.River = {};
     R.drawResizeOverlay(t);
 
     // ── Plan commit buttons — drawn last so they're never covered ──
-    if (R.planMode && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
+    if (R.planMode && !R.isMobile && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
   }
 
   requestAnimationFrame(frame);

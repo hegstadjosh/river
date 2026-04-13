@@ -128,6 +128,7 @@
   // ── Plan Mode Button ──────────────────────────────────────────────
   var planBtn = document.getElementById('plan-btn');
   planBtn.addEventListener('click', function () {
+    if (R.isMobile) return; // no plan mode on mobile
     if (R.planMode) {
       R.post('plan_end', {});
     } else {
@@ -264,7 +265,7 @@
     R.drawResizeOverlay(t);
 
     // ── Plan commit buttons — drawn last so they're never covered ──
-    if (R.planMode && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
+    if (R.planMode && !R.isMobile && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
   }
 
   requestAnimationFrame(frame);

@@ -882,8 +882,13 @@ input[type="checkbox"] {
     padding: 10px 14px;
   }
 
-  /* Plan button: hidden by JS, but also hide via CSS as fallback */
+  /* Plan button: hidden */
   .plan-btn {
+    display: none !important;
+  }
+
+  /* Wizard field and dwell effects: disabled on mobile */
+  .wizard-field {
     display: none !important;
   }
 }
