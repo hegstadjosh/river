@@ -3114,8 +3114,8 @@ window.River = {};
       // Activates whenever the cursor is in the cloud zone during any drag.
       // Works for cloud tasks AND river tasks dragged upward.
       // Wizard activates only when well into the cloud zone (30px above surface)
-      var cloudThreshold = boundary - 30;
-      var inCloud = e.clientY < cloudThreshold;
+      var cloudThreshold = R.isMobile ? boundary + 30 : boundary - 30;
+      var inCloud = R.isMobile ? (e.clientY > cloudThreshold) : (e.clientY < cloudThreshold);
       if (R.wizardActivate) {
         if (inCloud && !R.dragging.wizardStarted) {
           R.wizardActivate(R.dragging.id);
@@ -3300,10 +3300,16 @@ window.River = {};
 
     var wizardWasActive = d.wizardStarted;
 
-    // Convert snapped start edge to hours-from-now
+    // Convert drop position to hours-from-now
     var dd2 = R.taskStretch(a);
-    var startEdge = a.x - dd2.hw;
-    var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
+    var dropHours;
+    if (R.isMobile && R.screenYToHours) {
+      dropHours = R.screenYToHours(a.y);
+    } else {
+      var startEdge = a.x - dd2.hw;
+      dropHours = R.screenXToHours(startEdge) + a.mass / 120;
+    }
+
     // Build one combined update — wizard properties + position change
     var updates = {};
     if (wizardWasActive) {
@@ -3312,30 +3318,58 @@ window.River = {};
       updates.energy = a.energy;
     }
 
-    var rTop = R.surfaceY() + 30;
-    var rBot = R.H - 50;
-    var cTop = R.cloudTopY();
-    var cBot = R.surfaceY() - 50;
+    if (R.isMobile) {
+      // Mobile: river is ABOVE boundary, cloud is BELOW
+      var rTop = 20;
+      var rBot = boundary - 10;
+      var cTop = boundary + 10;
+      var cBot = R.H - 20;
 
-    if (d.zone === 'cloud' && a.y > boundary) {
-      // Cloud → river
-      updates.position = dropHours;
-      updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
-    } else if (d.zone === 'river' && a.y < boundary) {
-      // River → cloud
-      updates.position = null;
-      updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.15) / (R.W * 0.7)));
-      updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
-    } else if (d.zone === 'river' && a.y > boundary) {
-      // River → river (reposition)
-      var dd3 = R.taskStretch(a);
-      var startEdge2 = a.x - dd3.hw;
-      updates.position = R.screenXToHours(startEdge2) + a.mass / 120;
-      updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
-    } else if (d.zone === 'cloud') {
-      // Cloud → cloud (rearrange)
-      updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.15) / (R.W * 0.7)));
-      updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+      if (d.zone === 'cloud' && a.y < boundary) {
+        // Cloud → river (dragged UP into river zone)
+        updates.position = dropHours;
+        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+      } else if (d.zone === 'river' && a.y > boundary) {
+        // River → cloud (dragged DOWN into cloud zone)
+        updates.position = null;
+        updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
+        updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+      } else if (d.zone === 'river') {
+        // River → river (reposition)
+        updates.position = dropHours;
+        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+      } else if (d.zone === 'cloud') {
+        // Cloud → cloud (rearrange)
+        updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
+        updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+      }
+    } else {
+      // Desktop: cloud is ABOVE boundary, river is BELOW
+      var rTop = R.surfaceY() + 30;
+      var rBot = R.H - 50;
+      var cTop = R.cloudTopY();
+      var cBot = R.surfaceY() - 50;
+
+      if (d.zone === 'cloud' && a.y > boundary) {
+        // Cloud → river
+        updates.position = dropHours;
+        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+      } else if (d.zone === 'river' && a.y < boundary) {
+        // River → cloud
+        updates.position = null;
+        updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.15) / (R.W * 0.7)));
+        updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+      } else if (d.zone === 'river' && a.y > boundary) {
+        // River → river (reposition)
+        var dd3 = R.taskStretch(a);
+        var startEdge2 = a.x - dd3.hw;
+        updates.position = R.screenXToHours(startEdge2) + a.mass / 120;
+        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+      } else if (d.zone === 'cloud') {
+        // Cloud → cloud (rearrange)
+        updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.15) / (R.W * 0.7)));
+        updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+      }
     }
 
     // Send everything in one put
@@ -3844,6 +3878,16 @@ window.River = {};
       a.vy *= R.DAMPING;
       a.x += a.vx;
       a.y += a.vy;
+
+      // Mobile: hard boundary — river tasks stay above surfaceY, cloud tasks stay below
+      if (R.isMobile) {
+        var sY = R.surfaceY();
+        if (a.position !== null && a.position !== undefined) {
+          if (a.y > sY - 5) { a.y = sY - 5; a.vy = 0; }
+        } else {
+          if (a.y < sY + 5) { a.y = sY + 5; a.vy = 0; }
+        }
+      }
     }
 
     // Draw the world
@@ -3966,6 +4010,7 @@ window.River = {};
   var _origDrawTimeMarkers = R.drawTimeMarkers;
   var _origInitStreaks = R.initStreaks;
   var _origTaskStretch = R.taskStretch;
+  var _origCloudTopY = R.cloudTopY;
 
   // ── Mobile Constants ───────────────────────────────────────────────
   var CLOUD_HEIGHT_RATIO = 0.15; // cloud is bottom 15%
@@ -3984,15 +4029,24 @@ window.River = {};
   }
 
   // Cloud zone: full width, BOTTOM strip (thumb-reachable)
+  // CLAMPED: cloud tasks must stay below surfaceY
   function mCloudPos(task) {
     var top = mSurfaceY() + 20;
     var bot = R.H - 20;
-    var cx = (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx');
-    var cy = (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy');
+    var cx = Math.max(0, Math.min(1, (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx')));
+    var cy = Math.max(0, Math.min(1, (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy')));
     return {
       x: R.W * 0.1 + cx * R.W * 0.8,
       y: top + cy * (bot - top)
     };
+  }
+
+  function mCloudTopY() { return mSurfaceY() + 10; }
+
+  // Convert screen Y to hours-from-now (inverse of mHoursToY)
+  function mScreenYToHours(screenY) {
+    var ny = mNowY();
+    return R.scrollHours + (ny - screenY) / R.PIXELS_PER_HOUR;
   }
 
   // Convert hours-from-now to screen Y
@@ -4007,8 +4061,10 @@ window.River = {};
   function mHoursToX() { return R.W * 0.5; }
 
   // River task position: Y from time, X from hash scatter
+  // CLAMPED: river tasks must stay above surfaceY (never in cloud zone)
   function mRiverPos(task) {
     var y = mHoursToY(task.position || 0);
+    y = Math.max(20, Math.min(y, mSurfaceY() - 10));
     var left = 20;
     var right = R.W - 20;
     var rx = (task.river_y != null) ? task.river_y : R.hashFrac(task.id, 'ry');
@@ -4226,6 +4282,8 @@ window.River = {};
     R.riverPos = mRiverPos;
     R.hoursToX = mHoursToX;
     R.hoursToY = mHoursToY;
+    R.cloudTopY = mCloudTopY;
+    R.screenYToHours = mScreenYToHours;
     R.nx = function () { return R.W * 0.5; };
     R.recalcScale = mRecalcScale;
     R.taskStretch = mTaskStretch;
@@ -4261,6 +4319,8 @@ window.River = {};
     R.riverPos = _origRiverPos;
     R.hoursToX = _origHoursToX;
     delete R.hoursToY;
+    delete R.screenYToHours;
+    R.cloudTopY = _origCloudTopY;
     R.nx = _origNx;
     R.recalcScale = _origRecalcScale;
     R.taskStretch = _origTaskStretch;

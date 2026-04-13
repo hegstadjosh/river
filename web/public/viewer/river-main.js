@@ -186,6 +186,16 @@
       a.vy *= R.DAMPING;
       a.x += a.vx;
       a.y += a.vy;
+
+      // Mobile: hard boundary — river tasks stay above surfaceY, cloud tasks stay below
+      if (R.isMobile) {
+        var sY = R.surfaceY();
+        if (a.position !== null && a.position !== undefined) {
+          if (a.y > sY - 5) { a.y = sY - 5; a.vy = 0; }
+        } else {
+          if (a.y < sY + 5) { a.y = sY + 5; a.vy = 0; }
+        }
+      }
     }
 
     // Draw the world

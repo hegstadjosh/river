@@ -36,6 +36,7 @@
   var _origDrawTimeMarkers = R.drawTimeMarkers;
   var _origInitStreaks = R.initStreaks;
   var _origTaskStretch = R.taskStretch;
+  var _origCloudTopY = R.cloudTopY;
 
   // ── Mobile Constants ───────────────────────────────────────────────
   var CLOUD_HEIGHT_RATIO = 0.15; // cloud is bottom 15%
@@ -54,15 +55,24 @@
   }
 
   // Cloud zone: full width, BOTTOM strip (thumb-reachable)
+  // CLAMPED: cloud tasks must stay below surfaceY
   function mCloudPos(task) {
     var top = mSurfaceY() + 20;
     var bot = R.H - 20;
-    var cx = (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx');
-    var cy = (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy');
+    var cx = Math.max(0, Math.min(1, (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx')));
+    var cy = Math.max(0, Math.min(1, (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy')));
     return {
       x: R.W * 0.1 + cx * R.W * 0.8,
       y: top + cy * (bot - top)
     };
+  }
+
+  function mCloudTopY() { return mSurfaceY() + 10; }
+
+  // Convert screen Y to hours-from-now (inverse of mHoursToY)
+  function mScreenYToHours(screenY) {
+    var ny = mNowY();
+    return R.scrollHours + (ny - screenY) / R.PIXELS_PER_HOUR;
   }
 
   // Convert hours-from-now to screen Y
@@ -77,8 +87,10 @@
   function mHoursToX() { return R.W * 0.5; }
 
   // River task position: Y from time, X from hash scatter
+  // CLAMPED: river tasks must stay above surfaceY (never in cloud zone)
   function mRiverPos(task) {
     var y = mHoursToY(task.position || 0);
+    y = Math.max(20, Math.min(y, mSurfaceY() - 10));
     var left = 20;
     var right = R.W - 20;
     var rx = (task.river_y != null) ? task.river_y : R.hashFrac(task.id, 'ry');
@@ -296,6 +308,8 @@
     R.riverPos = mRiverPos;
     R.hoursToX = mHoursToX;
     R.hoursToY = mHoursToY;
+    R.cloudTopY = mCloudTopY;
+    R.screenYToHours = mScreenYToHours;
     R.nx = function () { return R.W * 0.5; };
     R.recalcScale = mRecalcScale;
     R.taskStretch = mTaskStretch;
@@ -331,6 +345,8 @@
     R.riverPos = _origRiverPos;
     R.hoursToX = _origHoursToX;
     delete R.hoursToY;
+    delete R.screenYToHours;
+    R.cloudTopY = _origCloudTopY;
     R.nx = _origNx;
     R.recalcScale = _origRecalcScale;
     R.taskStretch = _origTaskStretch;
