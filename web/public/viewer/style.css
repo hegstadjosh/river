@@ -434,7 +434,7 @@ input[type="checkbox"] {
 .tag-bar {
   position: absolute;
   top: 8px;
-  left: 48px;
+  left: 34px;
   z-index: 5;
   display: flex;
   gap: 10px;
@@ -734,30 +734,31 @@ input[type="checkbox"] {
   top: 8px;
   left: 8px;
   z-index: 200;
-  width: 32px;
-  height: 32px;
-  background: rgba(200, 165, 110, 0.08);
-  border: 1px solid rgba(200, 165, 110, 0.12);
-  border-radius: 6px;
-  color: rgba(200, 165, 110, 0.5);
-  font-size: 16px;
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: rgba(200, 165, 110, 0.35);
+  font-size: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   transition: background 0.2s, color 0.2s;
 }
 .menu-btn:hover {
-  background: rgba(200, 165, 110, 0.15);
-  color: rgba(200, 165, 110, 0.8);
+  background: rgba(200, 165, 110, 0.08);
+  color: rgba(200, 165, 110, 0.7);
 }
 .menu-icon { line-height: 1; }
 .menu-dot {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 7px;
-  height: 7px;
+  top: -1px;
+  right: -1px;
+  width: 5px;
+  height: 5px;
   background: rgb(200, 120, 80);
   border-radius: 50%;
   display: none;

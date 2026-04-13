@@ -214,7 +214,7 @@
     if (R.resizing && R.resizing.id === a.id) return;
 
     var fontSize = Math.max(10, Math.min(14, hh * 0.65));
-    var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
+    var labelA = Math.min(0.95, 0.75 + sol * 0.2) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

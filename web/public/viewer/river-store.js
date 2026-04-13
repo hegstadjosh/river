@@ -627,7 +627,7 @@
           known_tags: knownTagsRaw ? JSON.parse(knownTagsRaw).sort() : [],
         };
 
-        // Plan state
+        // Plan state — IMPORTANT: only call R.sync() ONCE, after all data is ready
         if (planActive) {
           // Fetch lane tasks in parallel
           var laneNums = [1, 2, 3, 4, 5];
@@ -655,6 +655,7 @@
             };
             R.state = state; R.sync();
           });
+          // Do NOT call R.sync() here — wait for lane data
         } else {
           R.state = state; R.sync();
         }

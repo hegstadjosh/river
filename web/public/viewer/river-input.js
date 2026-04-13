@@ -62,20 +62,7 @@
       var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
       if (commitLane >= 0) {
         var cl = commitLane;
-        R.post('plan_commit', { lane: cl }, function () {
-          // Optimistic: exit plan mode and merge lane tasks into main
-          var laneTasks = R.tasks.filter(function (t) { return t.ctx && t.ctx.type === 'lane' && t.ctx.lane === cl; });
-          for (var i = 0; i < laneTasks.length; i++) {
-            laneTasks[i].ctx = { type: 'main' };
-            laneTasks[i]._dirtyUntil = Date.now() + 5000;
-          }
-          R.planMode = false;
-          R.planLanes = [];
-          R.planWindowStart = null;
-          R.planWindowEnd = null;
-          R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
-          if (R.updatePlanIndicator) R.updatePlanIndicator();
-        });
+        R.post('plan_commit', { lane: cl });
         return;
       }
     }
@@ -633,14 +620,7 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && R.planMode && !quickAddWrap.classList.contains('hidden')) return;
     if (e.key === 'Escape' && R.planMode) {
-      R.post('plan_end', {}, function () {
-        R.planMode = false;
-        R.planLanes = [];
-        R.planWindowStart = null;
-        R.planWindowEnd = null;
-        R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
-        if (R.updatePlanIndicator) R.updatePlanIndicator();
-      });
+      R.post('plan_end', {});
     }
   });
 

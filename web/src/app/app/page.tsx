@@ -67,7 +67,8 @@ export default function AppPage() {
           },
           now: now.toISOString(), timeline: 'main',
           known_tags: tagsRes.data ? JSON.parse(tagsRes.data.value).sort() : [],
-          plan: planRes.data?.value === 'true' ? { active: true } : undefined,
+          // Don't preload partial plan state — let fetchState() load it fully
+          // to avoid entering broken plan mode with no lanes or window bounds
         }
       }
 

@@ -900,7 +900,7 @@ window.River = {};
     if (R.resizing && R.resizing.id === a.id) return;
 
     var fontSize = Math.max(10, Math.min(14, hh * 0.65));
-    var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
+    var labelA = Math.min(0.95, 0.75 + sol * 0.2) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1833,7 +1833,7 @@ window.River = {};
           known_tags: knownTagsRaw ? JSON.parse(knownTagsRaw).sort() : [],
         };
 
-        // Plan state
+        // Plan state — IMPORTANT: only call R.sync() ONCE, after all data is ready
         if (planActive) {
           // Fetch lane tasks in parallel
           var laneNums = [1, 2, 3, 4, 5];
@@ -1861,6 +1861,7 @@ window.River = {};
             };
             R.state = state; R.sync();
           });
+          // Do NOT call R.sync() here — wait for lane data
         } else {
           R.state = state; R.sync();
         }
@@ -2892,20 +2893,7 @@ window.River = {};
       var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
       if (commitLane >= 0) {
         var cl = commitLane;
-        R.post('plan_commit', { lane: cl }, function () {
-          // Optimistic: exit plan mode and merge lane tasks into main
-          var laneTasks = R.tasks.filter(function (t) { return t.ctx && t.ctx.type === 'lane' && t.ctx.lane === cl; });
-          for (var i = 0; i < laneTasks.length; i++) {
-            laneTasks[i].ctx = { type: 'main' };
-            laneTasks[i]._dirtyUntil = Date.now() + 5000;
-          }
-          R.planMode = false;
-          R.planLanes = [];
-          R.planWindowStart = null;
-          R.planWindowEnd = null;
-          R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
-          if (R.updatePlanIndicator) R.updatePlanIndicator();
-        });
+        R.post('plan_commit', { lane: cl });
         return;
       }
     }
@@ -3463,14 +3451,7 @@ window.River = {};
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && R.planMode && !quickAddWrap.classList.contains('hidden')) return;
     if (e.key === 'Escape' && R.planMode) {
-      R.post('plan_end', {}, function () {
-        R.planMode = false;
-        R.planLanes = [];
-        R.planWindowStart = null;
-        R.planWindowEnd = null;
-        R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
-        if (R.updatePlanIndicator) R.updatePlanIndicator();
-      });
+      R.post('plan_end', {});
     }
   });
 
@@ -3737,16 +3718,7 @@ window.River = {};
   var planBtn = document.getElementById('plan-btn');
   planBtn.addEventListener('click', function () {
     if (R.planMode) {
-      R.post('plan_end', {}, function () {
-        // Optimistic: exit plan mode immediately
-        R.planMode = false;
-        R.planLanes = [];
-        R.planWindowStart = null;
-        R.planWindowEnd = null;
-        // Remove lane tasks from local store
-        R.tasks = R.tasks.filter(function (t) { return !t.ctx || t.ctx.type !== 'lane'; });
-        if (R.updatePlanIndicator) R.updatePlanIndicator();
-      });
+      R.post('plan_end', {});
     } else {
       // Lock the current visible time range — use actual screen edges
       var now = R.state ? new Date(R.state.now) : new Date();
@@ -3754,16 +3726,7 @@ window.River = {};
       var rightHours = (R.W - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
       var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
-      R.post('plan_start', { window_start: windowStart, window_end: windowEnd }, function () {
-        // Optimistic: enter plan mode immediately with empty lanes
-        R.planMode = true;
-        R.planWindowStart = windowStart;
-        R.planWindowEnd = windowEnd;
-        R.planLanes = [];
-        for (var i = 0; i < 5; i++) R.planLanes.push({ label: '', tasks: [] });
-        if (R.initPlanStreaks) R.initPlanStreaks();
-        if (R.updatePlanIndicator) R.updatePlanIndicator();
-      });
+      R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
     }
   });
 
