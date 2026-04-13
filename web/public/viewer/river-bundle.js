@@ -4185,10 +4185,10 @@ window.River = {};
     ctx.fillStyle = glowGrad;
     ctx.fillRect(0, y - glowH, R.W, glowH * 2);
 
-    // Horizontal now line
+    // Horizontal now line — edge to edge
     ctx.beginPath();
-    ctx.moveTo(20, y);
-    ctx.lineTo(R.W - 20, y);
+    ctx.moveTo(0, y);
+    ctx.lineTo(R.W, y);
     ctx.strokeStyle = 'rgba(200, 165, 110, ' + (0.3 + breath * 0.15) + ')';
     ctx.lineWidth = 1.5;
     ctx.stroke();
