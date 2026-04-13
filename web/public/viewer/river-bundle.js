@@ -3005,7 +3005,9 @@ window.River = {};
 
   // Detect if mouse is in the resize handle zone.
   // Handles are OUTSIDE the grab area — they extend beyond the task edges.
-  // 4 handles: left/right = duration, top = commitment, bottom = energy
+  // Desktop: left/right = duration, top = commitment, bottom = energy
+  // Mobile:  top/bottom = duration, right = commitment, left = energy
+  // Returns PHYSICAL side names — the resize handler interprets per platform
   R.edgeHit = function (mx, my) {
     var visible = R.visibleTasks();
     for (var i = visible.length - 1; i >= 0; i--) {
@@ -3014,7 +3016,7 @@ window.River = {};
       var grabHW = Math.max(R.MIN_HIT, d.hw);
       var grabHH = Math.max(R.MIN_HIT, d.hh);
 
-      // Check vertical handles (top/bottom) — always available
+      // Check vertical handles (top/bottom)
       var tEdge = a.y - grabHH;
       var bEdge = a.y + grabHH;
       if (Math.abs(mx - a.x) <= grabHW) {
@@ -3117,10 +3119,21 @@ window.River = {};
       var a = R.findTask(R.resizing.id);
       if (!a) return;
 
-      if (R.resizing.side === 'top') {
-        // Top = commitment. Drag up = more committed.
-        var deltaY = R.resizing.startMY - e.clientY;
-        var newSol = Math.max(0, Math.min(1, R.resizing.startSolidity + deltaY / 80));
+      // Mobile remapping: top/bottom = duration, right = commitment, left = energy
+      // Desktop: top = commitment, bottom = energy, left/right = duration
+      var isMobileDuration = R.isMobile && (R.resizing.side === 'top' || R.resizing.side === 'bottom');
+      var isMobileCommitment = R.isMobile && R.resizing.side === 'right';
+      var isMobileEnergy = R.isMobile && R.resizing.side === 'left';
+      var isDesktopCommitment = !R.isMobile && R.resizing.side === 'top';
+      var isDesktopEnergy = !R.isMobile && R.resizing.side === 'bottom';
+      var isDesktopDuration = !R.isMobile && (R.resizing.side === 'left' || R.resizing.side === 'right');
+
+      if (isDesktopCommitment || isMobileCommitment) {
+        // Commitment: drag away from blob = more committed
+        var delta = R.isMobile
+          ? (e.clientX - R.resizing.startMX) / 80   // right = drag right = more
+          : (R.resizing.startMY - e.clientY) / 80;   // top = drag up = more
+        var newSol = Math.max(0, Math.min(1, R.resizing.startSolidity + delta));
         a.solidity = newSol;
         var solDelta = newSol - R.resizing.startSolidity;
         if (R.resizing.group) {
@@ -3132,11 +3145,13 @@ window.River = {};
         }
         var panelSolidity = document.getElementById('panel-solidity');
         if (R.selectedId === a.id) panelSolidity.value = Math.round(newSol * 100);
-        R.canvas.style.cursor = 'ns-resize';
-      } else if (R.resizing.side === 'bottom') {
-        // Bottom = energy. Drag up = more energy.
-        var deltaY = R.resizing.startMY - e.clientY;
-        var newEnergy = Math.max(0, Math.min(1, R.resizing.startEnergy + deltaY / 80));
+        R.canvas.style.cursor = R.isMobile ? 'ew-resize' : 'ns-resize';
+      } else if (isDesktopEnergy || isMobileEnergy) {
+        // Energy: drag away from blob = more energy
+        var delta = R.isMobile
+          ? (R.resizing.startMX - e.clientX) / 80   // left = drag left = more
+          : (R.resizing.startMY - e.clientY) / 80;   // bottom = drag up = more
+        var newEnergy = Math.max(0, Math.min(1, R.resizing.startEnergy + delta));
         a.energy = newEnergy;
         var engDelta = newEnergy - R.resizing.startEnergy;
         if (R.resizing.group) {
@@ -3148,23 +3163,45 @@ window.River = {};
         }
         var pe = document.getElementById('panel-energy');
         if (pe && R.selectedId === a.id) pe.value = Math.round(newEnergy * 100);
-        R.canvas.style.cursor = 'ns-resize';
-      } else {
-        // Horizontal: snap the dragged edge to grid
-        var snappedEdge = R.snapX(e.clientX);
+        R.canvas.style.cursor = R.isMobile ? 'ew-resize' : 'ns-resize';
+      } else if (isDesktopDuration || isMobileDuration) {
+        // Duration resize
+        if (R.isMobile) {
+          // Mobile: vertical duration — snap Y edge to time grid
+          var snappedY = R.snapY ? R.snapY(e.clientY) : e.clientY;
+          var startY = R.resizing.startMY;
+          var halfDurPx = (R.resizing.startMass / 60) * R.PIXELS_PER_HOUR / 2;
 
-        if (R.resizing.side === 'right') {
-          var leftEdgeX = R.resizing.startX - (R.resizing.startMass / 60) * R.PIXELS_PER_HOUR / 2;
-          var newWidthPx = Math.max(8, snappedEdge - leftEdgeX);
-          a.mass = Math.max(5, Math.round((newWidthPx / R.PIXELS_PER_HOUR) * 60));
-          a.x = leftEdgeX + newWidthPx / 2;
-          a.tx = a.x;
+          if (R.resizing.side === 'top') {
+            // Drag top edge (future edge) — bottom edge stays fixed
+            var botEdgeY = startY + halfDurPx; // approximate
+            var newHPx = Math.max(8, botEdgeY - snappedY);
+            a.mass = Math.max(5, Math.round((newHPx / R.PIXELS_PER_HOUR) * 60));
+          } else {
+            // Drag bottom edge (past edge) — top edge stays fixed
+            var topEdgeY = startY - halfDurPx;
+            var newHPx = Math.max(8, snappedY - topEdgeY);
+            a.mass = Math.max(5, Math.round((newHPx / R.PIXELS_PER_HOUR) * 60));
+          }
+          R.canvas.style.cursor = 'ns-resize';
         } else {
-          var rightEdgeX = R.resizing.startX + (R.resizing.startMass / 60) * R.PIXELS_PER_HOUR / 2;
-          var newWidthPx = Math.max(8, rightEdgeX - snappedEdge);
-          a.mass = Math.max(5, Math.round((newWidthPx / R.PIXELS_PER_HOUR) * 60));
-          a.x = rightEdgeX - newWidthPx / 2;
-          a.tx = a.x;
+          // Desktop: horizontal duration — snap X edge to time grid
+          var snappedEdge = R.snapX(e.clientX);
+
+          if (R.resizing.side === 'right') {
+            var leftEdgeX = R.resizing.startX - (R.resizing.startMass / 60) * R.PIXELS_PER_HOUR / 2;
+            var newWidthPx = Math.max(8, snappedEdge - leftEdgeX);
+            a.mass = Math.max(5, Math.round((newWidthPx / R.PIXELS_PER_HOUR) * 60));
+            a.x = leftEdgeX + newWidthPx / 2;
+            a.tx = a.x;
+          } else {
+            var rightEdgeX = R.resizing.startX + (R.resizing.startMass / 60) * R.PIXELS_PER_HOUR / 2;
+            var newWidthPx = Math.max(8, rightEdgeX - snappedEdge);
+            a.mass = Math.max(5, Math.round((newWidthPx / R.PIXELS_PER_HOUR) * 60));
+            a.x = rightEdgeX - newWidthPx / 2;
+            a.tx = a.x;
+          }
+          R.canvas.style.cursor = 'ew-resize';
         }
         var massDelta = a.mass - R.resizing.startMass;
         if (R.resizing.group) {
@@ -3819,26 +3856,34 @@ window.River = {};
       if (da && da.position !== null && da.position !== undefined && R.state) {
         var dnow = new Date(R.state.now);
         var dd = R.taskStretch(da);
-        // position = center. Start = center - half duration. End = center + half.
-        var centerHours = (da.x - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
-        var halfDurH = da.mass / 120; // half duration in hours
-        var startHours = centerHours - halfDurH;
-        var endHours = centerHours + halfDurH;
-
-        var startTime = new Date(dnow.getTime() + startHours * 3600000);
-        var endTime = new Date(dnow.getTime() + endHours * 3600000);
+        var halfDurH = da.mass / 120;
 
         ctx.font = '500 11px -apple-system, system-ui, sans-serif';
-        ctx.textBaseline = 'middle';
-
-        // Start time to the left
-        ctx.textAlign = 'right';
         ctx.fillStyle = 'rgba(200, 165, 110, 0.7)';
-        ctx.fillText(R.fmtDragTime(startTime), da.x - dd.hw - 8, da.y);
 
-        // End time to the right
-        ctx.textAlign = 'left';
-        ctx.fillText(R.fmtDragTime(endTime), da.x + dd.hw + 8, da.y);
+        if (R.isMobile && R.screenYToHours) {
+          // Mobile: start (future) on TOP, end (past) on BOTTOM
+          var centerH = R.screenYToHours(da.y);
+          var startTime = new Date(dnow.getTime() + (centerH + halfDurH) * 3600000);
+          var endTime = new Date(dnow.getTime() + (centerH - halfDurH) * 3600000);
+
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(R.fmtDragTime(startTime), da.x, da.y - dd.hh - 6);
+          ctx.textBaseline = 'top';
+          ctx.fillText(R.fmtDragTime(endTime), da.x, da.y + dd.hh + 6);
+        } else {
+          // Desktop: start on LEFT, end on RIGHT
+          var centerHours = (da.x - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
+          var startTime = new Date(dnow.getTime() + (centerHours - halfDurH) * 3600000);
+          var endTime = new Date(dnow.getTime() + (centerHours + halfDurH) * 3600000);
+
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'right';
+          ctx.fillText(R.fmtDragTime(startTime), da.x - dd.hw - 8, da.y);
+          ctx.textAlign = 'left';
+          ctx.fillText(R.fmtDragTime(endTime), da.x + dd.hw + 8, da.y);
+        }
       }
     }
   };
