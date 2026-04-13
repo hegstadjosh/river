@@ -29,7 +29,6 @@ export async function POST() {
   const { data, error } = await supabase.from('api_keys').insert({
     user_id: user.id,
     key,
-    key_hash: hashApiKey(key),
     name: 'Default',
   }).select('id, name, created_at').single()
 
