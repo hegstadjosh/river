@@ -197,7 +197,7 @@
 
   function mDrawNowLine(t) {
     var ctx = R.ctx;
-    var y = mNowY();
+    var y = mHoursToY(0); // moves with scroll
     if (y < -40 || y > mSurfaceY() + 40) return;
 
     var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
