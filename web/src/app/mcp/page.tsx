@@ -89,11 +89,12 @@ export default function McpSetupPage() {
         },
       },
     }, null, 2),
-    claudeDesktop: JSON.stringify({
+    codex: JSON.stringify({
       mcpServers: {
         river: {
-          command: 'npx',
-          args: ['-y', 'mcp-remote', sseUrl, '--transport', 'sse-only', '--header', `Authorization: Bearer ${displayToken}`],
+          type: 'sse',
+          url: sseUrl,
+          headers: { Authorization: `Bearer ${displayToken}` },
         },
       },
     }, null, 2),
@@ -116,7 +117,7 @@ export default function McpSetupPage() {
           Connect AI Agents
         </h1>
         <p className="text-sm mb-10" style={{ color: amberDim }}>
-          River is an MCP server. Connect Claude Code, Claude Desktop, or any MCP client
+          River is an MCP server. Connect Claude Code, Codex, or any MCP client that supports SSE
           to see your schedule, propose plans, and rearrange your day with natural language.
         </p>
 
@@ -217,10 +218,10 @@ export default function McpSetupPage() {
         />
 
         <ConfigBlock
-          title="Claude Desktop &amp; ChatGPT"
-          description="Add to claude_desktop_config.json (Settings → Developer → Edit Config). Requires Node.js. Restart Claude Desktop after saving. Also works with any MCP client that supports stdio."
-          config={configs.claudeDesktop}
-          configKey="claudeDesktop"
+          title="Codex"
+          description="Add to your Codex MCP config. Same format works with any MCP client that supports SSE transport."
+          config={configs.codex}
+          configKey="codex"
           copied={copied}
           onCopy={copy}
           amber={amber}
