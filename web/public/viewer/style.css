@@ -731,34 +731,36 @@ input[type="checkbox"] {
 
 .menu-btn {
   position: absolute;
-  top: 6px;
+  top: 8px;
   right: 16px;
   z-index: 200;
   background: none;
   border: none;
   padding: 0;
+  margin: 0;
   color: rgba(200, 165, 110, 0.4);
-  font-size: 32px;
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   transition: color 0.2s;
 }
 .menu-btn:hover {
   color: rgba(200, 165, 110, 0.7);
 }
-.menu-icon { line-height: 1; }
+.menu-icon {
+  display: block;
+  line-height: 1;
+}
 .menu-dot {
   position: absolute;
-  top: -3px;
-  right: -3px;
+  top: 0;
+  right: -2px;
   width: 6px;
   height: 6px;
   background: rgb(200, 120, 80);
   border-radius: 50%;
   display: none;
+  pointer-events: none;
 }
 .menu-dot.active { display: block; }
 
