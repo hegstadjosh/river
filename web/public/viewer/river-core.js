@@ -90,25 +90,151 @@ window.River = {};
     return h;
   };
 
-  // ── Optimistic post ─────────────────────────────────────────────
-  // Apply local changes IMMEDIATELY, then fire-and-forget to server.
-  // Server response triggers a full reconciliation via sync().
-  // optimisticFn(R.tasks) — mutate the task array in place before fetch.
+  // ── Supabase helpers ───────────────────────────────────────────
+  R.sb = function () { return window._riverSB; };
+  R.userId = function () { return window._riverUserId; };
+  R.timelineId = function () { return window._riverTimelineId; };
+
+  R.positionToAnchor = function (pos) {
+    return new Date(Date.now() + pos * 3600000).toISOString();
+  };
+
+  R.anchorToPosition = function (anchor) {
+    return (new Date(anchor).getTime() - Date.now()) / 3600000;
+  };
+
+  // ── Direct Supabase operations ─────────────────────────────────
+  // CRUD goes direct to Supabase (no API route, no cold start).
+  // Plan operations still go through /api/state (multi-step transactions).
+
+  var PLAN_ACTIONS = {
+    plan_start: 1, plan_end: 1, plan_commit: 1,
+    plan_lane_put: 1, plan_to_cloud: 1, plan_add: 1,
+    plan_move: 1, plan_copy: 1,
+  };
+
   R.post = function (action, data, optimisticFn) {
     if (optimisticFn) {
-      try { optimisticFn(R.tasks); } catch (e) { console.error('optimistic update failed', e); }
+      try { optimisticFn(R.tasks); } catch (e) { console.error('optimistic', e); }
     }
-    fetch('/api/state', {
-      method: 'POST', headers: R.authHeaders(),
-      body: JSON.stringify(Object.assign({ action: action }, data))
-    }).then(function (r) {
-      return r.json();
-    }).then(function (d) {
-      if (d && d.river !== undefined) {
-        R.state = d;
-        R.sync();
-      }
-    }).catch(function () {});
+
+    // Plan operations go through API route (need server-side transactions)
+    if (PLAN_ACTIONS[action]) {
+      fetch('/api/state', {
+        method: 'POST', headers: R.authHeaders(),
+        body: JSON.stringify(Object.assign({ action: action }, data))
+      }).then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.river !== undefined) { R.state = d; R.sync(); }
+        }).catch(function () {});
+      return;
+    }
+
+    // CRUD goes direct to Supabase
+    var sb = R.sb();
+    var uid = R.userId();
+    var tid = R.timelineId();
+    if (!sb || !uid || !tid) {
+      // Fallback to API route if Supabase client not ready
+      fetch('/api/state', {
+        method: 'POST', headers: R.authHeaders(),
+        body: JSON.stringify(Object.assign({ action: action }, data))
+      }).catch(function () {});
+      return;
+    }
+
+    switch (action) {
+      case 'put':
+        var anchor = data.position !== undefined
+          ? (data.position === null ? null : R.positionToAnchor(data.position))
+          : undefined;
+        if (data.id) {
+          var updates = {};
+          if (data.name !== undefined) updates.name = data.name;
+          if (data.mass !== undefined) updates.mass = data.mass;
+          if (anchor !== undefined) updates.anchor = anchor;
+          if (data.solidity !== undefined) updates.solidity = data.solidity;
+          if (data.energy !== undefined) updates.energy = data.energy;
+          if (data.fixed !== undefined) updates.fixed = data.fixed;
+          if (data.alive !== undefined) updates.alive = data.alive;
+          if (data.tags !== undefined) updates.tags = data.tags;
+          if (data.cloud_x !== undefined) updates.cloud_x = data.cloud_x;
+          if (data.cloud_y !== undefined) updates.cloud_y = data.cloud_y;
+          if (data.river_y !== undefined) updates.river_y = data.river_y;
+          sb.from('tasks').update(updates)
+            .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
+            .then(function () {});
+        } else {
+          sb.from('tasks').insert({
+            id: crypto.randomUUID(), user_id: uid, timeline_id: tid,
+            name: data.name || 'untitled', mass: data.mass || 30,
+            anchor: anchor || null, solidity: data.solidity || 0.1,
+            energy: data.energy || 0.5, fixed: data.fixed || false,
+            alive: data.alive || false, tags: data.tags || [],
+            created: new Date().toISOString(),
+            cloud_x: data.cloud_x || null, cloud_y: data.cloud_y || null,
+            river_y: data.river_y || null
+          }).then(function () {});
+        }
+        break;
+      case 'move':
+        var moveAnchor = data.position === null ? null : R.positionToAnchor(data.position);
+        sb.from('tasks').update({ anchor: moveAnchor })
+          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
+          .then(function () {});
+        break;
+      case 'delete':
+        sb.from('tasks').delete()
+          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
+          .then(function () {});
+        break;
+      case 'tag_create':
+        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').single()
+          .then(function (r) {
+            var tags = r.data ? JSON.parse(r.data.value) : [];
+            if (tags.indexOf(data.name) < 0) {
+              tags.push(data.name);
+              sb.from('meta').upsert({ user_id: uid, key: 'known_tags', value: JSON.stringify(tags) })
+                .then(function () {});
+            }
+          });
+        break;
+      case 'plan_update_task':
+        var lBranchP = sb.from('timelines').select('id')
+          .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
+        lBranchP.then(function (r) {
+          if (!r.data) return;
+          var patch = {};
+          if (data.mass !== undefined) patch.mass = data.mass;
+          if (data.solidity !== undefined) patch.solidity = data.solidity;
+          if (data.energy !== undefined) patch.energy = data.energy;
+          if (data.position !== undefined) patch.anchor = R.positionToAnchor(data.position);
+          sb.from('tasks').update(patch)
+            .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
+            .then(function () {});
+        });
+        break;
+      case 'plan_reposition':
+        var rpBranch = sb.from('timelines').select('id')
+          .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
+        rpBranch.then(function (r) {
+          if (!r.data) return;
+          sb.from('tasks').update({ anchor: R.positionToAnchor(data.position) })
+            .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
+            .then(function () {});
+        });
+        break;
+      case 'plan_remove':
+        var rmBranch = sb.from('timelines').select('id')
+          .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
+        rmBranch.then(function (r) {
+          if (!r.data) return;
+          sb.from('tasks').delete()
+            .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
+            .then(function () {});
+        });
+        break;
+    }
   };
 
 })();

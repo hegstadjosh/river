@@ -20,7 +20,7 @@ export default function AppPage() {
       }
       setReady(true)
 
-      // Preload state in parallel with iframe load to avoid cold-start latency
+      // Preload state and timeline ID in parallel with iframe load
       const statePromise = fetch('/api/state', {
         headers: {
           'Content-Type': 'application/json',
@@ -30,12 +30,21 @@ export default function AppPage() {
         .then(r => r.ok ? r.json() : null)
         .catch(() => null)
 
+      const timelinePromise = Promise.resolve(
+        supabase
+          .from('meta')
+          .select('value')
+          .eq('key', 'current_timeline_id')
+          .single()
+          .then(({ data }) => data?.value ?? null)
+      ).catch(() => null)
+
       const iframe = iframeRef.current
       if (iframe) {
         iframe.onload = async () => {
-          const preloadedState = await statePromise
+          const [preloadedState, timelineId] = await Promise.all([statePromise, timelinePromise])
           iframe.contentWindow?.postMessage(
-            { type: 'auth-token', token: session.access_token, state: preloadedState },
+            { type: 'auth-token', token: session.access_token, state: preloadedState, userId: session.user.id, timelineId },
             window.location.origin
           )
         }

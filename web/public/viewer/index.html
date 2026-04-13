@@ -102,25 +102,51 @@
     </div>
   </div>
 
+  <script src="supabase.min.js"></script>
   <script>
-    // Receive auth token (and optionally preloaded state) from parent React page
+    // ── Supabase direct client ──────────────────────────────────
+    window._riverSB = null;
     window._riverAuthToken = null;
+    window._riverUserId = null;
+    window._riverTimelineId = null;
+
+    // Supabase config (public keys — safe to inline)
+    var SB_URL = 'https://jgbcahwfompeeihxjszb.supabase.co';
+    var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnYmNhaHdmb21wZWVpaHhqc3piIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMzQ5OTcsImV4cCI6MjA5MTYxMDk5N30.SqVOAbxkgAk4GINKCr3mcNF05Oxs6z_G4a7Pf1cbzxM';
+
     window.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'auth-token') {
         window._riverAuthToken = e.data.token;
-        // If parent preloaded state, apply immediately — no fetch needed
-        if (e.data.state && window.River) {
+        window._riverUserId = e.data.userId || null;
+        window._riverTimelineId = e.data.timelineId || null;
+
+        // Create Supabase client with the user's JWT
+        if (!window._riverSB) {
+          window._riverSB = supabase.createClient(SB_URL, SB_ANON, {
+            global: { headers: { Authorization: 'Bearer ' + e.data.token } },
+            auth: { persistSession: false, autoRefreshToken: false }
+          });
+        }
+
+        // If parent preloaded state, apply immediately
+        if (e.data.state && window.River && window.River.sync) {
           window.River.state = e.data.state;
-          if (window.River.sync) window.River.sync();
+          window.River.sync();
         } else if (window.River && window.River.fetchState) {
           window.River.fetchState();
         }
-        // Check if user has API keys — show dot if not
-        fetch('/api/keys', { headers: { 'Authorization': 'Bearer ' + e.data.token } })
-          .then(function(r) { return r.json(); })
-          .catch(function() { return []; })
-          .then(function(keys) {
-            var hasKeys = Array.isArray(keys) && keys.length > 0;
+
+        // Start Realtime subscription
+        if (window.River && window.River.connectSSE && !window.River._realtimeChannel) {
+          window.River.connectSSE();
+        }
+
+        // Check API keys for MCP badge
+        window._riverSB.from('api_keys').select('id')
+          .eq('user_id', e.data.userId)
+          .is('revoked_at', null)
+          .then(function(res) {
+            var hasKeys = res.data && res.data.length > 0;
             var dot = document.getElementById('menu-dot');
             var badge = document.getElementById('menu-mcp-badge');
             if (dot) dot.className = hasKeys ? 'menu-dot' : 'menu-dot active';
@@ -129,7 +155,7 @@
       }
     });
 
-    // Hamburger menu toggle
+    // Hamburger menu
     document.addEventListener('DOMContentLoaded', function() {
       var btn = document.getElementById('menu-btn');
       var sidebar = document.getElementById('menu-sidebar');
@@ -137,13 +163,9 @@
         e.stopPropagation();
         sidebar.classList.toggle('hidden');
       });
-      // Close sidebar on click outside
       document.addEventListener('click', function(e) {
-        if (!sidebar.contains(e.target) && e.target !== btn) {
-          sidebar.classList.add('hidden');
-        }
+        if (!sidebar.contains(e.target) && e.target !== btn) sidebar.classList.add('hidden');
       });
-      // Sign out — tell parent page
       document.getElementById('menu-signout').addEventListener('click', function() {
         window.parent.postMessage({ type: 'sign-out' }, '*');
       });
