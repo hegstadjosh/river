@@ -128,6 +128,7 @@
   // ── Plan Mode Button ──────────────────────────────────────────────
   var planBtn = document.getElementById('plan-btn');
   planBtn.addEventListener('click', function () {
+    if (R.isMobile) return; // no plan mode on mobile
     if (R.planMode) {
       R.post('plan_end', {});
     } else {
@@ -137,7 +138,16 @@
       var rightHours = (R.W - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       var windowStart = new Date(now.getTime() + leftHours * 3600000).toISOString();
       var windowEnd = new Date(now.getTime() + rightHours * 3600000).toISOString();
-      R.post('plan_start', { window_start: windowStart, window_end: windowEnd });
+      R.post('plan_start', { window_start: windowStart, window_end: windowEnd }, function () {
+        // Optimistic: show plan mode visuals immediately (server fills lane data)
+        R.planMode = true;
+        R.planWindowStart = windowStart;
+        R.planWindowEnd = windowEnd;
+        R.planLanes = [];
+        for (var i = 0; i < R.planLaneCount(); i++) R.planLanes.push({ label: '', tasks: [] });
+        if (R.initPlanStreaks) R.initPlanStreaks();
+        if (R.updatePlanIndicator) R.updatePlanIndicator();
+      });
     }
   });
 
@@ -176,10 +186,23 @@
       a.vy *= R.DAMPING;
       a.x += a.vx;
       a.y += a.vy;
+
+      // Mobile: hard boundary — river tasks stay above surfaceY, cloud tasks stay below
+      if (R.isMobile) {
+        var sY = R.surfaceY();
+        if (a.position !== null && a.position !== undefined) {
+          if (a.y > sY - 5) { a.y = sY - 5; a.vy = 0; }
+        } else {
+          if (a.y < sY + 5) { a.y = sY + 5; a.vy = 0; }
+        }
+      }
     }
 
     // Draw the world
     R.drawWorld(t);
+
+    // Ambient floating clouds in the cloud zone
+    if (R.drawClouds) R.drawClouds(dt);
 
     // Always draw streaks, now line, time markers
     R.drawStreaks(dt);
@@ -193,7 +216,7 @@
       return 0;
     });
 
-    if (R.planMode) {
+    if (R.planMode && !R.isMobile) {
       // Plan mode: only draw river tasks OUTSIDE the plan window
       var now = R.state ? new Date(R.state.now) : new Date();
       var pwStartH = R.planWindowStart ? (new Date(R.planWindowStart).getTime() - now.getTime()) / 3600000 : -Infinity;
@@ -204,21 +227,26 @@
         var screenX = R.hoursToX(task.position);
         var cullHW = R.taskStretch(task).hw + 50;
         if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
-        // Skip tasks inside the plan window — those are in the lanes
         if (task.position >= pwStartH && task.position <= pwEndH) continue;
         R.drawBlob(task, t);
       }
 
-      // Draw plan overlay (lanes + lane tasks)
       R.drawPlanMode(t, dt);
       if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
-      // Normal mode: draw all river tasks (with culling)
+      // Normal mode (or mobile): draw all river tasks with culling
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
-        var screenX = R.hoursToX(task.position);
-        var cullHW = R.taskStretch(task).hw + 50;
-        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        if (R.isMobile) {
+          // Vertical culling: cull by Y position
+          var screenY = R.hoursToY ? R.hoursToY(task.position) : task.y;
+          var cullHH = R.taskStretch(task).hh + 50;
+          if (screenY + cullHH < 0 || screenY - cullHH > R.H) continue;
+        } else {
+          var screenX = R.hoursToX(task.position);
+          var cullHW = R.taskStretch(task).hw + 50;
+          if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        }
         R.drawBlob(task, t);
       }
     }
@@ -250,7 +278,7 @@
     R.drawResizeOverlay(t);
 
     // ── Plan commit buttons — drawn last so they're never covered ──
-    if (R.planMode && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
+    if (R.planMode && !R.isMobile && R.drawPlanCommitButtons) R.drawPlanCommitButtons(t);
   }
 
   requestAnimationFrame(frame);

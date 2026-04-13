@@ -201,6 +201,9 @@
     // Draw the world
     R.drawWorld(t);
 
+    // Ambient floating clouds in the cloud zone
+    if (R.drawClouds) R.drawClouds(dt);
+
     // Always draw streaks, now line, time markers
     R.drawStreaks(dt);
     R.drawNowLine(t);
