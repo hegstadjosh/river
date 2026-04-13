@@ -370,7 +370,7 @@
       return;
     }
 
-    // Plan mode: cloud task dropped into a lane
+    // Plan mode: cloud task dropped into a lane — copy it
     if (R.planMode && d.zone === 'cloud' && d.moved) {
       var dropLane = R.planLaneAt(e.clientY);
       if (dropLane >= 0) {
@@ -381,6 +381,27 @@
           var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
 
           R.copyToLane(d.id, dropLane, dropHours);
+        }
+        return;
+      }
+    }
+
+    // Plan mode: river task (outside plan window) dropped into a lane — copy it, snap back
+    if (R.planMode && d.zone === 'river' && d.moved) {
+      var dropLane = R.planLaneAt(e.clientY);
+      if (dropLane >= 0) {
+        var a = R.findTask(d.id);
+        if (a) {
+          var dd2 = R.taskStretch(a);
+          var startEdge = a.x - dd2.hw;
+          var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
+
+          R.copyToLane(d.id, dropLane, dropHours);
+
+          // Snap the original back to its river position
+          var origPos = R.riverPos(a);
+          a.tx = origPos.x;
+          a.ty = origPos.y;
         }
         return;
       }

@@ -3202,7 +3202,7 @@ window.River = {};
       return;
     }
 
-    // Plan mode: cloud task dropped into a lane
+    // Plan mode: cloud task dropped into a lane — copy it
     if (R.planMode && d.zone === 'cloud' && d.moved) {
       var dropLane = R.planLaneAt(e.clientY);
       if (dropLane >= 0) {
@@ -3213,6 +3213,27 @@ window.River = {};
           var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
 
           R.copyToLane(d.id, dropLane, dropHours);
+        }
+        return;
+      }
+    }
+
+    // Plan mode: river task (outside plan window) dropped into a lane — copy it, snap back
+    if (R.planMode && d.zone === 'river' && d.moved) {
+      var dropLane = R.planLaneAt(e.clientY);
+      if (dropLane >= 0) {
+        var a = R.findTask(d.id);
+        if (a) {
+          var dd2 = R.taskStretch(a);
+          var startEdge = a.x - dd2.hw;
+          var dropHours = R.screenXToHours(startEdge) + a.mass / 120;
+
+          R.copyToLane(d.id, dropLane, dropHours);
+
+          // Snap the original back to its river position
+          var origPos = R.riverPos(a);
+          a.tx = origPos.x;
+          a.ty = origPos.y;
         }
         return;
       }
@@ -3775,18 +3796,34 @@ window.River = {};
     R.drawNowLine(t);
     R.drawTimeMarkers();
 
-    // In plan mode, river tasks are hidden — only lane tasks render
+    // River task rendering
+    var riverSorted = R.riverTasks().sort(function (a, b) {
+      if (a.alive !== b.alive) return a.alive ? 1 : -1;
+      if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
+      return 0;
+    });
+
     if (R.planMode) {
+      // Plan mode: only draw river tasks OUTSIDE the plan window
+      var now = R.state ? new Date(R.state.now) : new Date();
+      var pwStartH = R.planWindowStart ? (new Date(R.planWindowStart).getTime() - now.getTime()) / 3600000 : -Infinity;
+      var pwEndH = R.planWindowEnd ? (new Date(R.planWindowEnd).getTime() - now.getTime()) / 3600000 : Infinity;
+
+      for (var j = 0; j < riverSorted.length; j++) {
+        var task = riverSorted[j];
+        var screenX = R.hoursToX(task.position);
+        var cullHW = R.taskStretch(task).hw + 50;
+        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        // Skip tasks inside the plan window — those are in the lanes
+        if (task.position >= pwStartH && task.position <= pwEndH) continue;
+        R.drawBlob(task, t);
+      }
+
+      // Draw plan overlay (lanes + lane tasks)
       R.drawPlanMode(t, dt);
       if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
-      // Normal mode: draw river tasks (with culling)
-      var riverSorted = R.riverTasks().sort(function (a, b) {
-        if (a.alive !== b.alive) return a.alive ? 1 : -1;
-        if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
-        return 0;
-      });
-
+      // Normal mode: draw all river tasks (with culling)
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
         var screenX = R.hoursToX(task.position);
