@@ -68,8 +68,8 @@ export default function McpSetupPage() {
     setTimeout(() => setCopied(null), 2000)
   }
 
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://river.app'
-  const mcpUrl = `${baseUrl}/api/mcp/mcp`
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.taskriver.dev'
+  const sseUrl = `${baseUrl}/api/mcp/sse`
   const displayToken = newKey ?? 'river_YOUR_API_KEY'
 
   const amber = 'rgb(200, 165, 110)'
@@ -82,7 +82,8 @@ export default function McpSetupPage() {
     claudeCode: JSON.stringify({
       mcpServers: {
         river: {
-          url: mcpUrl,
+          type: 'sse',
+          url: sseUrl,
           headers: { Authorization: `Bearer ${displayToken}` },
         },
       },
@@ -91,7 +92,7 @@ export default function McpSetupPage() {
       mcpServers: {
         river: {
           command: 'npx',
-          args: ['-y', 'mcp-remote', mcpUrl],
+          args: ['-y', 'mcp-remote', sseUrl],
           env: { MCP_HEADERS: `Authorization:Bearer ${displayToken}` },
         },
       },
