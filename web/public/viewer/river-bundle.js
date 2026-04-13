@@ -4169,7 +4169,7 @@ window.River = {};
   var _origCloudTopY = R.cloudTopY;
 
   // ── Mobile Constants ───────────────────────────────────────────────
-  var CLOUD_HEIGHT_RATIO = 0.15; // cloud is bottom 15%
+  var CLOUD_HEIGHT_RATIO = 0.28; // cloud is bottom 28%
   var HORIZON_BAR_H = 36;       // height reserved for timeframe bar
 
   // ── Mobile Layout ──────────────────────────────────────────────────
