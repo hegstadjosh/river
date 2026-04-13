@@ -103,12 +103,16 @@
   </div>
 
   <script>
-    // Receive auth token from parent React page
+    // Receive auth token (and optionally preloaded state) from parent React page
     window._riverAuthToken = null;
     window.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'auth-token') {
         window._riverAuthToken = e.data.token;
-        if (window.River && window.River.fetchState) {
+        // If parent preloaded state, apply immediately — no fetch needed
+        if (e.data.state && window.River) {
+          window.River.state = e.data.state;
+          if (window.River.sync) window.River.sync();
+        } else if (window.River && window.River.fetchState) {
           window.River.fetchState();
         }
         // Check if user has API keys — show dot if not

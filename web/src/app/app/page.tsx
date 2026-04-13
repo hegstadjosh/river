@@ -20,11 +20,22 @@ export default function AppPage() {
       }
       setReady(true)
 
+      // Preload state in parallel with iframe load to avoid cold-start latency
+      const statePromise = fetch('/api/state', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null)
+
       const iframe = iframeRef.current
       if (iframe) {
-        iframe.onload = () => {
+        iframe.onload = async () => {
+          const preloadedState = await statePromise
           iframe.contentWindow?.postMessage(
-            { type: 'auth-token', token: session.access_token },
+            { type: 'auth-token', token: session.access_token, state: preloadedState },
             window.location.origin
           )
         }
