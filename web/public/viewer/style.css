@@ -737,14 +737,11 @@ input[type="checkbox"] {
   background: rgba(200, 165, 110, 0.06);
   border: 1px solid rgba(200, 165, 110, 0.15);
   border-radius: 6px;
-  padding: 0;
+  padding: 4px 6px;
   margin: 0;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: rgba(200, 165, 110, 0.4);
+  font-size: 12px;
+  line-height: 1;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -754,7 +751,7 @@ input[type="checkbox"] {
   background: rgba(200, 165, 110, 0.1);
 }
 .menu-icon {
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
 }
 .menu-dot { display: none; }
