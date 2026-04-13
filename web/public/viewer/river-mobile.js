@@ -90,7 +90,8 @@
   // CLAMPED: river tasks must stay above surfaceY (never in cloud zone)
   function mRiverPos(task) {
     var y = mHoursToY(task.position || 0);
-    y = Math.max(20, Math.min(y, mSurfaceY() - 10));
+    // Don't clamp target — let the per-frame physics clamp handle it
+    // so tasks smoothly stop at the boundary instead of teleporting
     var left = 20;
     var right = R.W - 20;
     var rx = (task.river_y != null) ? task.river_y : R.hashFrac(task.id, 'ry');

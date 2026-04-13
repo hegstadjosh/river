@@ -187,13 +187,20 @@
       a.x += a.vx;
       a.y += a.vy;
 
-      // Mobile: hard boundary — river tasks stay above surfaceY, cloud tasks stay below
+      // Mobile: hard boundary — entire blob stays in its zone (not just center)
       if (R.isMobile) {
         var sY = R.surfaceY();
+        var blobHH = R.taskStretch(a).hh;
         if (a.position !== null && a.position !== undefined) {
-          if (a.y > sY - 5) { a.y = sY - 5; a.vy = 0; }
+          // River task: bottom edge (center + hh) must stay above surface
+          if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
+          // Also clamp top edge to screen
+          if (a.y - blobHH < 0) { a.y = blobHH; a.vy = 0; }
         } else {
-          if (a.y < sY + 5) { a.y = sY + 5; a.vy = 0; }
+          // Cloud task: top edge (center - hh) must stay below surface
+          if (a.y - blobHH < sY) { a.y = sY + blobHH; a.vy = 0; }
+          // Also clamp bottom edge to screen
+          if (a.y + blobHH > R.H) { a.y = R.H - blobHH; a.vy = 0; }
         }
       }
     }
