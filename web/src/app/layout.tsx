@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   title: "River — vibe scheduling",
   description:
     "A physics-based spatial task scheduler where tasks are organic shapes that drift in a river of time. No red, no overdue, no shame.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
