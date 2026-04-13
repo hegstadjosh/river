@@ -872,14 +872,18 @@ input[type="checkbox"] {
     display: flex !important;
   }
 
-  /* Quick-add: wider, prevent iOS zoom */
+  /* Quick-add: constrained to screen, prevent iOS zoom */
   .quick-add-wrap {
-    width: calc(100vw - 40px) !important;
-    max-width: 300px;
+    width: auto !important;
+    left: 16px !important;
+    right: 16px !important;
+    max-width: none !important;
   }
   .quick-add {
-    font-size: 16px !important; /* prevents iOS auto-zoom */
+    font-size: 16px !important;
     padding: 10px 14px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* Plan button: hidden */
