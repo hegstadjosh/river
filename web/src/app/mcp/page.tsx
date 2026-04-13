@@ -109,7 +109,7 @@ export default function McpSetupPage() {
 
   return (
     <div className="min-h-screen" style={{ background: '#17161a', color: amber }}>
-      <div className="max-w-2xl mx-auto px-6 py-12">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         <a href="/app" className="text-xs mb-8 block" style={{ color: amberDim }}>&larr; back to river</a>
 
         <h1 className="text-2xl font-light tracking-wide mb-2" style={{ fontFamily: 'var(--font-display)' }}>
@@ -166,7 +166,7 @@ export default function McpSetupPage() {
           {keys.length > 0 ? (
             <div className="space-y-2 mb-3">
               {keys.map((k) => (
-                <div key={k.id} className="flex items-center justify-between text-xs p-2 rounded" style={{ background: amberBg }}>
+                <div key={k.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded" style={{ background: amberBg }}>
                   <div>
                     <span style={{ color: amber }}>river_{'•'.repeat(8)}</span>
                     {k.last_used_at && (
@@ -243,14 +243,14 @@ function ConfigBlock({
 }) {
   return (
     <section className="rounded-lg p-5 mb-6" style={{ background: panelBg, border: `1px solid ${panelBorder}` }}>
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
         <div>
           <h2 className="text-sm font-medium" style={{ color: amber }}>{title}</h2>
           <p className="text-xs" style={{ color: amberDim }}>{description}</p>
         </div>
         <button
           onClick={() => onCopy(configKey, config)}
-          className="text-xs px-2 py-1 rounded cursor-pointer"
+          className="text-xs px-2 py-1 rounded cursor-pointer self-start sm:shrink-0"
           style={{ border: `1px solid ${panelBorder}`, color: amberDim }}
         >
           {copied === configKey ? 'Copied!' : 'Copy'}
