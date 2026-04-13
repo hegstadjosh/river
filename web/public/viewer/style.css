@@ -759,8 +759,8 @@ input[type="checkbox"] {
 }
 .menu-icon {
   display: block;
-  font-size: 10px;
-  line-height: 10px;
+  font-size: 15px;
+  line-height: 1;
 }
 .menu-dot { display: none; }
 .menu-dot.active { display: none; }
