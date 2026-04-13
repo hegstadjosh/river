@@ -19,7 +19,10 @@ export const metadata: Metadata = {
   description:
     "A physics-based spatial task scheduler where tasks are organic shapes that drift in a river of time. No red, no overdue, no shame.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-512.png", sizes: "512x512", type: "image/png" },
+    ],
     apple: "/apple-touch-icon.png",
   },
 };
