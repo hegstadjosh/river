@@ -230,6 +230,10 @@ export default function AppPage() {
           const R = window.River
           if (!R) return
 
+          // Check mobile BEFORE first sync so plan mode is blocked
+          if (R.checkMobile) R.checkMobile()
+          if (R.isMobile && R.applyMobile) R.applyMobile()
+
           // Apply preloaded state immediately — tasks appear on first frame
           if (window._riverPreloadedState) {
             R.state = window._riverPreloadedState

@@ -85,7 +85,7 @@
   // ── Drawing: Plan Mode ─────────────────────────────────────────────
 
   R.drawPlanMode = function (t, dt) {
-    if (!R.planMode) return;
+    if (!R.planMode || R.isMobile) return;
     var ctx = R.ctx;
 
     // ── Clip to plan window bounds ──
@@ -191,6 +191,7 @@
   R.planCommitBtns = []; // cached button rects for hit testing
 
   R.drawPlanCommitButtons = function (t) {
+    if (R.isMobile) return;
     var ctx = R.ctx;
     R.planCommitBtns = [];
 

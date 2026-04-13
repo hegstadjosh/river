@@ -306,7 +306,11 @@
     R.drawPastFade = mDrawPastFade;
     R.drawTimeMarkers = mDrawTimeMarkers;
 
-    // Hide plan button on mobile (no plan mode)
+    // Kill plan mode on mobile — force off, hide button
+    R.planMode = false;
+    R.planLanes = [];
+    R.planWindowStart = null;
+    R.planWindowEnd = null;
     var planBtn = document.getElementById('plan-btn');
     if (planBtn) planBtn.style.display = 'none';
 

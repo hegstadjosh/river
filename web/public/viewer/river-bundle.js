@@ -1017,7 +1017,7 @@ window.River = {};
   // ── Drawing: Plan Mode ─────────────────────────────────────────────
 
   R.drawPlanMode = function (t, dt) {
-    if (!R.planMode) return;
+    if (!R.planMode || R.isMobile) return;
     var ctx = R.ctx;
 
     // ── Clip to plan window bounds ──
@@ -1123,6 +1123,7 @@ window.River = {};
   R.planCommitBtns = []; // cached button rects for hit testing
 
   R.drawPlanCommitButtons = function (t) {
+    if (R.isMobile) return;
     var ctx = R.ctx;
     R.planCommitBtns = [];
 
@@ -4235,7 +4236,11 @@ window.River = {};
     R.drawPastFade = mDrawPastFade;
     R.drawTimeMarkers = mDrawTimeMarkers;
 
-    // Hide plan button on mobile (no plan mode)
+    // Kill plan mode on mobile — force off, hide button
+    R.planMode = false;
+    R.planLanes = [];
+    R.planWindowStart = null;
+    R.planWindowEnd = null;
     var planBtn = document.getElementById('plan-btn');
     if (planBtn) planBtn.style.display = 'none';
 
