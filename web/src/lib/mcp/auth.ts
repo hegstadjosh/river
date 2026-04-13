@@ -27,26 +27,12 @@ export async function resolveUser(bearerToken: string): Promise<McpUser | null> 
   const keyHash = hashApiKey(rawKey)
   const supabase = getServiceClient()
 
-  // Look up by hash (new keys), fall back to plaintext (old keys)
-  let apiKey = null
-  const { data: hashMatch } = await supabase
+  const { data: apiKey } = await supabase
     .from('api_keys')
     .select('id, user_id')
     .eq('key_hash', keyHash)
     .is('revoked_at', null)
     .single()
-
-  if (hashMatch) {
-    apiKey = hashMatch
-  } else {
-    const { data: plainMatch } = await supabase
-      .from('api_keys')
-      .select('id, user_id')
-      .eq('key', rawKey)
-      .is('revoked_at', null)
-      .single()
-    apiKey = plainMatch
-  }
 
   if (!apiKey) return null
 
