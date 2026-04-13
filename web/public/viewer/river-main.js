@@ -202,7 +202,7 @@
       return 0;
     });
 
-    if (R.planMode) {
+    if (R.planMode && !R.isMobile) {
       // Plan mode: only draw river tasks OUTSIDE the plan window
       var now = R.state ? new Date(R.state.now) : new Date();
       var pwStartH = R.planWindowStart ? (new Date(R.planWindowStart).getTime() - now.getTime()) / 3600000 : -Infinity;
@@ -213,21 +213,26 @@
         var screenX = R.hoursToX(task.position);
         var cullHW = R.taskStretch(task).hw + 50;
         if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
-        // Skip tasks inside the plan window — those are in the lanes
         if (task.position >= pwStartH && task.position <= pwEndH) continue;
         R.drawBlob(task, t);
       }
 
-      // Draw plan overlay (lanes + lane tasks)
       R.drawPlanMode(t, dt);
       if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
-      // Normal mode: draw all river tasks (with culling)
+      // Normal mode (or mobile): draw all river tasks with culling
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
-        var screenX = R.hoursToX(task.position);
-        var cullHW = R.taskStretch(task).hw + 50;
-        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        if (R.isMobile) {
+          // Vertical culling: cull by Y position
+          var screenY = R.hoursToY ? R.hoursToY(task.position) : task.y;
+          var cullHH = R.taskStretch(task).hh + 50;
+          if (screenY + cullHH < 0 || screenY - cullHH > R.H) continue;
+        } else {
+          var screenX = R.hoursToX(task.position);
+          var cullHW = R.taskStretch(task).hw + 50;
+          if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        }
         R.drawBlob(task, t);
       }
     }

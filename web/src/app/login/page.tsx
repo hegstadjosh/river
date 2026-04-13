@@ -50,7 +50,7 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: '#17161a' }}>
-      <div className="text-center space-y-8 max-w-sm w-full px-6">
+      <div className="text-center space-y-8 max-w-sm w-full px-4 sm:px-6">
         <div>
           <h1 className="text-3xl font-light tracking-wide mb-2" style={{ color: amber }}>
             River

@@ -4,7 +4,7 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen" style={{ background: '#17161a' }}>
       {/* ── Nav ────────────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5" style={{ background: 'rgba(23, 22, 26, 0.85)', backdropFilter: 'blur(12px)' }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5" style={{ background: 'rgba(23, 22, 26, 0.85)', backdropFilter: 'blur(12px)' }}>
         <span className="text-lg tracking-widest" style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}>
           River
         </span>
@@ -23,9 +23,9 @@ export default function LandingPage() {
       </nav>
 
       {/* ── Hero ───────────────────────────────────────────────── */}
-      <section className="relative flex flex-col items-center justify-center min-h-screen px-6 text-center pt-20">
+      <section className="relative flex flex-col items-center justify-center min-h-screen px-4 sm:px-6 text-center pt-20">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[800px] h-[400px] rounded-full" style={{ background: 'radial-gradient(ellipse, rgba(200, 165, 110, 0.04) 0%, transparent 70%)' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/3 w-[min(800px,200vw)] h-[400px] rounded-full" style={{ background: 'radial-gradient(ellipse, rgba(200, 165, 110, 0.04) 0%, transparent 70%)' }} />
         </div>
 
         <p className="text-sm tracking-widest uppercase mb-6 relative" style={{ color: 'rgba(200, 165, 110, 0.5)', letterSpacing: '0.2em' }}>
@@ -33,7 +33,7 @@ export default function LandingPage() {
         </p>
 
         <h1
-          className="text-5xl sm:text-7xl leading-tight mb-6 relative"
+          className="text-3xl sm:text-5xl md:text-7xl leading-tight mb-6 relative"
           style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}
         >
           Time is a river,<br />not a grid.
@@ -62,7 +62,7 @@ export default function LandingPage() {
           </a>
         </div>
 
-        <div className="mt-16 max-w-4xl w-full relative">
+        <div className="mt-10 sm:mt-16 max-w-4xl w-full relative">
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(200, 165, 110, 0.1)', boxShadow: '0 0 80px rgba(200, 165, 110, 0.03)' }}>
             <img src="/viewer/screenshots/river-day-view.png" alt="River — tasks flowing in a river of time" className="w-full" />
           </div>
@@ -70,9 +70,9 @@ export default function LandingPage() {
       </section>
 
       {/* ── The Problem ────────────────────────────────────────── */}
-      <section className="max-w-3xl mx-auto px-6 py-32">
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-32">
         <h2
-          className="text-3xl sm:text-4xl mb-8"
+          className="text-2xl sm:text-3xl md:text-4xl mb-8"
           style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}
         >
           Calendars lie to you.
@@ -93,9 +93,9 @@ export default function LandingPage() {
       </section>
 
       {/* ── Three Dimensions ───────────────────────────────────── */}
-      <section className="max-w-3xl mx-auto px-6 py-24">
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
         <h2
-          className="text-3xl sm:text-4xl mb-12"
+          className="text-2xl sm:text-3xl md:text-4xl mb-8 sm:mb-12"
           style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}
         >
           Three dimensions of a task.
@@ -135,9 +135,9 @@ export default function LandingPage() {
       </section>
 
       {/* ── Cloud and River ────────────────────────────────────── */}
-      <section className="max-w-3xl mx-auto px-6 py-24">
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
         <h2
-          className="text-3xl sm:text-4xl mb-8"
+          className="text-2xl sm:text-3xl md:text-4xl mb-8"
           style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}
         >
           The cloud and the river.
@@ -160,9 +160,9 @@ export default function LandingPage() {
       </section>
 
       {/* ── Claude Integration ─────────────────────────────────── */}
-      <section className="max-w-3xl mx-auto px-6 py-24">
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
         <h2
-          className="text-3xl sm:text-4xl mb-8"
+          className="text-2xl sm:text-3xl md:text-4xl mb-8"
           style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}
         >
           Your AI sees your day.
@@ -204,9 +204,9 @@ Your afternoon now: lunch → walk → read → open space.`}</code>
       </section>
 
       {/* ── CTA ────────────────────────────────────────────────── */}
-      <section className="flex flex-col items-center justify-center py-32 px-6 text-center">
+      <section className="flex flex-col items-center justify-center py-20 sm:py-32 px-4 sm:px-6 text-center">
         <h2
-          className="text-4xl sm:text-5xl mb-6"
+          className="text-3xl sm:text-4xl md:text-5xl mb-6"
           style={{ color: 'rgb(200, 165, 110)', fontFamily: 'var(--font-display)' }}
         >
           Start flowing.
@@ -225,7 +225,7 @@ Your afternoon now: lunch → walk → read → open space.`}</code>
       </section>
 
       {/* ── Footer ─────────────────────────────────────────────── */}
-      <footer className="py-8 px-6 text-center text-xs" style={{ color: 'rgba(200, 165, 110, 0.2)' }}>
+      <footer className="py-8 px-4 sm:px-6 text-center text-xs" style={{ color: 'rgba(200, 165, 110, 0.2)' }}>
         River is open source.
       </footer>
     </main>
