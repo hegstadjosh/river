@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data: keys } = await supabase
     .from('api_keys')
-    .select('id, name, created_at, last_used_at, revoked_at')
+    .select('id, name, key_hint, created_at, last_used_at, revoked_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
@@ -29,6 +29,7 @@ export async function POST() {
   const { data, error } = await supabase.from('api_keys').insert({
     user_id: user.id,
     key_hash: hashApiKey(key),
+    key_hint: key.slice(-4),
     name: 'Default',
   }).select('id, name, created_at').single()
 

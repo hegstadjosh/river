@@ -8,6 +8,7 @@ interface ApiKey {
   id: string
   name: string
   key?: string
+  key_hint?: string
   created_at: string
   last_used_at: string | null
   revoked_at: string | null
@@ -168,7 +169,7 @@ export default function McpSetupPage() {
               {keys.map((k) => (
                 <div key={k.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded" style={{ background: amberBg }}>
                   <div>
-                    <span style={{ color: amber }}>river_{'•'.repeat(8)}</span>
+                    <span style={{ color: amber }}>river_{'•'.repeat(8)}{k.key_hint || ''}</span>
                     {k.last_used_at && (
                       <span className="ml-2" style={{ color: 'rgba(200, 165, 110, 0.3)' }}>
                         used {new Date(k.last_used_at).toLocaleDateString()}
