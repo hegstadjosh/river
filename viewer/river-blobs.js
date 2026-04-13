@@ -55,9 +55,13 @@
       hw = Math.max(8, durationPx / 2);
       hh = Math.min(hw, Math.max(14, hw * 0.6));
       hh = Math.min(hh, 60);
-      // Clamp to lane height (small margin for separator lines)
-      if (a.ctx && a.ctx.type === 'lane' && R.planLaneHeight) {
-        hh = Math.min(hh, (R.planLaneHeight() - 4) / 2);
+      // Clamp to lane slot height (accounts for overlap spreading)
+      if (a.ctx && a.ctx.type === 'lane') {
+        var laneH;
+        if (a._laneSlotH) { laneH = a._laneSlotH; }
+        else if (R.planLaneBounds) { var lb = R.planLaneBounds(a.ctx.lane); laneH = lb.bottom - lb.top; }
+        else { laneH = hh * 2 + 4; }
+        hh = Math.min(hh, (laneH - 4) / 2);
       }
     } else {
       hw = 18; hh = 18;
@@ -214,11 +218,21 @@
     if (R.resizing && R.resizing.id === a.id) return;
 
     var fontSize = Math.max(10, Math.min(14, hh * 0.65));
-    var labelA = Math.min(0.9, (sol * 0.6 + 0.3)) * dim;
+    var labelA = Math.min(0.95, 0.75 + sol * 0.2) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
+    // Color label by tag (N/A or no tags = warm white)
+    var labelColor = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
+    if (a.tags && a.tags.length > 0 && a.tags[0] !== 'N/A' && R.tagColor) {
+      // Parse the tag color and apply the label alpha
+      var tc = R.tagColor(a.tags[0]);
+      var m = tc.match(/[\d.]+/g);
+      if (m && m.length >= 3) {
+        labelColor = 'rgba(' + m[0] + ', ' + m[1] + ', ' + m[2] + ', ' + labelA.toFixed(3) + ')';
+      }
+    }
+    ctx.fillStyle = labelColor;
 
     var nameW = ctx.measureText(a.name).width;
     if (nameW < hw * 1.8) {

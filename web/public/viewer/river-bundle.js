@@ -292,9 +292,10 @@ window.River = {};
       hw = 18; hh = 18;
     }
     if (a.alive) { hw *= 1.3; hh *= 1.3; }
-    // Clamp height to fit within lane in plan mode
-    if (a.ctx && a.ctx.type === 'lane' && R.planLaneHeight) {
-      var maxHH = (R.planLaneHeight() - 4) / 2;
+    // Clamp to lane slot height (matches drawBlob exactly)
+    if (a.ctx && a.ctx.type === 'lane') {
+      var maxHH = a._laneSlotH ? (a._laneSlotH - 4) / 2
+        : (R.planLaneBounds ? (R.planLaneBounds(a.ctx.lane).bottom - R.planLaneBounds(a.ctx.lane).top - 4) / 2 : hh);
       hh = Math.min(hh, maxHH);
     }
     return { r: Math.max(hw, hh), hw: hw, hh: hh };
@@ -743,8 +744,11 @@ window.River = {};
       hh = Math.min(hh, 60);
       // Clamp to lane slot height (accounts for overlap spreading)
       if (a.ctx && a.ctx.type === 'lane') {
-        var maxH = a._laneSlotH ? (a._laneSlotH - 4) / 2 : (R.planLaneHeight ? (R.planLaneHeight() - 4) / 2 : hh);
-        hh = Math.min(hh, maxH);
+        var laneH;
+        if (a._laneSlotH) { laneH = a._laneSlotH; }
+        else if (R.planLaneBounds) { var lb = R.planLaneBounds(a.ctx.lane); laneH = lb.bottom - lb.top; }
+        else { laneH = hh * 2 + 4; }
+        hh = Math.min(hh, (laneH - 4) / 2);
       }
     } else {
       hw = 18; hh = 18;
@@ -946,25 +950,46 @@ window.River = {};
 
   R.planRiverHeight = function () { return R.H - R.planRiverTop() - 30; };
 
-  R.planLaneHeight = function () {
-    return R.planRiverHeight() / R.planLaneCount();
+  // Current lane (0) gets 40% of height, rest split evenly
+  var CURRENT_LANE_RATIO = 0.40;
+
+  R.planLaneHeight = function (i) {
+    var total = R.planRiverHeight();
+    if (i === 0 || i === undefined) {
+      return i === 0 ? total * CURRENT_LANE_RATIO : total / R.planLaneCount();
+    }
+    return total * (1 - CURRENT_LANE_RATIO) / (R.planLaneCount() - 1);
   };
 
-  // Returns { top, bottom, midY } for a given lane index (0-4)
+  // Returns { top, bottom, midY } for a given lane index
   R.planLaneBounds = function (i) {
-    var top = R.planRiverTop() + i * R.planLaneHeight();
-    var h = R.planLaneHeight();
+    var rTop = R.planRiverTop();
+    var total = R.planRiverHeight();
+    var currentH = total * CURRENT_LANE_RATIO;
+    var otherH = (total - currentH) / (R.planLaneCount() - 1);
+    var top, h;
+    if (i === 0) {
+      top = rTop;
+      h = currentH;
+    } else {
+      top = rTop + currentH + (i - 1) * otherH;
+      h = otherH;
+    }
     return { top: top, bottom: top + h, midY: top + h / 2 };
   };
 
-  // Which lane is the mouse in? Returns 0-4 or -1 if not in a lane
+  // Which lane is the mouse in? Returns 0-3 or -1 if not in a lane
   R.planLaneAt = function (my) {
     if (!R.planMode) return -1;
     var rTop = R.planRiverTop();
     var rH = R.planRiverHeight();
     if (my < rTop || my > rTop + rH) return -1;
-    var lane = Math.floor((my - rTop) / R.planLaneHeight());
-    return Math.min(lane, R.planLaneCount() - 1);
+    // Check each lane's bounds
+    for (var i = 0; i < R.planLaneCount(); i++) {
+      var b = R.planLaneBounds(i);
+      if (my >= b.top && my < b.bottom) return i;
+    }
+    return R.planLaneCount() - 1;
   };
 
 
@@ -994,7 +1019,6 @@ window.River = {};
   R.drawPlanMode = function (t, dt) {
     if (!R.planMode) return;
     var ctx = R.ctx;
-    var laneH = R.planLaneHeight();
 
     // ── Clip to plan window bounds ──
     var now = new Date(R.state.now);
@@ -1019,7 +1043,8 @@ window.River = {};
       // Lane background — current lane slightly brighter
       var bgAlpha = isCurrent ? (isActive ? 0.04 : 0.02) : (isActive ? 0.02 : 0.005);
       ctx.fillStyle = 'rgba(200, 165, 110, ' + bgAlpha + ')';
-      ctx.fillRect(wLeftX, bounds.top, wRightX - wLeftX, laneH);
+      var thisLaneH = bounds.bottom - bounds.top;
+      ctx.fillRect(wLeftX, bounds.top, wRightX - wLeftX, thisLaneH);
 
       // Separator line at bottom of lane (except last) — more visible
       if (i < R.planLaneCount() - 1) {
@@ -1038,7 +1063,7 @@ window.River = {};
           s.x -= s.speed * dt;
           if (s.x + s.len < 0) {
             s.x = R.W + 20 + Math.random() * 200;
-            s.y = bounds.top + 10 + Math.random() * (laneH - 20);
+            s.y = bounds.top + 10 + Math.random() * (thisLaneH - 20);
             s.len = 40 + Math.random() * 120;
           }
           var fadeL = Math.min(1, (s.x + s.len) / 100);
@@ -1065,7 +1090,7 @@ window.River = {};
         ctx.fillText('current', wLeftX + 12, bounds.midY);
         // Left edge accent bar
         ctx.fillStyle = 'rgba(200, 165, 110, 0.2)';
-        ctx.fillRect(wLeftX, bounds.top + 2, 3, laneH - 4);
+        ctx.fillRect(wLeftX, bounds.top + 2, 3, thisLaneH - 4);
       } else {
         // Other lanes: number + optional label
         ctx.font = '500 11px -apple-system, system-ui, sans-serif';

@@ -12,31 +12,52 @@
 
   // ── Layout Helpers ─────────────────────────────────────────────────
 
-  R.planLaneCount = function () { return 5; };
+  R.planLaneCount = function () { return 4; };
 
   R.planRiverTop = function () { return R.surfaceY() + 5; };
 
   R.planRiverHeight = function () { return R.H - R.planRiverTop() - 30; };
 
-  R.planLaneHeight = function () {
-    return R.planRiverHeight() / R.planLaneCount();
+  // Current lane (0) gets 40% of height, rest split evenly
+  var CURRENT_LANE_RATIO = 0.40;
+
+  R.planLaneHeight = function (i) {
+    var total = R.planRiverHeight();
+    if (i === 0 || i === undefined) {
+      return i === 0 ? total * CURRENT_LANE_RATIO : total / R.planLaneCount();
+    }
+    return total * (1 - CURRENT_LANE_RATIO) / (R.planLaneCount() - 1);
   };
 
-  // Returns { top, bottom, midY } for a given lane index (0-4)
+  // Returns { top, bottom, midY } for a given lane index
   R.planLaneBounds = function (i) {
-    var top = R.planRiverTop() + i * R.planLaneHeight();
-    var h = R.planLaneHeight();
+    var rTop = R.planRiverTop();
+    var total = R.planRiverHeight();
+    var currentH = total * CURRENT_LANE_RATIO;
+    var otherH = (total - currentH) / (R.planLaneCount() - 1);
+    var top, h;
+    if (i === 0) {
+      top = rTop;
+      h = currentH;
+    } else {
+      top = rTop + currentH + (i - 1) * otherH;
+      h = otherH;
+    }
     return { top: top, bottom: top + h, midY: top + h / 2 };
   };
 
-  // Which lane is the mouse in? Returns 0-4 or -1 if not in a lane
+  // Which lane is the mouse in? Returns 0-3 or -1 if not in a lane
   R.planLaneAt = function (my) {
     if (!R.planMode) return -1;
     var rTop = R.planRiverTop();
     var rH = R.planRiverHeight();
     if (my < rTop || my > rTop + rH) return -1;
-    var lane = Math.floor((my - rTop) / R.planLaneHeight());
-    return Math.min(lane, R.planLaneCount() - 1);
+    // Check each lane's bounds
+    for (var i = 0; i < R.planLaneCount(); i++) {
+      var b = R.planLaneBounds(i);
+      if (my >= b.top && my < b.bottom) return i;
+    }
+    return R.planLaneCount() - 1;
   };
 
 
@@ -66,7 +87,6 @@
   R.drawPlanMode = function (t, dt) {
     if (!R.planMode) return;
     var ctx = R.ctx;
-    var laneH = R.planLaneHeight();
 
     // ── Clip to plan window bounds ──
     var now = new Date(R.state.now);
@@ -83,19 +103,23 @@
     // ── Draw lane separators (sediment layers) ──
     for (var i = 0; i < R.planLaneCount(); i++) {
       var bounds = R.planLaneBounds(i);
-
-      // Lane background — active lane is brighter
+      var isCurrent = (i === 0);
       var isActive = (R.planHoverLane === i);
-      var bgAlpha = isActive ? 0.02 : 0.005;
-      ctx.fillStyle = 'rgba(200, 165, 110, ' + bgAlpha + ')';
-      ctx.fillRect(wLeftX, bounds.top, wRightX - wLeftX, laneH);
+      var laneData = R.planLanes[i];
+      var label = (laneData && laneData.label) ? laneData.label : '';
 
-      // Separator line at bottom of lane (except last)
+      // Lane background — current lane slightly brighter
+      var bgAlpha = isCurrent ? (isActive ? 0.04 : 0.02) : (isActive ? 0.02 : 0.005);
+      ctx.fillStyle = 'rgba(200, 165, 110, ' + bgAlpha + ')';
+      var thisLaneH = bounds.bottom - bounds.top;
+      ctx.fillRect(wLeftX, bounds.top, wRightX - wLeftX, thisLaneH);
+
+      // Separator line at bottom of lane (except last) — more visible
       if (i < R.planLaneCount() - 1) {
         ctx.beginPath();
-        ctx.moveTo(wLeftX + 40, bounds.bottom);
-        ctx.lineTo(wRightX - 40, bounds.bottom);
-        ctx.strokeStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.12 : 0.06) + ')';
+        ctx.moveTo(wLeftX, bounds.bottom);
+        ctx.lineTo(wRightX, bounds.bottom);
+        ctx.strokeStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.25 : 0.15) + ')';
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -107,7 +131,7 @@
           s.x -= s.speed * dt;
           if (s.x + s.len < 0) {
             s.x = R.W + 20 + Math.random() * 200;
-            s.y = bounds.top + 10 + Math.random() * (laneH - 20);
+            s.y = bounds.top + 10 + Math.random() * (thisLaneH - 20);
             s.len = 40 + Math.random() * 120;
           }
           var fadeL = Math.min(1, (s.x + s.len) / 100);
@@ -123,26 +147,26 @@
         }
       }
 
-      // ── Lane label ──
-      var laneData = R.planLanes[i];
-      var label = (laneData && laneData.label) ? laneData.label : (i === 0 ? 'current' : '');
-      if (label) {
-        ctx.save();
-        ctx.font = '400 11px -apple-system, system-ui, sans-serif';
+      // ── Lane labels on LEFT edge of plan area ──
+      ctx.save();
+      if (isCurrent) {
+        // Current lane: prominent label + left accent bar
+        ctx.font = '600 12px -apple-system, system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.45 : 0.25) + ')';
-        ctx.fillText(label, wLeftX + 16, bounds.midY);
-        ctx.restore();
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.6)';
+        ctx.fillText('current', wLeftX + 12, bounds.midY);
+        // Left edge accent bar
+        ctx.fillStyle = 'rgba(200, 165, 110, 0.2)';
+        ctx.fillRect(wLeftX, bounds.top + 2, 3, thisLaneH - 4);
+      } else {
+        // Other lanes: number + optional label
+        ctx.font = '500 11px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(200, 165, 110, ' + (isActive ? 0.4 : 0.2) + ')';
+        ctx.fillText(label || ('lane ' + (i + 1)), wLeftX + 12, bounds.midY);
       }
-
-      // ── Lane number (faint) ──
-      ctx.save();
-      ctx.font = '500 10px -apple-system, system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(200, 165, 110, 0.15)';
-      ctx.fillText((i + 1), wLeftX + 16, bounds.top + 6);
       ctx.restore();
     }
 
@@ -189,23 +213,23 @@
       ctx.beginPath();
       ctx.roundRect(btnX, btnY, btnW, btnH, 6);
       ctx.fillStyle = isHover
-        ? 'rgba(200, 165, 110, 0.18)'
-        : 'rgba(200, 165, 110, 0.08)';
+        ? 'rgba(180, 70, 50, 0.25)'
+        : 'rgba(180, 70, 50, 0.12)';
       ctx.fill();
       ctx.strokeStyle = isHover
-        ? 'rgba(200, 165, 110, 0.35)'
-        : 'rgba(200, 165, 110, 0.15)';
+        ? 'rgba(180, 70, 50, 0.5)'
+        : 'rgba(180, 70, 50, 0.3)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Button text
-      ctx.font = '500 10px -apple-system, system-ui, sans-serif';
+      // Button text — bright red
+      ctx.font = '600 10px -apple-system, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = isHover
-        ? 'rgba(200, 165, 110, 0.85)'
-        : 'rgba(200, 165, 110, 0.45)';
-      ctx.fillText('Use this', btnX + btnW / 2, btnY + btnH / 2);
+        ? 'rgba(220, 90, 60, 0.95)'
+        : 'rgba(180, 70, 50, 0.7)';
+      ctx.fillText('Use lane', btnX + btnW / 2, btnY + btnH / 2);
       ctx.restore();
     }
   };

@@ -57,8 +57,11 @@
       hh = Math.min(hh, 60);
       // Clamp to lane slot height (accounts for overlap spreading)
       if (a.ctx && a.ctx.type === 'lane') {
-        var maxH = a._laneSlotH ? (a._laneSlotH - 4) / 2 : (R.planLaneHeight ? (R.planLaneHeight() - 4) / 2 : hh);
-        hh = Math.min(hh, maxH);
+        var laneH;
+        if (a._laneSlotH) { laneH = a._laneSlotH; }
+        else if (R.planLaneBounds) { var lb = R.planLaneBounds(a.ctx.lane); laneH = lb.bottom - lb.top; }
+        else { laneH = hh * 2 + 4; }
+        hh = Math.min(hh, (laneH - 4) / 2);
       }
     } else {
       hw = 18; hh = 18;
