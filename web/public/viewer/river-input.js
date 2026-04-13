@@ -544,8 +544,18 @@
     quickAddClickY = e.clientY;
 
     if (R.planMode) {
+      // Only target a lane if click is inside the plan window (both X and Y)
       var lane = R.planLaneAt(e.clientY);
-      if (lane >= 0) {
+      var inPlanX = false;
+      if (R.planWindowStart && R.planWindowEnd && R.state) {
+        var pNow = new Date(R.state.now);
+        var pStartH = (new Date(R.planWindowStart).getTime() - pNow.getTime()) / 3600000;
+        var pEndH = (new Date(R.planWindowEnd).getTime() - pNow.getTime()) / 3600000;
+        var pLeftX = R.hoursToX(pStartH);
+        var pRightX = R.hoursToX(pEndH);
+        inPlanX = (e.clientX >= pLeftX && e.clientX <= pRightX);
+      }
+      if (lane >= 0 && inPlanX) {
         quickAddLane = lane;
         quickAddPos = (e.clientX - R.W * R.NOW_X) / R.PIXELS_PER_HOUR + R.scrollHours;
       } else {
