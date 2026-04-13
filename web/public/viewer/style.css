@@ -617,12 +617,15 @@ input[type="checkbox"] {
   top: 8px;
   right: 50px;
   z-index: 5;
+  box-sizing: border-box;
+  height: 20px;
   padding: 4px 10px;
   border-radius: 6px;
   background: rgba(200, 165, 110, 0.06);
   border: 1px solid rgba(200, 165, 110, 0.12);
   color: rgba(200, 165, 110, 0.4);
   font-size: 10px;
+  line-height: 10px;
   font-weight: 500;
   font-family: -apple-system, system-ui, sans-serif;
   letter-spacing: 0.04em;
@@ -734,14 +737,18 @@ input[type="checkbox"] {
   top: 8px;
   right: 16px;
   z-index: 200;
-  background: rgba(200, 165, 110, 0.06);
-  border: 1px solid rgba(200, 165, 110, 0.15);
-  border-radius: 6px;
-  padding: 4px 6px;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(200, 165, 110, 0.06);
+  border: 1px solid rgba(200, 165, 110, 0.12);
+  border-radius: 6px;
   color: rgba(200, 165, 110, 0.4);
-  font-size: 12px;
-  line-height: 1;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -751,8 +758,9 @@ input[type="checkbox"] {
   background: rgba(200, 165, 110, 0.1);
 }
 .menu-icon {
-  font-size: 12px;
-  line-height: 1;
+  display: block;
+  font-size: 10px;
+  line-height: 10px;
 }
 .menu-dot { display: none; }
 .menu-dot.active { display: none; }
