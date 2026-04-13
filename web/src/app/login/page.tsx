@@ -30,7 +30,7 @@ function LoginContent() {
       if (error) {
         setMessage(error.message)
       } else {
-        setMessage('Check your email to confirm your account.')
+        router.push('/app')
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
