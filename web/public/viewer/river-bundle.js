@@ -3927,8 +3927,16 @@ window.River = {};
 })();
 // river-mobile.js — vertical river layout for mobile viewports
 // Loaded AFTER all other viewer files. Overrides layout/render functions
-// when viewport width < 768px. Time flows top to bottom.
-// Cloud is a horizontal strip at the top. River flows downward.
+// when viewport width < 768px.
+//
+// LAYOUT (bottom to top of screen):
+//   Bottom:  Cloud (thumb zone) — unscheduled wisps
+//   Above:   Timeframe bar (horizon selector)
+//   Above:   Now-line — horizontal amber band, ~20% from bottom
+//   Above:   Past fades between now-line and surface
+//   Top:     River/Future — tasks emerge from top, drift DOWN toward now
+//
+// Time flows DOWNWARD. Future at top, past below now-line.
 (function () {
   'use strict';
 
@@ -3957,20 +3965,25 @@ window.River = {};
   var _origTaskStretch = R.taskStretch;
 
   // ── Mobile Constants ───────────────────────────────────────────────
-  // Cloud is top 20% strip. River fills the rest.
-  // Time flows top to bottom. NOW_Y at 25% from top of river zone.
-  var CLOUD_HEIGHT_RATIO = 0.18;
-  var NOW_Y_RATIO = 0.25; // now-line at 25% down the river zone
+  var CLOUD_HEIGHT_RATIO = 0.15; // cloud is bottom 15%
+  var HORIZON_BAR_H = 36;       // height reserved for timeframe bar
 
   // ── Mobile Layout ──────────────────────────────────────────────────
 
-  // Surface Y = bottom of cloud strip (horizontal divider)
-  function mSurfaceY() { return R.H * CLOUD_HEIGHT_RATIO; }
+  // Surface Y = boundary between river (above) and cloud (below)
+  // Located at 85% from top — cloud fills from here to bottom
+  function mSurfaceY() { return R.H * (1 - CLOUD_HEIGHT_RATIO); }
 
-  // Cloud zone: full width, top strip
+  // Now-line sits ~20% from bottom of screen, above the cloud
+  function mNowY() {
+    var sY = mSurfaceY();
+    return sY - HORIZON_BAR_H - 30; // just above the timeframe bar
+  }
+
+  // Cloud zone: full width, BOTTOM strip (thumb-reachable)
   function mCloudPos(task) {
-    var top = 40;
-    var bot = mSurfaceY() - 20;
+    var top = mSurfaceY() + 20;
+    var bot = R.H - 20;
     var cx = (task.cloud_x != null) ? task.cloud_x : R.hashFrac(task.id, 'cx');
     var cy = (task.cloud_y != null) ? task.cloud_y : R.hashFrac(task.id, 'cy');
     return {
@@ -3979,18 +3992,16 @@ window.River = {};
     };
   }
 
-  // Convert hours-from-now to screen Y (time axis is vertical)
+  // Convert hours-from-now to screen Y
+  // Future (positive h) → UP (smaller Y, toward top of screen)
+  // Past (negative h) → DOWN (larger Y, toward now-line and below)
   function mHoursToY(h) {
-    var riverTop = mSurfaceY() + 30;
-    var nowY = riverTop + (R.H - riverTop) * NOW_Y_RATIO;
-    return nowY + (h - R.scrollHours) * R.PIXELS_PER_HOUR;
+    var ny = mNowY();
+    return ny - (h - R.scrollHours) * R.PIXELS_PER_HOUR;
   }
 
-  // Stub: hoursToX returns center for all river tasks (they spread horizontally)
+  // Stub: hoursToX returns center for river tasks (they scatter horizontally via hash)
   function mHoursToX() { return R.W * 0.5; }
-
-  // Now-line Y position
-  function mNowY() { return mHoursToY(0); }
 
   // River task position: Y from time, X from hash scatter
   function mRiverPos(task) {
@@ -4003,20 +4014,18 @@ window.River = {};
   }
 
   function mRecalcScale() {
-    // Visible future spans from now-line to bottom edge
-    var riverTop = mSurfaceY() + 30;
-    var nowY = riverTop + (R.H - riverTop) * NOW_Y_RATIO;
-    var futureHeight = R.H - nowY - 30;
-    R.PIXELS_PER_HOUR = futureHeight / R.horizonHours;
+    // Future spans from now-line UP to the top of screen
+    var futureHeight = mNowY() - 40; // 40px top margin for tag bar
+    R.PIXELS_PER_HOUR = Math.max(1, futureHeight / R.horizonHours);
   }
 
-  // Task dimensions: on mobile, height = duration (vertical), width = fixed
+  // Task dimensions: on mobile, height = duration (vertical), width adapts
   function mTaskStretch(a) {
     var hw, hh;
     if (a.position !== null && a.position !== undefined) {
       var durationPx = (a.mass / 60) * R.PIXELS_PER_HOUR;
-      hh = Math.max(8, durationPx / 2); // height = duration
-      hw = Math.min(hh, Math.max(14, hh * 0.6)); // width adapts
+      hh = Math.max(8, durationPx / 2);
+      hw = Math.min(hh, Math.max(14, hh * 0.6));
       hw = Math.min(hw, 50);
     } else {
       hw = 16; hh = 16;
@@ -4031,26 +4040,30 @@ window.River = {};
     var ctx = R.ctx;
     var sY = mSurfaceY();
 
-    // Cloud zone — cool dark sky at top
-    ctx.fillStyle = R.SKY_COLOR;
+    // River zone — warm water at TOP (0 to surfaceY)
+    var waterGrad = ctx.createLinearGradient(0, 0, 0, sY);
+    waterGrad.addColorStop(0, R.WATER_DEEP);
+    waterGrad.addColorStop(1, R.WATER_TOP);
+    ctx.fillStyle = waterGrad;
     ctx.fillRect(0, 0, R.W, sY);
 
-    // River zone — warm water below
-    var waterGrad = ctx.createLinearGradient(0, sY, 0, R.H);
-    waterGrad.addColorStop(0, R.WATER_TOP);
-    waterGrad.addColorStop(1, R.WATER_DEEP);
-    ctx.fillStyle = waterGrad;
+    // Cloud zone — cool dark sky at BOTTOM (surfaceY to H)
+    ctx.fillStyle = R.SKY_COLOR;
     ctx.fillRect(0, sY, R.W, R.H - sY);
 
-    // Surface glow — horizontal band
-    var surfGrad = ctx.createLinearGradient(0, sY - 10, 0, sY + 20);
+    // Surface glow — horizontal band at the boundary
+    var surfGrad = ctx.createLinearGradient(0, sY - 15, 0, sY + 15);
     surfGrad.addColorStop(0, 'rgba(200, 165, 110, 0)');
     surfGrad.addColorStop(0.3, 'rgba(200, 165, 110, 0.04)');
     surfGrad.addColorStop(0.5, 'rgba(200, 165, 110, 0.07)');
     surfGrad.addColorStop(0.7, 'rgba(200, 165, 110, 0.04)');
     surfGrad.addColorStop(1, 'rgba(200, 165, 110, 0)');
     ctx.fillStyle = surfGrad;
-    ctx.fillRect(0, sY - 10, R.W, 30);
+    ctx.fillRect(0, sY - 15, R.W, 30);
+
+    // Breathing room: warm wash over the river
+    ctx.fillStyle = 'rgba(200, 165, 110, 0.008)';
+    ctx.fillRect(0, 0, R.W, sY);
   }
 
   function mInitStreaks() {
@@ -4058,12 +4071,12 @@ window.River = {};
     var sY = mSurfaceY();
     for (var i = 0; i < R.NUM_STREAKS; i++) {
       R.streaks.push({
-        x: 0, // unused — streaks are horizontal lines that move DOWN
-        y: sY + 20 + Math.random() * (R.H - sY - 40),
+        x: 0,
+        y: 20 + Math.random() * (sY - 40), // within river zone (0 to sY)
         len: 30 + Math.random() * (R.W * 0.6),
         speed: 6 + Math.random() * 18,
         alpha: 0.015 + Math.random() * 0.04,
-        xOff: Math.random() * R.W * 0.4 // horizontal offset for variety
+        xOff: Math.random() * R.W * 0.4
       });
     }
   }
@@ -4073,16 +4086,16 @@ window.River = {};
     var sY = mSurfaceY();
     for (var i = 0; i < R.streaks.length; i++) {
       var s = R.streaks[i];
-      // Streaks drift downward (direction of time flow)
+      // Streaks drift downward (time flows down)
       s.y += s.speed * dt;
-      if (s.y - 20 > R.H) {
-        s.y = sY + 10;
+      if (s.y > sY - 10) {
+        s.y = 10; // recycle to top of river
         s.len = 30 + Math.random() * (R.W * 0.6);
         s.xOff = Math.random() * R.W * 0.3;
       }
 
-      var fadeT = Math.min(1, (s.y - sY) / 80);
-      var fadeB = Math.min(1, (R.H - s.y) / 80);
+      var fadeT = Math.min(1, s.y / 80);
+      var fadeB = Math.min(1, (sY - s.y) / 80);
       var fade = fadeT * fadeB;
 
       var x1 = s.xOff;
@@ -4100,7 +4113,7 @@ window.River = {};
   function mDrawNowLine(t) {
     var ctx = R.ctx;
     var y = mNowY();
-    if (y < mSurfaceY() - 40 || y > R.H + 40) return;
+    if (y < -40 || y > mSurfaceY() + 40) return;
 
     var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
 
@@ -4131,14 +4144,15 @@ window.River = {};
   function mDrawPastFade() {
     var ctx = R.ctx;
     var sY = mSurfaceY();
-    var fadeH = (R.H - sY) * 0.1;
+    var ny = mNowY();
+    var fadeH = (sY - ny) * 0.4;
 
-    // Fade at top of river zone (past fades up)
-    var fg = ctx.createLinearGradient(0, sY, 0, sY + fadeH);
+    // Fade between now-line and surface — past dissolves toward cloud
+    var fg = ctx.createLinearGradient(0, sY, 0, sY - fadeH);
     fg.addColorStop(0, R.WATER_TOP);
     fg.addColorStop(1, 'rgba(35, 30, 25, 0)');
     ctx.fillStyle = fg;
-    ctx.fillRect(0, sY, R.W, fadeH);
+    ctx.fillRect(0, sY - fadeH, R.W, fadeH);
   }
 
   function mDrawTimeMarkers() {
@@ -4146,37 +4160,37 @@ window.River = {};
     var ctx = R.ctx;
     var now = new Date(R.state.now);
     var sY = mSurfaceY();
+    var ny = mNowY();
 
-    // Visible time range (vertical)
-    var riverTop = sY + 30;
-    var nowY = riverTop + (R.H - riverTop) * NOW_Y_RATIO;
-    var viewTopH = R.scrollHours - (nowY - riverTop) / R.PIXELS_PER_HOUR;
-    var viewBotH = viewTopH + (R.H - riverTop) / R.PIXELS_PER_HOUR;
-    var viewTopMs = now.getTime() + viewTopH * 3600000;
-    var viewBotMs = now.getTime() + viewBotH * 3600000;
+    // Visible time range: top of screen = most future, now-line = h=0
+    var viewTopH = R.scrollHours + (ny - 30) / R.PIXELS_PER_HOUR;
+    var viewBotH = R.scrollHours - (sY - ny) / R.PIXELS_PER_HOUR;
+    // Ensure top > bot (top is more future)
+    var minH = Math.min(viewTopH, viewBotH);
+    var maxH = Math.max(viewTopH, viewBotH);
+    var viewMinMs = now.getTime() + minH * 3600000;
+    var viewMaxMs = now.getTime() + maxH * 3600000;
 
-    // Use the same boundary helpers from river-grid.js (they're on the R namespace)
     var majorTimes, majorLabel;
 
     if (R.horizonHours <= 6) {
       majorTimes = [];
-      var d = new Date(viewTopMs); d.setMinutes(0,0,0);
-      while (d.getTime() <= viewBotMs) { majorTimes.push(d.getTime()); d = new Date(d.getTime() + 3600000); }
-      majorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
+      var d1 = new Date(viewMinMs); d1.setMinutes(0, 0, 0);
+      while (d1.getTime() <= viewMaxMs) { majorTimes.push(d1.getTime()); d1 = new Date(d1.getTime() + 3600000); }
+      majorLabel = function (d) { var h = d.getHours(); return (h % 12 || 12) + (h >= 12 ? 'pm' : 'am'); };
     } else if (R.horizonHours <= 24) {
       majorTimes = [];
-      var d = new Date(viewTopMs); d.setMinutes(0,0,0);
       var step = 3 * 3600000;
-      d = new Date(Math.floor(d.getTime() / step) * step);
-      while (d.getTime() <= viewBotMs) { majorTimes.push(d.getTime()); d = new Date(d.getTime() + step); }
-      majorLabel = function(d) { var h=d.getHours(); return (h%12||12) + (h>=12?'pm':'am'); };
+      var d2 = new Date(viewMinMs); d2.setMinutes(0, 0, 0);
+      d2 = new Date(Math.floor(d2.getTime() / step) * step);
+      while (d2.getTime() <= viewMaxMs) { majorTimes.push(d2.getTime()); d2 = new Date(d2.getTime() + step); }
+      majorLabel = function (d) { var h = d.getHours(); return (h % 12 || 12) + (h >= 12 ? 'pm' : 'am'); };
     } else {
-      // Wider horizons: daily markers
       majorTimes = [];
-      var d = new Date(viewTopMs); d.setHours(0,0,0,0);
-      if (d.getTime() < viewTopMs) d.setDate(d.getDate() + 1);
-      while (d.getTime() <= viewBotMs) { majorTimes.push(d.getTime()); d.setDate(d.getDate() + 1); }
-      majorLabel = function(d) { return R.DAYS[d.getDay()] + ' ' + d.getDate(); };
+      var d3 = new Date(viewMinMs); d3.setHours(0, 0, 0, 0);
+      if (d3.getTime() < viewMinMs) d3.setDate(d3.getDate() + 1);
+      while (d3.getTime() <= viewMaxMs) { majorTimes.push(d3.getTime()); d3.setDate(d3.getDate() + 1); }
+      majorLabel = function (d) { return R.DAYS[d.getDay()] + ' ' + d.getDate(); };
     }
 
     // Draw horizontal time markers
@@ -4185,7 +4199,7 @@ window.River = {};
     for (var i = 0; i < majorTimes.length; i++) {
       var hrs = (majorTimes[i] - now.getTime()) / 3600000;
       var y = mHoursToY(hrs);
-      if (y < sY + 10 || y > R.H - 10) continue;
+      if (y < 30 || y > sY - 10) continue;
 
       ctx.beginPath();
       ctx.moveTo(20, y);
@@ -4207,9 +4221,9 @@ window.River = {};
     R.surfaceY = mSurfaceY;
     R.cloudPos = mCloudPos;
     R.riverPos = mRiverPos;
-    R.hoursToX = mHoursToX; // stub — returns center
-    R.hoursToY = mHoursToY; // new: time → Y
-    R.nx = function () { return R.W * 0.5; }; // unused but safe
+    R.hoursToX = mHoursToX;
+    R.hoursToY = mHoursToY;
+    R.nx = function () { return R.W * 0.5; };
     R.recalcScale = mRecalcScale;
     R.taskStretch = mTaskStretch;
     R.drawWorld = mDrawWorld;
@@ -4219,13 +4233,16 @@ window.River = {};
     R.drawPastFade = mDrawPastFade;
     R.drawTimeMarkers = mDrawTimeMarkers;
 
-    // Hide plan button on mobile
+    // Hide plan button on mobile (no plan mode)
     var planBtn = document.getElementById('plan-btn');
     if (planBtn) planBtn.style.display = 'none';
 
-    // Hide horizon bar on mobile (use default day view)
+    // Reposition horizon bar to sit at the surface line (between river and cloud)
     var horizonBar = document.getElementById('horizon-bar');
-    if (horizonBar) horizonBar.style.display = 'none';
+    if (horizonBar) {
+      horizonBar.style.top = mSurfaceY() + 'px';
+      horizonBar.style.transform = 'translateX(-50%) translateY(-50%)';
+    }
 
     R.recalcScale();
     R.initStreaks();
@@ -4250,7 +4267,10 @@ window.River = {};
     var planBtn = document.getElementById('plan-btn');
     if (planBtn) planBtn.style.display = '';
     var horizonBar = document.getElementById('horizon-bar');
-    if (horizonBar) horizonBar.style.display = '';
+    if (horizonBar) {
+      horizonBar.style.top = '';
+      horizonBar.style.transform = '';
+    }
 
     R.recalcScale();
     R.initStreaks();
@@ -4264,6 +4284,13 @@ window.River = {};
     R.checkMobile();
     if (R.isMobile && !wasMobile) R.applyMobile();
     else if (!R.isMobile && wasMobile) R.removeMobile();
+    // Update horizon bar position on every resize in mobile mode
+    if (R.isMobile) {
+      var horizonBar = document.getElementById('horizon-bar');
+      if (horizonBar) {
+        horizonBar.style.top = mSurfaceY() + 'px';
+      }
+    }
   };
 
   // ── Touch Events ───────────────────────────────────────────────────
@@ -4280,7 +4307,6 @@ window.River = {};
       var t = e.touches[0];
       touchStart = { x: t.clientX, y: t.clientY, time: Date.now(), scrollH: R.scrollHours };
       touchScrolling = false;
-      // Don't preventDefault here — only in touchmove once we know it's a drag/scroll
     }, { passive: true });
 
     R.canvas.addEventListener('touchmove', function (e) {
@@ -4292,13 +4318,13 @@ window.River = {};
 
       if (!touchScrolling && (Math.abs(dy) > R.DRAG_THRESHOLD || Math.abs(dx) > R.DRAG_THRESHOLD)) {
         touchScrolling = true;
-        // Clear any phantom drag state from the mousedown we dispatched
         R.dragging = null;
       }
 
       if (touchScrolling) {
+        // Drag DOWN → scroll toward future (future is up, so adding hours reveals more future at top)
         var hoursPerPx = 1 / R.PIXELS_PER_HOUR;
-        R.scrollHours = touchStart.scrollH - dy * hoursPerPx;
+        R.scrollHours = touchStart.scrollH + dy * hoursPerPx;
         R.sync();
       } else {
         var me = new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY });
@@ -4312,7 +4338,7 @@ window.River = {};
       var endY = e.changedTouches[0].clientY;
 
       if (touchScrolling) {
-        R.dragging = null; // ensure no phantom drag
+        R.dragging = null;
         touchScrolling = false;
         touchStart = null;
         return;
@@ -4325,7 +4351,7 @@ window.River = {};
         R.canvas.dispatchEvent(dbl);
         lastTapTime = 0;
       } else {
-        // Single tap — dispatch mousedown + mouseup (select/click)
+        // Single tap
         var down = new MouseEvent('mousedown', { clientX: endX, clientY: endY });
         R.canvas.dispatchEvent(down);
         var up = new MouseEvent('mouseup', { clientX: endX, clientY: endY });
@@ -4340,7 +4366,6 @@ window.River = {};
   }
 
   // ── Initial Check ──────────────────────────────────────────────────
-  // Run after canvas is sized
   setTimeout(function () {
     if (R.W > 0) {
       R.checkMobile();

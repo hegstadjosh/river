@@ -822,3 +822,68 @@ input[type="checkbox"] {
   color: rgb(200, 120, 80);
 }
 .menu-badge.hidden { display: none; }
+
+/* ── Mobile Overrides ──────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  /* Tag bar: horizontal scroll, top of screen */
+  .tag-bar {
+    max-width: calc(100vw - 50px);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  /* Horizon bar: repositioned by JS to surface line, smaller */
+  .river-bar {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+  .hz-btn {
+    padding: 3px 5px;
+    font-size: 9px;
+  }
+  .hz-nav {
+    padding-left: 4px;
+  }
+  .hz-arrow { font-size: 14px; }
+  .hz-label { font-size: 9px; }
+
+  /* Panel: bottom sheet */
+  .panel {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-height: 55vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    z-index: 20;
+    transition: transform 0.25s ease, opacity 0.15s ease;
+    transform: translateY(0);
+  }
+  .panel.hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+    display: flex !important;
+  }
+
+  /* Quick-add: wider, prevent iOS zoom */
+  .quick-add-wrap {
+    width: calc(100vw - 40px) !important;
+    max-width: 300px;
+  }
+  .quick-add {
+    font-size: 16px !important; /* prevents iOS auto-zoom */
+    padding: 10px 14px;
+  }
+
+  /* Plan button: hidden by JS, but also hide via CSS as fallback */
+  .plan-btn {
+    display: none !important;
+  }
+}
