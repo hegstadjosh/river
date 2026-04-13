@@ -738,7 +738,7 @@ input[type="checkbox"] {
   border: none;
   padding: 0;
   color: rgba(200, 165, 110, 0.4);
-  font-size: 22px;
+  font-size: 32px;
   line-height: 1;
   cursor: pointer;
   display: flex;
