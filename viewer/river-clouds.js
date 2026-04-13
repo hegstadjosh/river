@@ -19,7 +19,7 @@
       dy: (Math.random() - 0.5) * 18,
       rx: 25 + Math.random() * 50,
       ry: 12 + Math.random() * 22,
-      alpha: 0.012 + Math.random() * 0.018,
+      alpha: 0.006 + Math.random() * 0.01,
       rot: (Math.random() - 0.5) * 0.3,
     };
   }
@@ -44,7 +44,7 @@
     for (var i = 0; i < NUM_CLOUDS; i++) {
       var x = Math.random() * R.W * 1.5;
       var y = zone.top + zone.pad + Math.random() * (zone.h - zone.pad * 2);
-      var speed = 1.5 + Math.random() * 3.5; // px/sec, very slow
+      var speed = 6 + Math.random() * 12; // px/sec
       clouds.push(createCloud(x, y, speed));
     }
   };
