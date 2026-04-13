@@ -310,6 +310,19 @@
     R.hoursToY = mHoursToY;
     R.cloudTopY = mCloudTopY;
     R.screenYToHours = mScreenYToHours;
+    R.snapY = function (screenY) {
+      if (!R.state || !R.snapTimesMs || R.snapTimesMs.length === 0) return screenY;
+      var now = new Date(R.state.now);
+      var nearestY = screenY;
+      var nearestDist = R.SNAP_ZONE + 1;
+      for (var i = 0; i < R.snapTimesMs.length; i++) {
+        var hrs = (R.snapTimesMs[i] - now.getTime()) / 3600000;
+        var gy = mHoursToY(hrs);
+        var dist = Math.abs(screenY - gy);
+        if (dist < nearestDist) { nearestDist = dist; nearestY = gy; }
+      }
+      return nearestDist <= R.SNAP_ZONE ? nearestY : screenY;
+    };
     R.nx = function () { return R.W * 0.5; };
     R.recalcScale = mRecalcScale;
     R.taskStretch = mTaskStretch;
@@ -346,6 +359,7 @@
     R.hoursToX = _origHoursToX;
     delete R.hoursToY;
     delete R.screenYToHours;
+    delete R.snapY;
     R.cloudTopY = _origCloudTopY;
     R.nx = _origNx;
     R.recalcScale = _origRecalcScale;

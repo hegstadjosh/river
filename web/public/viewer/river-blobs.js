@@ -44,28 +44,9 @@
     }
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
-    // ── Dimensions ──
-    // Width = exact duration in pixels for river tasks.
-    // During wizard drag: show duration-based size even though still a cloud task.
-    var hw, hh;
-    var isRiverOrWizard = (a.position !== null && a.position !== undefined) ||
-      (R.wizardState && R.wizardState.active && R.wizardState.taskId === a.id);
-    if (isRiverOrWizard) {
-      var durationPx = (a.mass / 60) * R.PIXELS_PER_HOUR;
-      hw = Math.max(8, durationPx / 2);
-      hh = Math.min(hw, Math.max(14, hw * 0.6));
-      hh = Math.min(hh, 60);
-      // Clamp to lane slot height (accounts for overlap spreading)
-      if (a.ctx && a.ctx.type === 'lane') {
-        var laneH;
-        if (a._laneSlotH) { laneH = a._laneSlotH; }
-        else if (R.planLaneBounds) { var lb = R.planLaneBounds(a.ctx.lane); laneH = lb.bottom - lb.top; }
-        else { laneH = hh * 2 + 4; }
-        hh = Math.min(hh, (laneH - 4) / 2);
-      }
-    } else {
-      hw = 18; hh = 18;
-    }
+    // ── Dimensions — delegate to taskStretch (handles mobile axis swap) ──
+    var _s = R.taskStretch(a);
+    var hw = _s.hw, hh = _s.hh;
 
     // ── Visual parameters ──
     var alpha = (0.2 + sol * 0.75) * dim;
@@ -114,7 +95,6 @@
 
     // ── Alive glow ──
     if (a.alive) {
-      hw *= 1.3; hh *= 1.3;
       var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
       var glowR = Math.max(hw, hh) * 2.0 + breath * 10;
       var gg = ctx.createRadialGradient(x, y, Math.min(hw, hh) * 0.5, x, y, glowR);
@@ -165,7 +145,9 @@
     if (rectness > 0) {
       // Solid form — fades in as rectness increases
       var solidAlpha = alpha * rectness;
-      var fg = ctx.createLinearGradient(x - hw, y, x + hw, y);
+      var fg = (R.isMobile && a.position !== null && a.position !== undefined)
+        ? ctx.createLinearGradient(x, y - hh, x, y + hh)
+        : ctx.createLinearGradient(x - hw, y, x + hw, y);
       fg.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + solidAlpha + ')');
       fg.addColorStop(0.5, 'hsla(' + hue + ',' + (sat + 5) + '%,' + lit + '%,' + solidAlpha + ')');
       fg.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + (solidAlpha * 0.9) + ')');

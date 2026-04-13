@@ -264,13 +264,20 @@
         R.dwellCheckStart(e.clientX, e.clientY);
       }
 
-      var rawX = R.dragging.sx + dx;
-      // Snap the START edge (left edge = center - halfWidth) to grid
-      var dd = R.taskStretch(a);
-      var startEdgeX = rawX - dd.hw;
-      var snappedStart = R.snapX(startEdgeX);
-      a.x = snappedStart + dd.hw; // shift center so start edge aligns
-      a.y = R.dragging.sy + dy;
+      if (R.isMobile) {
+        // Mobile: X moves freely, snap Y (time axis)
+        a.x = R.dragging.sx + dx;
+        var rawY = R.dragging.sy + dy;
+        a.y = R.snapY ? R.snapY(rawY) : rawY;
+      } else {
+        var rawX = R.dragging.sx + dx;
+        // Snap the START edge (left edge = center - halfWidth) to grid
+        var dd = R.taskStretch(a);
+        var startEdgeX = rawX - dd.hw;
+        var snappedStart = R.snapX(startEdgeX);
+        a.x = snappedStart + dd.hw;
+        a.y = R.dragging.sy + dy;
+      }
       a.tx = a.x; a.ty = a.y;
 
       if (R.dragging.group) {
@@ -459,7 +466,7 @@
       if (d.zone === 'cloud' && a.y < boundary) {
         // Cloud → river (dragged UP into river zone)
         updates.position = dropHours;
-        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+        updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40))); // X = scatter on mobile
       } else if (d.zone === 'river' && a.y > boundary) {
         // River → cloud (dragged DOWN into cloud zone)
         updates.position = null;
@@ -468,7 +475,7 @@
       } else if (d.zone === 'river') {
         // River → river (reposition)
         updates.position = dropHours;
-        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+        updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40))); // X = scatter on mobile
       } else if (d.zone === 'cloud') {
         // Cloud → cloud (rearrange)
         updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
@@ -518,9 +525,13 @@
         var gBoundary = R.surfaceY();
         var gRTop = gBoundary + 30, gRBot = R.H - 50;
         if (gt.position != null) {
-          var gdd = R.taskStretch(gt);
-          var gStartEdge = gt.x - gdd.hw;
-          gUpdates.position = R.screenXToHours(gStartEdge) + gt.mass / 120;
+          if (R.isMobile && R.screenYToHours) {
+            gUpdates.position = R.screenYToHours(gt.y);
+          } else {
+            var gdd = R.taskStretch(gt);
+            var gStartEdge = gt.x - gdd.hw;
+            gUpdates.position = R.screenXToHours(gStartEdge) + gt.mass / 120;
+          }
           gUpdates.river_y = Math.max(0, Math.min(1, (gt.y - gRTop) / (gRBot - gRTop)));
         }
         if (Object.keys(gUpdates).length > 0) R.save(g.id, gUpdates);
@@ -613,8 +624,18 @@
         : null;
     }
 
-    quickAddWrap.style.left = (e.clientX - 100) + 'px';
-    quickAddWrap.style.top = (e.clientY - 18) + 'px';
+    if (R.isMobile) {
+      // Mobile: CSS handles left/right (16px gutters). Just set top smartly.
+      quickAddWrap.style.left = '';
+      var qTop = e.clientY - 18;
+      // Keep it on screen
+      if (qTop > R.H - 80) qTop = R.H - 80;
+      if (qTop < 10) qTop = 10;
+      quickAddWrap.style.top = qTop + 'px';
+    } else {
+      quickAddWrap.style.left = (e.clientX - 100) + 'px';
+      quickAddWrap.style.top = (e.clientY - 18) + 'px';
+    }
     quickAddWrap.classList.remove('hidden');
     quickAdd.value = '';
     quickAdd.focus();

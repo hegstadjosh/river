@@ -731,28 +731,9 @@ window.River = {};
     }
     var dim = (anyAlive && !a.alive) ? 0.55 : 1.0;
 
-    // ── Dimensions ──
-    // Width = exact duration in pixels for river tasks.
-    // During wizard drag: show duration-based size even though still a cloud task.
-    var hw, hh;
-    var isRiverOrWizard = (a.position !== null && a.position !== undefined) ||
-      (R.wizardState && R.wizardState.active && R.wizardState.taskId === a.id);
-    if (isRiverOrWizard) {
-      var durationPx = (a.mass / 60) * R.PIXELS_PER_HOUR;
-      hw = Math.max(8, durationPx / 2);
-      hh = Math.min(hw, Math.max(14, hw * 0.6));
-      hh = Math.min(hh, 60);
-      // Clamp to lane slot height (accounts for overlap spreading)
-      if (a.ctx && a.ctx.type === 'lane') {
-        var laneH;
-        if (a._laneSlotH) { laneH = a._laneSlotH; }
-        else if (R.planLaneBounds) { var lb = R.planLaneBounds(a.ctx.lane); laneH = lb.bottom - lb.top; }
-        else { laneH = hh * 2 + 4; }
-        hh = Math.min(hh, (laneH - 4) / 2);
-      }
-    } else {
-      hw = 18; hh = 18;
-    }
+    // ── Dimensions — delegate to taskStretch (handles mobile axis swap) ──
+    var _s = R.taskStretch(a);
+    var hw = _s.hw, hh = _s.hh;
 
     // ── Visual parameters ──
     var alpha = (0.2 + sol * 0.75) * dim;
@@ -801,7 +782,6 @@ window.River = {};
 
     // ── Alive glow ──
     if (a.alive) {
-      hw *= 1.3; hh *= 1.3;
       var breath = Math.sin(t / 4000 * Math.PI * 2) * 0.5 + 0.5;
       var glowR = Math.max(hw, hh) * 2.0 + breath * 10;
       var gg = ctx.createRadialGradient(x, y, Math.min(hw, hh) * 0.5, x, y, glowR);
@@ -852,7 +832,9 @@ window.River = {};
     if (rectness > 0) {
       // Solid form — fades in as rectness increases
       var solidAlpha = alpha * rectness;
-      var fg = ctx.createLinearGradient(x - hw, y, x + hw, y);
+      var fg = (R.isMobile && a.position !== null && a.position !== undefined)
+        ? ctx.createLinearGradient(x, y - hh, x, y + hh)
+        : ctx.createLinearGradient(x - hw, y, x + hw, y);
       fg.addColorStop(0,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + solidAlpha + ')');
       fg.addColorStop(0.5, 'hsla(' + hue + ',' + (sat + 5) + '%,' + lit + '%,' + solidAlpha + ')');
       fg.addColorStop(1,   'hsla(' + hue + ',' + sat + '%,' + (lit - 3) + '%,' + (solidAlpha * 0.9) + ')');
@@ -3133,13 +3115,20 @@ window.River = {};
         R.dwellCheckStart(e.clientX, e.clientY);
       }
 
-      var rawX = R.dragging.sx + dx;
-      // Snap the START edge (left edge = center - halfWidth) to grid
-      var dd = R.taskStretch(a);
-      var startEdgeX = rawX - dd.hw;
-      var snappedStart = R.snapX(startEdgeX);
-      a.x = snappedStart + dd.hw; // shift center so start edge aligns
-      a.y = R.dragging.sy + dy;
+      if (R.isMobile) {
+        // Mobile: X moves freely, snap Y (time axis)
+        a.x = R.dragging.sx + dx;
+        var rawY = R.dragging.sy + dy;
+        a.y = R.snapY ? R.snapY(rawY) : rawY;
+      } else {
+        var rawX = R.dragging.sx + dx;
+        // Snap the START edge (left edge = center - halfWidth) to grid
+        var dd = R.taskStretch(a);
+        var startEdgeX = rawX - dd.hw;
+        var snappedStart = R.snapX(startEdgeX);
+        a.x = snappedStart + dd.hw;
+        a.y = R.dragging.sy + dy;
+      }
       a.tx = a.x; a.ty = a.y;
 
       if (R.dragging.group) {
@@ -3328,7 +3317,7 @@ window.River = {};
       if (d.zone === 'cloud' && a.y < boundary) {
         // Cloud → river (dragged UP into river zone)
         updates.position = dropHours;
-        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+        updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40))); // X = scatter on mobile
       } else if (d.zone === 'river' && a.y > boundary) {
         // River → cloud (dragged DOWN into cloud zone)
         updates.position = null;
@@ -3337,7 +3326,7 @@ window.River = {};
       } else if (d.zone === 'river') {
         // River → river (reposition)
         updates.position = dropHours;
-        updates.river_y = Math.max(0, Math.min(1, (a.y - rTop) / (rBot - rTop)));
+        updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40))); // X = scatter on mobile
       } else if (d.zone === 'cloud') {
         // Cloud → cloud (rearrange)
         updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
@@ -3387,9 +3376,13 @@ window.River = {};
         var gBoundary = R.surfaceY();
         var gRTop = gBoundary + 30, gRBot = R.H - 50;
         if (gt.position != null) {
-          var gdd = R.taskStretch(gt);
-          var gStartEdge = gt.x - gdd.hw;
-          gUpdates.position = R.screenXToHours(gStartEdge) + gt.mass / 120;
+          if (R.isMobile && R.screenYToHours) {
+            gUpdates.position = R.screenYToHours(gt.y);
+          } else {
+            var gdd = R.taskStretch(gt);
+            var gStartEdge = gt.x - gdd.hw;
+            gUpdates.position = R.screenXToHours(gStartEdge) + gt.mass / 120;
+          }
           gUpdates.river_y = Math.max(0, Math.min(1, (gt.y - gRTop) / (gRBot - gRTop)));
         }
         if (Object.keys(gUpdates).length > 0) R.save(g.id, gUpdates);
@@ -3482,8 +3475,18 @@ window.River = {};
         : null;
     }
 
-    quickAddWrap.style.left = (e.clientX - 100) + 'px';
-    quickAddWrap.style.top = (e.clientY - 18) + 'px';
+    if (R.isMobile) {
+      // Mobile: CSS handles left/right (16px gutters). Just set top smartly.
+      quickAddWrap.style.left = '';
+      var qTop = e.clientY - 18;
+      // Keep it on screen
+      if (qTop > R.H - 80) qTop = R.H - 80;
+      if (qTop < 10) qTop = 10;
+      quickAddWrap.style.top = qTop + 'px';
+    } else {
+      quickAddWrap.style.left = (e.clientX - 100) + 'px';
+      quickAddWrap.style.top = (e.clientY - 18) + 'px';
+    }
     quickAddWrap.classList.remove('hidden');
     quickAdd.value = '';
     quickAdd.focus();
@@ -4305,6 +4308,19 @@ window.River = {};
     R.hoursToY = mHoursToY;
     R.cloudTopY = mCloudTopY;
     R.screenYToHours = mScreenYToHours;
+    R.snapY = function (screenY) {
+      if (!R.state || !R.snapTimesMs || R.snapTimesMs.length === 0) return screenY;
+      var now = new Date(R.state.now);
+      var nearestY = screenY;
+      var nearestDist = R.SNAP_ZONE + 1;
+      for (var i = 0; i < R.snapTimesMs.length; i++) {
+        var hrs = (R.snapTimesMs[i] - now.getTime()) / 3600000;
+        var gy = mHoursToY(hrs);
+        var dist = Math.abs(screenY - gy);
+        if (dist < nearestDist) { nearestDist = dist; nearestY = gy; }
+      }
+      return nearestDist <= R.SNAP_ZONE ? nearestY : screenY;
+    };
     R.nx = function () { return R.W * 0.5; };
     R.recalcScale = mRecalcScale;
     R.taskStretch = mTaskStretch;
@@ -4341,6 +4357,7 @@ window.River = {};
     R.hoursToX = _origHoursToX;
     delete R.hoursToY;
     delete R.screenYToHours;
+    delete R.snapY;
     R.cloudTopY = _origCloudTopY;
     R.nx = _origNx;
     R.recalcScale = _origRecalcScale;
