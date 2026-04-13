@@ -53,13 +53,6 @@ export default function LandingPage() {
           >
             Start flowing
           </Link>
-          <a
-            href="https://github.com/hegstadjosh/river"
-            className="px-6 py-3 rounded-lg text-sm transition-all"
-            style={{ color: 'rgba(200, 165, 110, 0.5)', border: '1px solid rgba(200, 165, 110, 0.1)' }}
-          >
-            View source
-          </a>
         </div>
 
         <div className="mt-10 sm:mt-16 max-w-4xl w-full relative">
