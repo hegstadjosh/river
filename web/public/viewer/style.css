@@ -765,13 +765,13 @@ input[type="checkbox"] {
 .menu-sidebar {
   position: fixed;
   top: 0;
-  left: 0;
+  right: 0;
   z-index: 190;
   width: 220px;
   height: 100vh;
   background: rgba(23, 22, 26, 0.95);
   backdrop-filter: blur(16px);
-  border-right: 1px solid rgba(200, 165, 110, 0.08);
+  border-left: 1px solid rgba(200, 165, 110, 0.08);
   padding: 52px 12px 20px;
   display: flex;
   flex-direction: column;
@@ -780,7 +780,7 @@ input[type="checkbox"] {
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 .menu-sidebar.hidden {
-  transform: translateX(-100%);
+  transform: translateX(100%);
   opacity: 0;
   pointer-events: none;
 }
