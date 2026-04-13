@@ -214,9 +214,12 @@
 
       if (existingMap[sKey] !== undefined) {
         var a = R.tasks[existingMap[sKey]];
-        // Skip overwriting tasks with unconfirmed local changes
+        // Skip overwriting SERVER data for tasks with unconfirmed local changes
+        // But ALWAYS update target position (so scroll works correctly)
         if (a._dirtyUntil && Date.now() < a._dirtyUntil) {
           a.ctx = src.ctx;
+          a.tx = tgt.x;
+          a.ty = tgt.y;
           continue;
         }
         delete a._dirtyUntil;

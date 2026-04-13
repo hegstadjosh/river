@@ -1449,9 +1449,12 @@ window.River = {};
 
       if (existingMap[sKey] !== undefined) {
         var a = R.tasks[existingMap[sKey]];
-        // Skip overwriting tasks with unconfirmed local changes
+        // Skip overwriting SERVER data for tasks with unconfirmed local changes
+        // But ALWAYS update target position (so scroll works correctly)
         if (a._dirtyUntil && Date.now() < a._dirtyUntil) {
           a.ctx = src.ctx;
+          a.tx = tgt.x;
+          a.ty = tgt.y;
           continue;
         }
         delete a._dirtyUntil;
@@ -4267,36 +4270,37 @@ window.River = {};
 
   var touchStart = null;
   var touchScrolling = false;
+  var lastTapTime = 0;
+  var lastTapX = 0;
+  var lastTapY = 0;
 
   if (R.canvas) {
     R.canvas.addEventListener('touchstart', function (e) {
       if (!R.isMobile) return;
-      e.preventDefault();
       var t = e.touches[0];
       touchStart = { x: t.clientX, y: t.clientY, time: Date.now(), scrollH: R.scrollHours };
       touchScrolling = false;
-
-      // Simulate mousedown for hit testing
-      var me = new MouseEvent('mousedown', { clientX: t.clientX, clientY: t.clientY });
-      R.canvas.dispatchEvent(me);
-    }, { passive: false });
+      // Don't preventDefault here — only in touchmove once we know it's a drag/scroll
+    }, { passive: true });
 
     R.canvas.addEventListener('touchmove', function (e) {
       if (!R.isMobile || !touchStart) return;
       e.preventDefault();
       var t = e.touches[0];
       var dy = t.clientY - touchStart.y;
+      var dx = t.clientX - touchStart.x;
 
-      if (Math.abs(dy) > R.DRAG_THRESHOLD) {
+      if (!touchScrolling && (Math.abs(dy) > R.DRAG_THRESHOLD || Math.abs(dx) > R.DRAG_THRESHOLD)) {
         touchScrolling = true;
+        // Clear any phantom drag state from the mousedown we dispatched
+        R.dragging = null;
       }
 
       if (touchScrolling) {
-        // Scroll time by dragging vertically
         var hoursPerPx = 1 / R.PIXELS_PER_HOUR;
         R.scrollHours = touchStart.scrollH - dy * hoursPerPx;
+        R.sync();
       } else {
-        // Drag task
         var me = new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY });
         R.canvas.dispatchEvent(me);
       }
@@ -4304,19 +4308,33 @@ window.River = {};
 
     R.canvas.addEventListener('touchend', function (e) {
       if (!R.isMobile) return;
-      e.preventDefault();
+      var endX = e.changedTouches[0].clientX;
+      var endY = e.changedTouches[0].clientY;
+
       if (touchScrolling) {
-        // Could add momentum here
+        R.dragging = null; // ensure no phantom drag
         touchScrolling = false;
         touchStart = null;
         return;
       }
 
-      var me = new MouseEvent('mouseup', {
-        clientX: e.changedTouches[0].clientX,
-        clientY: e.changedTouches[0].clientY
-      });
-      R.canvas.dispatchEvent(me);
+      // Detect double-tap (< 300ms, < 30px apart)
+      var now = Date.now();
+      if (now - lastTapTime < 300 && Math.abs(endX - lastTapX) < 30 && Math.abs(endY - lastTapY) < 30) {
+        var dbl = new MouseEvent('dblclick', { clientX: endX, clientY: endY });
+        R.canvas.dispatchEvent(dbl);
+        lastTapTime = 0;
+      } else {
+        // Single tap — dispatch mousedown + mouseup (select/click)
+        var down = new MouseEvent('mousedown', { clientX: endX, clientY: endY });
+        R.canvas.dispatchEvent(down);
+        var up = new MouseEvent('mouseup', { clientX: endX, clientY: endY });
+        R.canvas.dispatchEvent(up);
+        lastTapTime = now;
+        lastTapX = endX;
+        lastTapY = endY;
+      }
+
       touchStart = null;
     }, { passive: false });
   }

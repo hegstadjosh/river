@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { generateApiKey } from '@/lib/mcp/auth'
+import { generateApiKey, hashApiKey } from '@/lib/mcp/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +29,7 @@ export async function POST() {
   const { data, error } = await supabase.from('api_keys').insert({
     user_id: user.id,
     key,
+    key_hash: hashApiKey(key),
     name: 'Default',
   }).select('id, name, created_at').single()
 

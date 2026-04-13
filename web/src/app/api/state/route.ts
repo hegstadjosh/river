@@ -24,16 +24,15 @@ async function getAuthedState() {
     },
   )
 
-  // Use getSession (reads JWT locally) instead of getUser (hits auth server)
-  // Middleware already validated the session on every request
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return null
+  // getUser() verifies the JWT against Supabase Auth (not just local decode)
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
 
-  const state = new WebState(supabase, session.user.id)
+  const state = new WebState(supabase, user.id)
 
-  if (!ensuredUsers.has(session.user.id)) {
+  if (!ensuredUsers.has(user.id)) {
     await state.ensureUser()
-    ensuredUsers.add(session.user.id)
+    ensuredUsers.add(user.id)
   }
 
   return state
@@ -120,6 +119,7 @@ export async function POST(request: Request) {
     const result = await state.look()
     return NextResponse.json(result)
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 400 })
+    console.error('POST /api/state error:', err)
+    return NextResponse.json({ error: 'operation failed' }, { status: 400 })
   }
 }

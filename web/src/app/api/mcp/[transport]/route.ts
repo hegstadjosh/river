@@ -1,13 +1,15 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createMcpHandler } from 'mcp-handler'
 import { resolveUser, type McpUser } from '@/lib/mcp/auth'
 import { registerRiverTools } from '@/lib/mcp/tools'
 
-// Per-request user context — set by auth wrapper before tool handlers run
-let currentUser: McpUser | null = null
+// Request-scoped user context via AsyncLocalStorage (safe for concurrent requests)
+const userStore = new AsyncLocalStorage<McpUser>()
 
 const getUser = (): McpUser => {
-  if (!currentUser) throw new Error('Not authenticated')
-  return currentUser
+  const user = userStore.getStore()
+  if (!user) throw new Error('Not authenticated')
+  return user
 }
 
 const handler = createMcpHandler(
@@ -45,17 +47,19 @@ const handler = createMcpHandler(
   },
 )
 
-// Auth wrapper: extract bearer token, resolve to user, delegate to MCP handler
+// Auth wrapper: resolve user, run MCP handler within request-scoped context
 async function authHandler(req: Request) {
   const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7)
-    const user = await resolveUser(token)
-    if (user) {
-      currentUser = user
-    }
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
   }
-  return handler(req)
+
+  const user = await resolveUser(authHeader.slice(7))
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'invalid api key' }), { status: 401 })
+  }
+
+  return userStore.run(user, () => handler(req))
 }
 
 export { authHandler as GET, authHandler as POST, authHandler as DELETE }
