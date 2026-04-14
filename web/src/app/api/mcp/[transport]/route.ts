@@ -43,6 +43,8 @@ const handler = createMcpHandler(
   {
     basePath: '/api/mcp',
     maxDuration: 60,
+    redisUrl: process.env.REDIS_URL || process.env.KV_URL,
+    disableSse: !process.env.REDIS_URL && !process.env.KV_URL,
     verboseLogs: process.env.NODE_ENV !== 'production',
   },
 )

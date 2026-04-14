@@ -70,7 +70,7 @@ export default function McpSetupPage() {
   }
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.taskriver.dev'
-  const sseUrl = `${baseUrl}/api/mcp/sse`
+  const mcpUrl = `${baseUrl}/api/mcp/mcp`
   const displayToken = newKey ?? 'river_YOUR_API_KEY'
 
   const amber = 'rgb(200, 165, 110)'
@@ -83,8 +83,8 @@ export default function McpSetupPage() {
     claudeCode: JSON.stringify({
       mcpServers: {
         river: {
-          type: 'sse',
-          url: sseUrl,
+          type: 'streamable-http',
+          url: mcpUrl,
           headers: { Authorization: `Bearer ${displayToken}` },
         },
       },
@@ -92,8 +92,8 @@ export default function McpSetupPage() {
     codex: JSON.stringify({
       mcpServers: {
         river: {
-          type: 'sse',
-          url: sseUrl,
+          type: 'streamable-http',
+          url: mcpUrl,
           headers: { Authorization: `Bearer ${displayToken}` },
         },
       },
@@ -117,7 +117,7 @@ export default function McpSetupPage() {
           Connect AI Agents
         </h1>
         <p className="text-sm mb-10" style={{ color: amberDim }}>
-          River is an MCP server. Connect Claude Code, Codex, or any MCP client that supports SSE
+          River is an MCP server. Connect Claude Code, Codex, or any MCP client
           to see your schedule, propose plans, and rearrange your day with natural language.
         </p>
 
@@ -219,7 +219,7 @@ export default function McpSetupPage() {
 
         <ConfigBlock
           title="Codex"
-          description="Add to your Codex MCP config. Same format works with any MCP client that supports SSE transport."
+          description="Add to your Codex MCP config. Same format works with any MCP client that supports Streamable HTTP."
           config={configs.codex}
           configKey="codex"
           copied={copied}
