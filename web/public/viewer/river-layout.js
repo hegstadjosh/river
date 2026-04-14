@@ -6,7 +6,6 @@
 
   R.surfaceY = function () { return R.H * R.SURFACE_RATIO; };
   R.cloudTopY = function () { return 40; };
-  R.riverMidY = function () { return R.surfaceY() + (R.H - R.surfaceY()) * 0.45; };
 
   // Convert hours-from-now to screen X, accounting for scroll
   R.hoursToX = function (h) { return R.W * R.NOW_X + (h - R.scrollHours) * R.PIXELS_PER_HOUR; };
@@ -64,13 +63,6 @@
   R.taskEdges = function (a) {
     var d = R.taskStretch(a);
     return { left: a.x - d.hw, right: a.x + d.hw, top: a.y - d.hh, bottom: a.y + d.hh, hw: d.hw };
-  };
-
-  // Base radius — log-scaled so short tasks differ visibly,
-  // but month-long tasks don't become vertically enormous
-  R.blobR = function (mass) {
-    if (mass <= 240) return Math.sqrt(mass) * R.BLOB_SCALE; // normal for <=4h
-    return Math.sqrt(240) * R.BLOB_SCALE + Math.log2(mass / 240) * 8; // log taper above 4h
   };
 
   R.recalcScale = function () {

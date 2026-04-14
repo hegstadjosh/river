@@ -89,15 +89,11 @@
     }
   };
 
-  R.getCalendarHorizon = function (nominal) {
-    return nominal; // all frames are fixed durations
-  };
-
   hzBtns.forEach(function (btn) {
     btn.addEventListener('click', function () {
       R.scrollHours = 0; R.scrollVel = 0;
       var nominal = Number(btn.dataset.hours);
-      R.setHorizon(R.getCalendarHorizon(nominal));
+      R.setHorizon(nominal);
       // Store nominal so we know which button is active
       btn._nominal = nominal;
     });

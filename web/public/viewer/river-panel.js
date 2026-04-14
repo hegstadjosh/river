@@ -281,9 +281,7 @@
     if (!a) return;
     var pw = 200, ph = panel.offsetHeight || 220;
     var d = R.taskStretch(a);
-    var screenX = (a.position !== null && a.position !== undefined)
-      ? a.x - R.scrollHours * R.PIXELS_PER_HOUR
-      : a.x;
+    var screenX = a.x;
     var grabHH = Math.max(R.MIN_HIT, d.hh);
 
     // Position ABOVE or BELOW the task — never overlapping it

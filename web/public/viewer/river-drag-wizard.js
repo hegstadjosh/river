@@ -155,8 +155,6 @@
   }
 
   R.wizardIsActive = function () { return wiz.active && wiz.stage >= 0 && wiz.stage <= 2; };
-  R.wizardIsCompleted = function () { return wiz.active && wiz.stage > 2; };
-
   // ── Mouse Tracking (called from river-input.js) ───────────────────
 
   R.wizardMouseMove = function (mx, my) {
@@ -248,14 +246,6 @@
       wizardEl.classList.add('hidden');
     }
   }
-
-  // ── Get Selections for POST ───────────────────────────────────────
-
-  R.wizardGetSelections = function () {
-    var a = R.findTask(wiz.taskId);
-    if (!a) return { mass: null, solidity: null, energy: null };
-    return { mass: a.mass, solidity: a.solidity, energy: a.energy };
-  };
 
   // No Canvas rendering for the wizard field — it's a DOM element now.
   // R.drawWizardField is kept as a no-op so the frame loop doesn't break.

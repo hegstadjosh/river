@@ -23,7 +23,6 @@ window.River = {};
   R.horizonHours = 24;    // default: day view
   R.scrollHours = 0;      // horizontal scroll offset (hours from now)
   R.scrollVel = 0;        // scroll momentum (hours/sec)
-  R.CLOUD_RATIO = 0.30;         // top 30% is cloud (sky)
   R.SURFACE_RATIO = 0.35;       // the river surface starts here
   R.NOW_X = 0.25;               // now-line at 25% from left
   R.BLOB_SCALE = 4.0;           // radius = sqrt(mass) * scale
@@ -39,7 +38,6 @@ window.River = {};
   R.SKY_COLOR    = '#17161a';  // cool dark — a night sky
   R.WATER_TOP    = '#231e19';  // warm dark — shallow water
   R.WATER_DEEP   = '#1e1a15';  // slightly deeper
-  R.SURFACE_GLOW = 'rgba(200, 165, 110, 0.06)'; // where light hits water
   R.AMBER        = [200, 165, 110]; // the color of the now-light
 
   // ── State ───────────────────────────────────────────────────────────
