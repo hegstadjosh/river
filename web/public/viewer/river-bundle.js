@@ -914,11 +914,28 @@ window.River = {};
     }
     ctx.fillStyle = labelColor;
 
-    var nameW = ctx.measureText(a.name).width;
-    if (nameW < hw * 1.8) {
-      ctx.fillText(a.name, x, y);
-    } else {
-      ctx.fillText(a.name, x, y + hh + fontSize + 2);
+    // Multi-line word-wrap: text floats ON the task, centered, overflows sides if needed
+    // Never split a word. Prefer fewer lines. Max width = task width * 2 (generous overflow)
+    var maxW = Math.max(hw * 2, 60);
+    var words = a.name.split(' ');
+    var lines = [];
+    var line = '';
+    for (var wi = 0; wi < words.length; wi++) {
+      var test = line ? line + ' ' + words[wi] : words[wi];
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = words[wi];
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+
+    var lineH = fontSize * 1.25;
+    var totalH = lines.length * lineH;
+    var startY = y - totalH / 2 + lineH / 2;
+    for (var li = 0; li < lines.length; li++) {
+      ctx.fillText(lines[li], x, startY + li * lineH);
     }
 
   };
