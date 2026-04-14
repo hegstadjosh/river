@@ -1018,10 +1018,7 @@ input[type="checkbox"] {
     min-height: 44px;
   }
 
-  /* Plan button: hidden */
-  .plan-btn {
-    display: none !important;
-  }
+  /* Plan button: JS handles hiding via applyMobile() for actual mobile devices */
 
   /* Lock button: visible on mobile */
   .lock-btn {
