@@ -58,12 +58,30 @@ Comprehensive audit of all ~7,000 LOC across server, viewer, web app, MCP, and t
 - Service role key in MCP path is a deliberate design choice — all queries manually filter by `user_id`
 - Supabase operations made sequential (not parallel) for lane manipulation to prevent data loss at the cost of slightly higher latency
 
+### Viewer Deep Dive (agent team, 2026-04-13)
+Full line-by-line analysis of all 13 viewer JS files by a 3-agent team. Found and fixed:
+
+1. **Mobile boundary clamp traps tasks at surface (MAJOR)** — frame loop unconditionally clamped river tasks above surfaceY, preventing them from scrolling off-screen. Tasks piled up at the boundary. Fix: only clamp when target is in the river zone; release when scroll pushes target past surface. (fc2626b)
+
+2. **Culling uses logical position, not animated position (MEDIUM)** — tasks popped in/out during spring animation after scroll. Fix: cull by animated a.x/a.y instead of hoursToX/hoursToY. (fc2626b)
+
+3. **Scroll lag from spring-only target updates (HIGH)** — sync() only updated targets during scroll, so spring physics caused 100-400px lag at speed. Fix: shift actual positions by scroll delta so tasks stay locked to viewport. (07b6784)
+
+4. **Dirty target rubber-band (MEDIUM)** — computeTarget used stale server data for tasks with pending optimistic saves, causing snap-back. Fix: use local state during dirty window. (07b6784)
+
+5. **Tag bar DOM thrash (MEDIUM)** — rebuildTagBar() did full DOM teardown on every sync including during 60fps scroll events. Fix: only rebuild when server state changes, not scroll-only syncs. (07b6784)
+
+6. **Mobile touch handlers completely broken (CRITICAL)** — touchend fired simultaneous mousedown+mouseup (click only), tasks could NOT be dragged. Fix: complete rewrite with long-press-to-drag state machine (IDLE→PENDING→DRAGGING/SCROLLING). 250ms long-press timer, 8px movement threshold, haptic feedback, full zone-transition drop logic matching desktop. (19b6c94)
+
 ## Known Limitations (not bugs)
 - Service role key bypasses RLS in MCP path — mitigated by manual `user_id` filtering in every query
 - No Supabase transactions — lane operations are sequential but not atomic; a server crash mid-operation could leave partial state
 - `river-bundle.js` is manually concatenated — no build step to auto-generate it
 
 ## Git Log (overhaul commits)
+- 19b6c94: fix: rewrite mobile touch handlers with long-press-to-drag state machine
+- 07b6784: fix: scroll-lock, dirty targets, tag bar jank in store/core
+- fc2626b: fix: mobile scroll — boundary clamp + culling bugs in frame loop
 - 220f38e: fix: P3 architecture fixes — side-effectful reads, lane enforcement, data integrity
 - 3de06cd: fix: harden state layer — error checking, race safety, plan context restore
 - f86ab4a: fix: MCP server cleanup — energy field, tag sync, dead code, CORS
