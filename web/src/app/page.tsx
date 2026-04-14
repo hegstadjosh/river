@@ -55,9 +55,19 @@ export default function LandingPage() {
           </Link>
         </div>
 
-        <div className="mt-10 sm:mt-16 max-w-4xl w-full relative">
+        <div className="mt-10 sm:mt-16 max-w-4xl w-full relative space-y-6">
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(200, 165, 110, 0.1)', boxShadow: '0 0 80px rgba(200, 165, 110, 0.03)' }}>
             <img src="/viewer/screenshots/river-day-view.png" alt="River — tasks flowing in a river of time" className="w-full" />
+          </div>
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(200, 165, 110, 0.1)', boxShadow: '0 0 80px rgba(200, 165, 110, 0.03)' }}>
+            <video
+              src="/viewer/screenshots/river-video-demo.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full"
+            />
           </div>
         </div>
       </section>
