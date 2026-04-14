@@ -83,7 +83,7 @@ export default function McpSetupPage() {
     claudeCode: JSON.stringify({
       mcpServers: {
         river: {
-          type: 'streamable-http',
+          type: 'http',
           url: mcpUrl,
           headers: { Authorization: `Bearer ${displayToken}` },
         },
@@ -92,7 +92,7 @@ export default function McpSetupPage() {
     codex: JSON.stringify({
       mcpServers: {
         river: {
-          type: 'streamable-http',
+          type: 'http',
           url: mcpUrl,
           headers: { Authorization: `Bearer ${displayToken}` },
         },
