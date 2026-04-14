@@ -352,7 +352,7 @@
     R.scrollLocked = false;
     var lockBtn = document.createElement('button');
     lockBtn.id = 'lock-btn';
-    lockBtn.className = 'menu-btn lock-btn';
+    lockBtn.className = 'lock-btn';
     lockBtn.innerHTML = '<span class="menu-icon">&#128275;</span>';
     lockBtn.title = 'Lock river';
     lockBtn.addEventListener('click', function(e) {

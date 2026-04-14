@@ -241,8 +241,10 @@
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
         if (R.isMobile) {
+          // Cull river tasks that scroll off-screen top OR past the surface into cloud zone
           var cullHH = R.taskStretch(task).hh + 50;
-          if (task.y + cullHH < 0 || task.y - cullHH > R.H) continue;
+          var sYCull = R.surfaceY();
+          if (task.y + cullHH < 0 || task.y - cullHH > sYCull) continue;
         } else {
           var cullHW = R.taskStretch(task).hw + 50;
           if (task.x + cullHW < 0 || task.x - cullHW > R.W) continue;
