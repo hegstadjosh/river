@@ -49,7 +49,8 @@
     if (!t || !t.ctx) return;
 
     // Mark dirty — sync will skip overwriting this task until server confirms
-    t._dirtyUntil = Date.now() + 3000;
+    // 15s window handles slow mobile networks; cleared early on fetchState success
+    t._dirtyUntil = Date.now() + 15000;
 
     // Optimistic: apply changes locally NOW
     var optimistic = function () {
@@ -70,7 +71,7 @@
   R.savePosition = function (taskId, position) {
     var t = R.findTask(taskId);
     if (!t || !t.ctx) return;
-    t._dirtyUntil = Date.now() + 3000;
+    t._dirtyUntil = Date.now() + 15000;
 
     // Optimistic: update position locally NOW
     var optimistic = function () { t.position = position; };

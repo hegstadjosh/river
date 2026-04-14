@@ -159,9 +159,15 @@ window.River = {};
           if (data.cloud_x !== undefined) updates.cloud_x = data.cloud_x;
           if (data.cloud_y !== undefined) updates.cloud_y = data.cloud_y;
           if (data.river_y !== undefined) updates.river_y = data.river_y;
+          var putId = data.id;
           sb.from('tasks').update(updates)
-            .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-            .then(function (res) { if (res.error) console.error('River:', res.error); });
+            .eq('id', putId).eq('user_id', uid).eq('timeline_id', tid)
+            .then(function (res) {
+              if (res.error) { console.error('River save failed:', res.error); return; }
+              // Save confirmed — clear dirty flag so next sync uses server data
+              var saved = R.findTask(putId);
+              if (saved) delete saved._dirtyUntil;
+            });
         } else {
           sb.from('tasks').insert({
             id: crypto.randomUUID(), user_id: uid, timeline_id: tid,
@@ -177,9 +183,14 @@ window.River = {};
         break;
       case 'move':
         var moveAnchor = data.position === null ? null : R.positionToAnchor(data.position);
+        var moveId = data.id;
         sb.from('tasks').update({ anchor: moveAnchor })
-          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function (res) { if (res.error) console.error('River:', res.error); });
+          .eq('id', moveId).eq('user_id', uid).eq('timeline_id', tid)
+          .then(function (res) {
+            if (res.error) { console.error('River move failed:', res.error); return; }
+            var saved = R.findTask(moveId);
+            if (saved) delete saved._dirtyUntil;
+          });
         break;
       case 'delete':
         sb.from('tasks').delete()

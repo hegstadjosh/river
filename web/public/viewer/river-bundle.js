@@ -159,9 +159,15 @@ window.River = {};
           if (data.cloud_x !== undefined) updates.cloud_x = data.cloud_x;
           if (data.cloud_y !== undefined) updates.cloud_y = data.cloud_y;
           if (data.river_y !== undefined) updates.river_y = data.river_y;
+          var putId = data.id;
           sb.from('tasks').update(updates)
-            .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-            .then(function (res) { if (res.error) console.error('River:', res.error); });
+            .eq('id', putId).eq('user_id', uid).eq('timeline_id', tid)
+            .then(function (res) {
+              if (res.error) { console.error('River save failed:', res.error); return; }
+              // Save confirmed — clear dirty flag so next sync uses server data
+              var saved = R.findTask(putId);
+              if (saved) delete saved._dirtyUntil;
+            });
         } else {
           sb.from('tasks').insert({
             id: crypto.randomUUID(), user_id: uid, timeline_id: tid,
@@ -177,9 +183,14 @@ window.River = {};
         break;
       case 'move':
         var moveAnchor = data.position === null ? null : R.positionToAnchor(data.position);
+        var moveId = data.id;
         sb.from('tasks').update({ anchor: moveAnchor })
-          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function (res) { if (res.error) console.error('River:', res.error); });
+          .eq('id', moveId).eq('user_id', uid).eq('timeline_id', tid)
+          .then(function (res) {
+            if (res.error) { console.error('River move failed:', res.error); return; }
+            var saved = R.findTask(moveId);
+            if (saved) delete saved._dirtyUntil;
+          });
         break;
       case 'delete':
         sb.from('tasks').delete()
@@ -1257,7 +1268,8 @@ window.River = {};
     if (!t || !t.ctx) return;
 
     // Mark dirty — sync will skip overwriting this task until server confirms
-    t._dirtyUntil = Date.now() + 3000;
+    // 15s window handles slow mobile networks; cleared early on fetchState success
+    t._dirtyUntil = Date.now() + 15000;
 
     // Optimistic: apply changes locally NOW
     var optimistic = function () {
@@ -1278,7 +1290,7 @@ window.River = {};
   R.savePosition = function (taskId, position) {
     var t = R.findTask(taskId);
     if (!t || !t.ctx) return;
-    t._dirtyUntil = Date.now() + 3000;
+    t._dirtyUntil = Date.now() + 15000;
 
     // Optimistic: update position locally NOW
     var optimistic = function () { t.position = position; };
@@ -4472,8 +4484,18 @@ window.River = {};
 
       R.canvas.releasePointerCapture(e.pointerId);
 
+      // ── IDLE (tapped empty cloud zone) → close panel ──
+      if (prevState === 'idle') {
+        R.hidePanel();
+        ptrReset();
+        return;
+      }
+
       // ── SCROLLING → IDLE ──
       if (prevState === 'scrolling') {
+        // If didn't actually scroll (just tapped empty river), close panel
+        var scrollDist = Math.abs(endX - ptrStart.x) + Math.abs(endY - ptrStart.y);
+        if (scrollDist < 5) R.hidePanel();
         R.dragging = null;
         ptrReset();
         return;

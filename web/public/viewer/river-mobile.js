@@ -570,8 +570,18 @@
 
       R.canvas.releasePointerCapture(e.pointerId);
 
+      // ── IDLE (tapped empty cloud zone) → close panel ──
+      if (prevState === 'idle') {
+        R.hidePanel();
+        ptrReset();
+        return;
+      }
+
       // ── SCROLLING → IDLE ──
       if (prevState === 'scrolling') {
+        // If didn't actually scroll (just tapped empty river), close panel
+        var scrollDist = Math.abs(endX - ptrStart.x) + Math.abs(endY - ptrStart.y);
+        if (scrollDist < 5) R.hidePanel();
         R.dragging = null;
         ptrReset();
         return;
