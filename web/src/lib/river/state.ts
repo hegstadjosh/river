@@ -177,7 +177,7 @@ export class WebState {
 
   // ── Look (full state read) — PARALLELIZED ──────────────────────
 
-  async look(): Promise<LookResult> {
+  async look(options?: { horizon?: number; id?: string; cloud?: boolean }): Promise<LookResult> {
     const timelineId = await this.getTimelineId()
     const now = new Date()
     const nowIso = now.toISOString()
@@ -226,6 +226,28 @@ export class WebState {
     const river = (riverResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r)))
     const cloud = (cloudResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r)))
 
+    // Handle filtered lookups
+    if (options?.id) {
+      const match = [...river, ...cloud].find(t => t.id === options.id)
+      return {
+        river: match && match.position !== null ? [match] : [],
+        cloud: match && match.position === null ? [match] : [],
+        breathing_room: { next_4h: 0, rest_of_day: 0 },
+        now: nowIso,
+        timeline: 'main',
+        known_tags: [],
+      }
+    }
+
+    let filteredRiver = river
+    let filteredCloud = cloud
+    if (options?.cloud) {
+      filteredRiver = []
+    }
+    if (options?.horizon !== undefined) {
+      filteredRiver = filteredRiver.filter(t => t.position !== null && t.position <= options.horizon!)
+    }
+
     // Breathing room (computed from already-fetched data)
     const endOf4h = new Date(now.getTime() + 4 * 3_600_000)
     const endOfDay = new Date(now)
@@ -256,7 +278,7 @@ export class WebState {
     const knownTags = knownTagsResult ? JSON.parse(knownTagsResult).sort() : []
 
     return {
-      river, cloud,
+      river: filteredRiver, cloud: filteredCloud,
       breathing_room: {
         next_4h: Math.max(0, 240 - usedNext4h),
         rest_of_day: Math.max(0, minutesUntilEndOfDay - usedRestOfDay),
@@ -404,7 +426,7 @@ export class WebState {
     })
     const countResults = await Promise.all(countQueries)
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 4; i++) {
       if (laneResults[i].data && countResults[i]) {
         const [countRes, label] = countResults[i]!
         lanes.push({

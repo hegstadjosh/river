@@ -163,7 +163,7 @@ window.River = {};
           if (data.river_y !== undefined) updates.river_y = data.river_y;
           sb.from('tasks').update(updates)
             .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-            .then(function () {});
+            .then(function (res) { if (res.error) console.error('River:', res.error); });
         } else {
           sb.from('tasks').insert({
             id: crypto.randomUUID(), user_id: uid, timeline_id: tid,
@@ -174,19 +174,19 @@ window.River = {};
             created: new Date().toISOString(),
             cloud_x: data.cloud_x || null, cloud_y: data.cloud_y || null,
             river_y: data.river_y || null
-          }).then(function () {});
+          }).then(function (res) { if (res.error) console.error('River:', res.error); });
         }
         break;
       case 'move':
         var moveAnchor = data.position === null ? null : R.positionToAnchor(data.position);
         sb.from('tasks').update({ anchor: moveAnchor })
           .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function () {});
+          .then(function (res) { if (res.error) console.error('River:', res.error); });
         break;
       case 'delete':
         sb.from('tasks').delete()
           .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function () {});
+          .then(function (res) { if (res.error) console.error('River:', res.error); });
         break;
       case 'tag_create':
         sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').single()
@@ -195,7 +195,7 @@ window.River = {};
             if (tags.indexOf(data.name) < 0) {
               tags.push(data.name);
               sb.from('meta').upsert({ user_id: uid, key: 'known_tags', value: JSON.stringify(tags) })
-                .then(function () {});
+                .then(function (res) { if (res.error) console.error('River:', res.error); });
             }
           });
         break;
@@ -211,7 +211,7 @@ window.River = {};
           if (data.position !== undefined) patch.anchor = R.positionToAnchor(data.position);
           sb.from('tasks').update(patch)
             .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
-            .then(function () {});
+            .then(function (res) { if (res.error) console.error('River:', res.error); });
         });
         break;
       case 'plan_reposition':
@@ -221,7 +221,7 @@ window.River = {};
           if (!r.data) return;
           sb.from('tasks').update({ anchor: R.positionToAnchor(data.position) })
             .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
-            .then(function () {});
+            .then(function (res) { if (res.error) console.error('River:', res.error); });
         });
         break;
       case 'plan_remove':
@@ -231,7 +231,7 @@ window.River = {};
           if (!r.data) return;
           sb.from('tasks').delete()
             .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
-            .then(function () {});
+            .then(function (res) { if (res.error) console.error('River:', res.error); });
         });
         break;
     }
