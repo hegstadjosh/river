@@ -527,6 +527,30 @@ export class WebState {
     return this.getKnownTags()
   }
 
+  async renameTag(oldName: string, newName: string): Promise<void> {
+    // Update known_tags index atomically — read, replace, write
+    const tags = await this.getKnownTags()
+    const updated = tags.map(t => t === oldName ? newName : t)
+    if (!updated.includes(newName)) updated.push(newName)
+    const deduped = [...new Set(updated)]
+    await this.setMeta('known_tags', JSON.stringify(deduped))
+
+    // Update all tasks that have the old tag
+    const timelineId = await this.getTimelineId()
+    const { data: tasks } = await this.supabase.from('tasks').select('id, tags')
+      .eq('user_id', this.userId).eq('timeline_id', timelineId)
+    if (tasks) {
+      for (const t of tasks) {
+        const taskTags: string[] = t.tags || []
+        if (taskTags.includes(oldName)) {
+          const newTags = taskTags.map((x: string) => x === oldName ? newName : x)
+          await this.supabase.from('tasks').update({ tags: newTags })
+            .eq('id', t.id).eq('user_id', this.userId)
+        }
+      }
+    }
+  }
+
   // ── Plan Mode ──────────────────────────────────────────────────
 
   async startPlan(windowStart: string, windowEnd: string): Promise<void> {

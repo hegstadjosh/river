@@ -109,7 +109,7 @@ window.River = {};
     plan_start: 1, plan_end: 1, plan_commit: 1,
     plan_lane_put: 1, plan_to_cloud: 1, plan_add: 1,
     plan_move: 1, plan_copy: 1,
-    tag_create: 1, tag_delete: 1,
+    tag_create: 1, tag_delete: 1, tag_rename: 1,
   };
 
   R.post = function (action, data, optimisticFn) {
@@ -1807,9 +1807,8 @@ window.River = {};
                 }
               }
               if (R.hiddenTags[tag]) { R.hiddenTags[newName] = true; delete R.hiddenTags[tag]; }
-              // Update known_tags: remove old, add new
-              R.post('tag_delete', { name: tag });
-              R.post('tag_create', { name: newName });
+              // Atomic rename — single server call, no race condition
+              R.post('tag_rename', { oldName: tag, newName: newName });
               // Immediate local update
               if (R.state && R.state.known_tags) {
                 R.state.known_tags = R.state.known_tags.map(function (t) { return t === tag ? newName : t; });

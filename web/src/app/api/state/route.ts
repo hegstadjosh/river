@@ -75,6 +75,9 @@ export async function POST(request: Request) {
       case 'tag_delete':
         await state.deleteTag(data.name)
         break
+      case 'tag_rename':
+        await state.renameTag(data.oldName, data.newName)
+        break
       case 'plan_start':
         await state.startPlan(data.window_start, data.window_end)
         break
