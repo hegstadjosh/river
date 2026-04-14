@@ -43,7 +43,7 @@ window.River = {};
   // ── State ───────────────────────────────────────────────────────────
 
   R.state = null;
-  R.tasks = [];
+  // R.tasks is owned by river-store.js — initialized there
   R.planMode = false;
   R.planLanes = [];
   R.planWindowStart = null;

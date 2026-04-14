@@ -131,6 +131,26 @@
   R.sync = function () {
     if (!R.state) return;
 
+    // ── Scroll-lock: shift actual positions to match scroll delta ──
+    // Without this, tasks lag behind scroll via spring physics (~100-400px at speed).
+    // By shifting actual positions by the same pixel delta as targets, tasks stay
+    // locked to the viewport during scroll instead of trailing.
+    var prevScroll = R._prevSyncScroll;
+    R._prevSyncScroll = R.scrollHours;
+    if (prevScroll !== undefined && prevScroll !== R.scrollHours) {
+      var pxShift = (R.scrollHours - prevScroll) * R.PIXELS_PER_HOUR;
+      for (var si = 0; si < R.tasks.length; si++) {
+        var sa = R.tasks[si];
+        if (R.dragging && R.dragging.id === sa.id) continue;
+        if (sa.position === null || sa.position === undefined) continue;
+        if (R.isMobile) {
+          sa.y += pxShift;
+        } else {
+          sa.x -= pxShift;
+        }
+      }
+    }
+
     // ── Detect plan mode (disabled on mobile) ──
     var wasPlanMode = R.planMode;
     R.planMode = R.isMobile ? false : !!(R.state.plan && R.state.plan.active !== false);
@@ -218,8 +238,11 @@
         // But ALWAYS update target position (so scroll works correctly)
         if (a._dirtyUntil && Date.now() < a._dirtyUntil) {
           a.ctx = src.ctx;
-          a.tx = tgt.x;
-          a.ty = tgt.y;
+          // Use LOCAL (optimistic) state for target, not stale server data.
+          // src still has the pre-save position until the server round-trips.
+          var localTgt = computeTarget(a);
+          a.tx = localTgt.x;
+          a.ty = localTgt.y;
           continue;
         }
         delete a._dirtyUntil;
@@ -247,7 +270,12 @@
     }
 
     spreadLaneTasks();
-    R.rebuildTagBar();
+    // Only rebuild tag bar when server state changes — not during scroll-only syncs.
+    // rebuildTagBar does full DOM teardown/rebuild which causes jank at 60fps scroll rate.
+    if (R._lastSyncState !== R.state) {
+      R._lastSyncState = R.state;
+      R.rebuildTagBar();
+    }
   };
 
   // After sync, spread overlapping lane tasks vertically
