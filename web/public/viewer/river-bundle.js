@@ -2886,8 +2886,15 @@ window.River = {};
     // Mobile needs bigger touch targets — fingers are ~44px
     var minHit = R.isMobile ? 28 : R.MIN_HIT;
     var pad = R.isMobile ? 10 : 5;
+    // On mobile, determine which zone the finger is in — only match tasks in that zone
+    var mSY = R.isMobile ? R.surfaceY() : 0;
+    var fingerInCloud = R.isMobile && my > mSY;
+    var fingerInRiver = R.isMobile && my <= mSY;
     for (var i = sorted.length - 1; i >= 0; i--) {
       var a = sorted[i];
+      // Zone filtering: river tasks only hittable in river zone, cloud in cloud
+      if (fingerInCloud && a.position !== null && a.position !== undefined) continue;
+      if (fingerInRiver && (a.position === null || a.position === undefined)) continue;
       var d = R.taskStretch(a);
       var hitHW = Math.max(minHit, d.hw + pad);
       var hitHH = Math.max(minHit, d.hh + pad);
