@@ -4299,7 +4299,8 @@ window.River = {};
       horizonBar.style.transform = 'translateX(-50%) translateY(-50%)';
     }
 
-    R.recalcScale();
+    // Default to 6h view on mobile (tighter focus)
+    R.setHorizon(6);
     R.initStreaks();
   };
 
