@@ -159,14 +159,14 @@ window.River = {};
           if (data.cloud_x !== undefined) updates.cloud_x = data.cloud_x;
           if (data.cloud_y !== undefined) updates.cloud_y = data.cloud_y;
           if (data.river_y !== undefined) updates.river_y = data.river_y;
-          var putId = data.id;
           sb.from('tasks').update(updates)
-            .eq('id', putId).eq('user_id', uid).eq('timeline_id', tid)
+            .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
             .then(function (res) {
               if (res.error) { console.error('River save failed:', res.error); return; }
-              // Save confirmed — clear dirty flag so next sync uses server data
-              var saved = R.findTask(putId);
-              if (saved) delete saved._dirtyUntil;
+              // Save confirmed — fetch fresh state so R.state has the new data,
+              // THEN clear dirty flag. Order matters: if we clear first, a sync
+              // with stale R.state would snap the task back.
+              R.fetchState();
             });
         } else {
           sb.from('tasks').insert({
@@ -183,19 +183,20 @@ window.River = {};
         break;
       case 'move':
         var moveAnchor = data.position === null ? null : R.positionToAnchor(data.position);
-        var moveId = data.id;
         sb.from('tasks').update({ anchor: moveAnchor })
-          .eq('id', moveId).eq('user_id', uid).eq('timeline_id', tid)
+          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
           .then(function (res) {
             if (res.error) { console.error('River move failed:', res.error); return; }
-            var saved = R.findTask(moveId);
-            if (saved) delete saved._dirtyUntil;
+            R.fetchState();
           });
         break;
       case 'delete':
         sb.from('tasks').delete()
           .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function (res) { if (res.error) console.error('River:', res.error); });
+          .then(function (res) {
+            if (res.error) { console.error('River delete failed:', res.error); return; }
+            R.fetchState();
+          });
         break;
       case 'tag_create':
         sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle()
