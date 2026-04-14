@@ -32,6 +32,7 @@
   // Mobile:  top/bottom = duration, right = commitment, left = energy
   // Returns PHYSICAL side names — the resize handler interprets per platform
   R.edgeHit = function (mx, my) {
+    if (R.isMobile) return null;
     var visible = R.visibleTasks();
     for (var i = visible.length - 1; i >= 0; i--) {
       var a = visible[i];
@@ -787,6 +788,7 @@
   // Called from the frame loop to draw indicators during resize/hover/drag
 
   R.drawResizeOverlay = function (t) {
+    if (R.isMobile) return;
     var ctx = R.ctx;
 
     if (R.resizing) {
