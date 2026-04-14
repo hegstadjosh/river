@@ -326,6 +326,157 @@ export class WebState {
     }
   }
 
+  // ── Clear ──────────────────────────────────────────────────────
+
+  async clear(timeRange?: { start?: number; end?: number }): Promise<number> {
+    const timelineId = await this.getTimelineId()
+
+    if (timeRange && (timeRange.start !== undefined || timeRange.end !== undefined)) {
+      let query = this.supabase.from('tasks').delete()
+        .eq('user_id', this.userId).eq('timeline_id', timelineId)
+        .not('anchor', 'is', null)
+
+      if (timeRange.start !== undefined) {
+        query = query.gte('anchor', positionToAnchor(timeRange.start))
+      }
+      if (timeRange.end !== undefined) {
+        query = query.lte('anchor', positionToAnchor(timeRange.end))
+      }
+
+      const { data, error } = await query.select('id')
+      if (error) throw new Error(`Failed to clear tasks: ${error.message}`)
+      return data?.length ?? 0
+    }
+
+    // No time range: delete everything on this timeline
+    const { data, error } = await this.supabase.from('tasks').delete()
+      .eq('user_id', this.userId).eq('timeline_id', timelineId).select('id')
+    if (error) throw new Error(`Failed to clear all tasks: ${error.message}`)
+    return data?.length ?? 0
+  }
+
+  // ── Bulk Sweep ────────────────────────────────────────────────
+
+  async bulkSweep(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0
+    const timelineId = await this.getTimelineId()
+    const { data, error } = await this.supabase.from('tasks').delete()
+      .eq('user_id', this.userId).eq('timeline_id', timelineId)
+      .in('id', ids).select('id')
+    if (error) throw new Error(`Failed to bulk sweep tasks: ${error.message}`)
+    return data?.length ?? 0
+  }
+
+  // ── Rename ────────────────────────────────────────────────────
+
+  async rename(id: string, name: string): Promise<Task> {
+    const timelineId = await this.getTimelineId()
+    const { error } = await this.supabase.from('tasks').update({ name })
+      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
+    if (error) throw new Error(`Failed to rename task ${id}: ${error.message}`)
+
+    const { data } = await this.supabase.from('tasks').select('*')
+      .eq('id', id).eq('user_id', this.userId).single()
+    if (!data) throw new Error(`Task ${id} not found after rename`)
+    return rowToTask(data)
+  }
+
+  // ── Tag / Untag ───────────────────────────────────────────────
+
+  async tag(id: string, tags: string[], action: 'add' | 'remove'): Promise<Task> {
+    const timelineId = await this.getTimelineId()
+
+    const { data: existing } = await this.supabase.from('tasks').select('tags')
+      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId).single()
+    if (!existing) throw new Error(`Task ${id} not found`)
+
+    const currentTags: string[] = (existing.tags ?? []) as string[]
+    let newTags: string[]
+
+    if (action === 'add') {
+      const tagSet = new Set(currentTags)
+      for (const t of tags) tagSet.add(t)
+      newTags = [...tagSet]
+    } else {
+      const removeSet = new Set(tags)
+      newTags = currentTags.filter((t: string) => !removeSet.has(t))
+    }
+
+    const { error } = await this.supabase.from('tasks').update({ tags: newTags })
+      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
+    if (error) throw new Error(`Failed to update tags on task ${id}: ${error.message}`)
+
+    const { data } = await this.supabase.from('tasks').select('*')
+      .eq('id', id).eq('user_id', this.userId).single()
+    if (!data) throw new Error(`Task ${id} not found after tag update`)
+    return rowToTask(data)
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────
+
+  async stats(): Promise<{
+    total: number
+    river_count: number
+    cloud_count: number
+    tag_distribution: Record<string, number>
+    avg_solidity: number
+    avg_energy: number
+    breathing_room: { next_4h: number; rest_of_day: number }
+  }> {
+    const timelineId = await this.getTimelineId()
+    const now = new Date()
+
+    const { data: allTasks } = await this.supabase.from('tasks').select('*')
+      .eq('user_id', this.userId).eq('timeline_id', timelineId)
+
+    const rows = (allTasks ?? []).map((r: Record<string, unknown>) => rowToTask(r))
+    const total = rows.length
+    const riverTasks = rows.filter(t => t.anchor !== null)
+    const cloudTasks = rows.filter(t => t.anchor === null)
+
+    // Tag distribution
+    const tagDist: Record<string, number> = {}
+    for (const task of rows) {
+      for (const t of task.tags) {
+        tagDist[t] = (tagDist[t] ?? 0) + 1
+      }
+    }
+
+    // Averages
+    const avgSolidity = total > 0
+      ? Math.round((rows.reduce((s, t) => s + t.solidity, 0) / total) * 100) / 100
+      : 0
+    const avgEnergy = total > 0
+      ? Math.round((rows.reduce((s, t) => s + t.energy, 0) / total) * 100) / 100
+      : 0
+
+    // Breathing room
+    const endOf4h = new Date(now.getTime() + 4 * 3_600_000)
+    const endOfDay = new Date(now)
+    endOfDay.setHours(23, 59, 59, 999)
+
+    const usedNext4h = riverTasks
+      .filter(t => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOf4h)
+      .reduce((s, t) => s + t.mass, 0)
+    const usedRestOfDay = riverTasks
+      .filter(t => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOfDay)
+      .reduce((s, t) => s + t.mass, 0)
+    const minutesUntilEndOfDay = (endOfDay.getTime() - now.getTime()) / 60_000
+
+    return {
+      total,
+      river_count: riverTasks.length,
+      cloud_count: cloudTasks.length,
+      tag_distribution: tagDist,
+      avg_solidity: avgSolidity,
+      avg_energy: avgEnergy,
+      breathing_room: {
+        next_4h: Math.max(0, 240 - usedNext4h),
+        rest_of_day: Math.max(0, minutesUntilEndOfDay - usedRestOfDay),
+      },
+    }
+  }
+
   // ── Tags ───────────────────────────────────────────────────────
 
   async getKnownTags(): Promise<string[]> {

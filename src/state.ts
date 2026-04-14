@@ -23,6 +23,11 @@ import { createLookFns } from './db/look.js';
 import { createBranchFns } from './db/branches.js';
 import { createSweepFn } from './db/sweep.js';
 import { createPlanFns } from './db/plan.js';
+import { createClearFn } from './db/clear.js';
+import { createBulkSweepFn } from './db/bulk_sweep.js';
+import { createRenameFn } from './db/rename.js';
+import { createTagFn } from './db/tag.js';
+import { createStatsFn, type RiverStats } from './db/stats.js';
 
 // ── RiverState ───────────────────────────────────────────────────────
 
@@ -38,6 +43,11 @@ export class RiverState {
   private branchFns: ReturnType<typeof createBranchFns>;
   private sweepFn: ReturnType<typeof createSweepFn>;
   private planFns: ReturnType<typeof createPlanFns>;
+  private clearFn: ReturnType<typeof createClearFn>;
+  private bulkSweepFn: ReturnType<typeof createBulkSweepFn>;
+  private renameFn: ReturnType<typeof createRenameFn>;
+  private tagFn: ReturnType<typeof createTagFn>;
+  private statsFn: ReturnType<typeof createStatsFn>;
 
   constructor(dbDir: string) {
     if (!existsSync(dbDir)) {
@@ -65,6 +75,11 @@ export class RiverState {
     this.branchFns = createBranchFns(this.db, currentTimelineId);
     this.sweepFn = createSweepFn(this.db, currentTimelineId);
     this.planFns = createPlanFns(this.db, currentTimelineId);
+    this.clearFn = createClearFn(this.db, currentTimelineId);
+    this.bulkSweepFn = createBulkSweepFn(this.db, currentTimelineId);
+    this.renameFn = createRenameFn(this.db, currentTimelineId);
+    this.tagFn = createTagFn(this.db, currentTimelineId);
+    this.statsFn = createStatsFn(this.db, currentTimelineId);
   }
 
   private init() {
@@ -326,6 +341,36 @@ export class RiverState {
 
   putTaskInLane(lane: number, name: string, position: number | null): void {
     this.planFns.putTaskInLane(lane, name, position);
+  }
+
+  // ── Clear (delegated) ──────────────────────────────────────────
+
+  clear(timeRange?: { start?: number; end?: number }): number {
+    return this.clearFn.clear(timeRange);
+  }
+
+  // ── Bulk Sweep (delegated) ────────────────────────────────────
+
+  bulkSweep(ids: string[]): number {
+    return this.bulkSweepFn.bulkSweep(ids);
+  }
+
+  // ── Rename (delegated) ────────────────────────────────────────
+
+  rename(id: string, name: string): Task {
+    return this.renameFn.rename(id, name);
+  }
+
+  // ── Tag (delegated) ──────────────────────────────────────────
+
+  tag(id: string, tags: string[], action: 'add' | 'remove'): Task {
+    return this.tagFn.tag(id, tags, action);
+  }
+
+  // ── Stats (delegated) ────────────────────────────────────────
+
+  stats(): RiverStats {
+    return this.statsFn.stats();
   }
 
   // ── SSE ──────────────────────────────────────────────────────────

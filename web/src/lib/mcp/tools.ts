@@ -164,6 +164,103 @@ export function registerRiverTools(
     },
   )
 
+  // ── clear ─────────────────────────────────────────────────────
+  server.registerTool(
+    'clear',
+    {
+      description:
+        'Wipe all tasks, or all tasks within a time window. ' +
+        'If no args, clears everything. If start and/or end (hours from now) ' +
+        'are provided, only clears river tasks in that window.',
+      inputSchema: {
+        start: z.number().optional().describe('Start of time window in hours from now'),
+        end: z.number().optional().describe('End of time window in hours from now'),
+      },
+    },
+    async (args) => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const timeRange =
+        args.start !== undefined || args.end !== undefined
+          ? { start: args.start, end: args.end }
+          : undefined
+      const count = await state.clear(timeRange)
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ cleared: count }, null, 2) }] }
+    },
+  )
+
+  // ── bulk_sweep ────────────────────────────────────────────────
+  server.registerTool(
+    'bulk_sweep',
+    {
+      description: 'Batch delete tasks by ID array. Deletes all tasks whose IDs are in the array.',
+      inputSchema: {
+        ids: z.array(z.string()).describe('Array of task IDs to delete'),
+      },
+    },
+    async (args) => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const count = await state.bulkSweep(args.ids)
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ deleted: count, requested: args.ids.length }, null, 2) }] }
+    },
+  )
+
+  // ── rename ────────────────────────────────────────────────────
+  server.registerTool(
+    'rename',
+    {
+      description: 'Edit a task name after creation.',
+      inputSchema: {
+        id: z.string().describe('Task ID to rename'),
+        name: z.string().describe('New name for the task'),
+      },
+    },
+    async (args) => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const task = await state.rename(args.id, args.name)
+      return { content: [{ type: 'text' as const, text: JSON.stringify(taskWithPosition(task), null, 2) }] }
+    },
+  )
+
+  // ── tag ───────────────────────────────────────────────────────
+  server.registerTool(
+    'tag',
+    {
+      description: 'Add or remove tags from a task without touching anything else.',
+      inputSchema: {
+        id: z.string().describe('Task ID to tag/untag'),
+        tags: z.array(z.string()).describe('Tags to add or remove'),
+        action: z.enum(['add', 'remove']).describe('Whether to add or remove the specified tags'),
+      },
+    },
+    async (args) => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const task = await state.tag(args.id, args.tags, args.action)
+      if (args.action === 'add') await state.ensureTaskTags(args.tags)
+      return { content: [{ type: 'text' as const, text: JSON.stringify(taskWithPosition(task), null, 2) }] }
+    },
+  )
+
+  // ── stats ─────────────────────────────────────────────────────
+  server.registerTool(
+    'stats',
+    {
+      description:
+        'Get summary statistics: total task count, river vs cloud count, ' +
+        'tag distribution, average solidity, average energy, and breathing room.',
+      inputSchema: {},
+    },
+    async () => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const result = await state.stats()
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
+    },
+  )
+
   // ── branch ────────────────────────────────────────────────────
   server.registerTool(
     'branch',

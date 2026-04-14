@@ -12,6 +12,11 @@ import { registerLook } from './tools/look.js';
 import { registerBranch } from './tools/branch.js';
 import { registerSweep } from './tools/sweep.js';
 import { registerPlan } from './tools/plan.js';
+import { registerClear } from './tools/clear.js';
+import { registerBulkSweep } from './tools/bulk_sweep.js';
+import { registerRename } from './tools/rename.js';
+import { registerTag } from './tools/tag.js';
+import { registerStats } from './tools/stats.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +35,11 @@ async function main() {
   registerBranch(mcpServer, state);
   registerSweep(mcpServer, state);
   registerPlan(mcpServer, state);
+  registerClear(mcpServer, state);
+  registerBulkSweep(mcpServer, state);
+  registerRename(mcpServer, state);
+  registerTag(mcpServer, state);
+  registerStats(mcpServer, state);
 
   // Connect MCP FIRST — Claude Code needs the handshake immediately
   const transport = new StdioServerTransport();
