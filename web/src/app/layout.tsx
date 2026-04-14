@@ -54,7 +54,7 @@ export default function RootLayout({
       lang="en"
       className={`${instrumentSerif.variable} ${ibmPlex.variable} antialiased`}
     >
-      <body style={{ overflow: 'hidden', position: 'fixed', width: '100%', height: '100%' }}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
