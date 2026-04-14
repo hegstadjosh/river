@@ -110,7 +110,7 @@ export default function AppPage() {
   }
 
   return (
-    <div className="w-screen h-screen" style={{ background: '#1a1614', overflow: 'hidden' }}>
+    <div className="w-screen h-screen" style={{ background: '#1a1614', overflow: 'hidden', touchAction: 'none' }}>
       {/* Viewer CSS */}
       <link rel="stylesheet" href="/viewer/style.css" />
 

@@ -4332,55 +4332,58 @@ window.River = {};
     }
   };
 
-  // ── Touch Events ───────────────────────────────────────────────────
+  // ── Pointer Events (replaces touch events — works on iOS Safari + Chrome) ──
   //
   // State machine: IDLE → DRAGGING or SCROLLING
   //
-  // touchstart on task   → DRAGGING immediately (you touched it, you own it)
-  // touchstart on empty  → SCROLLING (river zone) or IDLE (cloud zone)
+  // pointerdown on task  → DRAGGING immediately (you touched it, you own it)
+  // pointerdown on empty → SCROLLING (river zone) or IDLE (cloud zone)
   //
-  // DRAGGING + touchmove → move the task
-  // DRAGGING + touchend  → if moved: DROP (save position); if not: TAP (show panel)
+  // DRAGGING + pointermove → move the task
+  // DRAGGING + pointerup   → if moved: DROP; if not: TAP (show panel)
   //
-  // SCROLLING + touchmove → shift R.scrollHours
-  // SCROLLING + touchend  → IDLE
+  // SCROLLING + pointermove → shift R.scrollHours
+  // SCROLLING + pointerup   → IDLE
+  //
+  // Uses Pointer Events API (pointerdown/pointermove/pointerup) instead of
+  // touch events. Pointer events are the W3C-recommended approach for
+  // cross-platform input handling and avoid passive listener ambiguity.
+  // touch-action: none is set in CSS (style.css) so it's in effect before
+  // the first gesture — required by spec.
 
-  var touchState = 'idle';  // 'idle' | 'dragging' | 'scrolling'
-  var touchStart = null;    // { x, y, scrollH, hitTask }
+  var ptrState = 'idle';   // 'idle' | 'dragging' | 'scrolling'
+  var ptrStart = null;     // { x, y, scrollH, pointerId }
   var lastTapTime = 0;
   var lastTapX = 0;
   var lastTapY = 0;
 
-  function touchReset() {
-    touchState = 'idle';
-    touchStart = null;
+  function ptrReset() {
+    ptrState = 'idle';
+    ptrStart = null;
   }
 
   if (R.canvas) {
-    R.canvas.addEventListener('touchstart', function (e) {
-      if (!R.isMobile) { console.log('[River] touchstart blocked: isMobile=' + R.isMobile); return; }
-      var t = e.touches[0];
-      var mx = t.clientX, my = t.clientY;
+    // ── POINTER DOWN ──
+    R.canvas.addEventListener('pointerdown', function (e) {
+      if (!R.isMobile || e.pointerType === 'mouse') return;
+
+      var mx = e.clientX, my = e.clientY;
       var hit = R.hitTest(mx, my);
 
-      console.log('[River] touchstart: hit=' + (hit ? hit.id.slice(0,8) : 'none') + ' xy=' + Math.round(mx) + ',' + Math.round(my) + ' surfaceY=' + Math.round(R.surfaceY()));
+      // Capture this pointer so all subsequent events come to the canvas
+      // even if the finger moves outside it
+      R.canvas.setPointerCapture(e.pointerId);
 
-      touchStart = { x: mx, y: my, scrollH: R.scrollHours, hitTask: hit };
+      ptrStart = { x: mx, y: my, scrollH: R.scrollHours, pointerId: e.pointerId };
 
       if (hit) {
         // Touch on a task → DRAGGING immediately
         var task = R.findTask(hit.id);
-        if (!task) { touchReset(); return; }
+        if (!task) { ptrReset(); return; }
 
-        touchState = 'dragging';
-        console.log('[River] → DRAGGING task ' + task.name);
+        ptrState = 'dragging';
 
-        var zone;
-        if (task.position != null) {
-          zone = 'river';
-        } else {
-          zone = 'cloud';
-        }
+        var zone = (task.position != null) ? 'river' : 'cloud';
 
         R.dragging = {
           id: task.id,
@@ -4403,31 +4406,31 @@ window.River = {};
       } else {
         // No task hit — scroll only in river zone (above surface)
         if (my < R.surfaceY()) {
-          touchState = 'scrolling';
+          ptrState = 'scrolling';
         }
         // Touch in cloud zone with no task → stay idle
       }
-    }, { passive: true });
+    });
 
-    R.canvas.addEventListener('touchmove', function (e) {
-      if (!R.isMobile || !touchStart) return;
-      e.preventDefault();
-      var t = e.touches[0];
-      var mx = t.clientX, my = t.clientY;
-      var dx = mx - touchStart.x;
-      var dy = my - touchStart.y;
+    // ── POINTER MOVE ──
+    R.canvas.addEventListener('pointermove', function (e) {
+      if (!R.isMobile || !ptrStart || e.pointerId !== ptrStart.pointerId) return;
+
+      var mx = e.clientX, my = e.clientY;
+      var dx = mx - ptrStart.x;
+      var dy = my - ptrStart.y;
 
       // ── SCROLLING: shift time view ──
-      if (touchState === 'scrolling') {
+      if (ptrState === 'scrolling') {
         if (R.scrollLocked) return;
         var hoursPerPx = 1 / R.PIXELS_PER_HOUR;
-        R.scrollHours = touchStart.scrollH + dy * hoursPerPx;
+        R.scrollHours = ptrStart.scrollH + dy * hoursPerPx;
         R.sync();
         return;
       }
 
-      // ── DRAGGING: move task, check wizard/dwell ──
-      if (touchState === 'dragging') {
+      // ── DRAGGING: move task ──
+      if (ptrState === 'dragging') {
         R.mouseX = mx;
         R.mouseY = my;
         if (!R.dragging) return;
@@ -4435,26 +4438,6 @@ window.River = {};
 
         var a = R.findTask(R.dragging.id);
         if (!a) return;
-
-        var boundary = R.surfaceY();
-
-        // Wizard activation (currently no-ops on mobile, but wired for future use)
-        var cloudThreshold = boundary + 30;
-        var inCloud = my > cloudThreshold;
-        if (R.wizardActivate) {
-          if (inCloud && !R.dragging.wizardStarted) {
-            R.wizardActivate(R.dragging.id);
-            R.dragging.wizardStarted = true;
-          }
-          if (R.wizardIsActive && R.wizardIsActive()) {
-            R.wizardMouseMove(mx, my);
-          }
-        }
-
-        // Dwell check on horizon bar buttons
-        if (R.dwellCheckStart && !(R.wizardIsActive && R.wizardIsActive())) {
-          R.dwellCheckStart(mx, my);
-        }
 
         // Mobile: X moves freely, Y snaps to time grid
         a.x = R.dragging.sx + dx;
@@ -4475,18 +4458,21 @@ window.River = {};
           }
         }
       }
-    }, { passive: false });
+    });
 
-    R.canvas.addEventListener('touchend', function (e) {
-      if (!R.isMobile) return;
-      var endX = e.changedTouches[0].clientX;
-      var endY = e.changedTouches[0].clientY;
-      var prevState = touchState;
+    // ── POINTER UP ──
+    R.canvas.addEventListener('pointerup', function (e) {
+      if (!R.isMobile || !ptrStart || e.pointerId !== ptrStart.pointerId) return;
+
+      var endX = e.clientX, endY = e.clientY;
+      var prevState = ptrState;
+
+      R.canvas.releasePointerCapture(e.pointerId);
 
       // ── SCROLLING → IDLE ──
       if (prevState === 'scrolling') {
         R.dragging = null;
-        touchReset();
+        ptrReset();
         return;
       }
 
@@ -4499,15 +4485,10 @@ window.River = {};
         var hzBar = document.getElementById('horizon-bar');
         if (hzBar) hzBar.style.pointerEvents = '';
 
-        // Clean up wizard and dwell
-        if (d && d.wizardStarted && R.wizardDeactivate) R.wizardDeactivate();
-        if (R.dwellReset) R.dwellReset();
+        if (!d) { ptrReset(); return; }
 
-        if (!d) { touchReset(); return; }
-
-        // Touch without moving → TAP (show panel or double-tap quick-add)
+        // Touch without moving → TAP
         if (!d.moved) {
-          // Double-tap detection (< 300ms, < 30px apart)
           var now = Date.now();
           if (now - lastTapTime < 300 && Math.abs(endX - lastTapX) < 30 && Math.abs(endY - lastTapY) < 30) {
             var dbl = new MouseEvent('dblclick', { clientX: endX, clientY: endY });
@@ -4524,47 +4505,34 @@ window.River = {};
             lastTapX = endX;
             lastTapY = endY;
           }
-          touchReset();
+          ptrReset();
           return;
         }
 
-        // ── Drop logic (mirrors mouseup in river-input.js) ──
+        // ── Drop logic ──
         var a = R.findTask(d.id);
-        if (!a) { touchReset(); return; }
+        if (!a) { ptrReset(); return; }
 
         var boundary = R.surfaceY();
-        var wizardWasActive = d.wizardStarted;
-
-        // Convert drop Y to hours-from-now
         var dropHours = R.screenYToHours ? R.screenYToHours(a.y) : 0;
 
-        // Build combined update
         var updates = {};
-        if (wizardWasActive) {
-          updates.mass = a.mass;
-          updates.solidity = a.solidity;
-          updates.energy = a.energy;
-        }
 
         // Mobile zones: river ABOVE boundary, cloud BELOW
         var cTop = boundary + 10;
         var cBot = R.H - 20;
 
         if (d.zone === 'cloud' && a.y < boundary) {
-          // Cloud → river
           updates.position = dropHours;
           updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40)));
         } else if (d.zone === 'river' && a.y > boundary) {
-          // River → cloud
           updates.position = null;
           updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
           updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
         } else if (d.zone === 'river') {
-          // River → river reposition
           updates.position = dropHours;
           updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40)));
         } else if (d.zone === 'cloud') {
-          // Cloud → cloud rearrange
           updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
           updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
         }
@@ -4589,13 +4557,21 @@ window.River = {};
           }
         }
 
-        touchReset();
+        ptrReset();
         return;
       }
 
-      // Fallback cleanup
-      touchReset();
-    }, { passive: false });
+      ptrReset();
+    });
+
+    // ── POINTER CANCEL (finger leaves screen unexpectedly) ──
+    R.canvas.addEventListener('pointercancel', function (e) {
+      if (!ptrStart || e.pointerId !== ptrStart.pointerId) return;
+      R.dragging = null;
+      var hzBar = document.getElementById('horizon-bar');
+      if (hzBar) hzBar.style.pointerEvents = '';
+      ptrReset();
+    });
   }
 
   // ── Initial Check ──────────────────────────────────────────────────

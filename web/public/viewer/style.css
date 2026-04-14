@@ -18,6 +18,9 @@ canvas {
   width: 100vw;
   height: 100vh;
   cursor: default;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ── Horizon Bar ────────────────────────────────────── */
