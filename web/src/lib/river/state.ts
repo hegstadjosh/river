@@ -55,7 +55,8 @@ export class WebState {
   }
 
   private async setMeta(key: string, value: string): Promise<void> {
-    await this.supabase.from('meta').upsert({ user_id: this.userId, key, value })
+    const { error } = await this.supabase.from('meta').upsert({ user_id: this.userId, key, value })
+    if (error) throw new Error(`Failed to set meta '${key}': ${error.message}`)
   }
 
   private async deleteMeta(key: string): Promise<void> {
@@ -84,9 +85,10 @@ export class WebState {
 
     if (!data) {
       const id = crypto.randomUUID()
-      await this.supabase.from('timelines').insert({
+      const { error } = await this.supabase.from('timelines').insert({
         id, user_id: this.userId, name: 'main', created: new Date().toISOString(),
       })
+      if (error) throw new Error(`Failed to create main timeline: ${error.message}`)
       await this.setMeta('current_timeline_id', id)
       this._timelineId = id
     } else {
@@ -129,17 +131,19 @@ export class WebState {
       if (input.river_y !== undefined) updates.river_y = input.river_y
 
       if (Object.keys(updates).length > 0) {
-        await this.supabase
+        const { error } = await this.supabase
           .from('tasks')
           .update(updates)
           .eq('id', input.id)
           .eq('user_id', this.userId)
           .eq('timeline_id', timelineId)
+        if (error) throw new Error(`Failed to update task ${input.id}: ${error.message}`)
       }
 
       const { data } = await this.supabase
         .from('tasks').select('*').eq('id', input.id).eq('user_id', this.userId).single()
-      return rowToTask(data!)
+      if (!data) throw new Error(`Task ${input.id} not found after update`)
+      return rowToTask(data)
     } else {
       const id = crypto.randomUUID()
       const row = {
@@ -157,22 +161,25 @@ export class WebState {
         cloud_y: (input.cloud_y as number) ?? null,
         river_y: (input.river_y as number) ?? null,
       }
-      await this.supabase.from('tasks').insert(row)
+      const { error } = await this.supabase.from('tasks').insert(row)
+      if (error) throw new Error(`Failed to create task: ${error.message}`)
       return rowToTask(row)
     }
   }
 
   async deleteTask(id: string): Promise<void> {
     const timelineId = await this.getTimelineId()
-    await this.supabase.from('tasks').delete()
+    const { error } = await this.supabase.from('tasks').delete()
       .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
+    if (error) throw new Error(`Failed to delete task ${id}: ${error.message}`)
   }
 
   async moveTask(id: string, position: number | null): Promise<void> {
     const anchor = position === null ? null : positionToAnchor(position)
     const timelineId = await this.getTimelineId()
-    await this.supabase.from('tasks').update({ anchor })
+    const { error } = await this.supabase.from('tasks').update({ anchor })
       .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
+    if (error) throw new Error(`Failed to move task ${id}: ${error.message}`)
   }
 
   // ── Look (full state read) — PARALLELIZED ──────────────────────
@@ -275,7 +282,10 @@ export class WebState {
       }
     }
 
-    const knownTags = knownTagsResult ? JSON.parse(knownTagsResult).sort() : []
+    let knownTags: string[] = []
+    if (knownTagsResult) {
+      try { knownTags = JSON.parse(knownTagsResult).sort() } catch { knownTags = [] }
+    }
 
     return {
       river: filteredRiver, cloud: filteredCloud,
@@ -320,7 +330,8 @@ export class WebState {
 
   async getKnownTags(): Promise<string[]> {
     const raw = await this.getMeta('known_tags')
-    return raw ? JSON.parse(raw).sort() : []
+    if (!raw) return []
+    try { return JSON.parse(raw).sort() } catch { return [] }
   }
 
   async addKnownTag(tag: string): Promise<void> {
@@ -339,6 +350,10 @@ export class WebState {
   // ── Plan Mode ──────────────────────────────────────────────────
 
   async startPlan(windowStart: string, windowEnd: string): Promise<void> {
+    // Save the current timeline so we can restore it when plan ends
+    const currentTimeline = await this.getTimelineId()
+    await this.setMeta('pre_plan_timeline_id', currentTimeline)
+
     const mainId = await this.getMainTimelineId()
     const now = new Date().toISOString()
 
@@ -353,7 +368,8 @@ export class WebState {
         name: laneBranchName(i), parent_id: mainId, created: now,
       })
     }
-    await this.supabase.from('timelines').insert(branchInserts)
+    const { error: branchError } = await this.supabase.from('timelines').insert(branchInserts)
+    if (branchError) throw new Error(`Failed to create plan branches: ${branchError.message}`)
 
     // Snapshot main tasks into lane 1, set meta — in parallel
     const [tasksResult] = await Promise.all([
@@ -372,7 +388,8 @@ export class WebState {
         energy: t.energy, fixed: t.fixed, alive: t.alive, tags: t.tags,
         created: t.created, cloud_x: t.cloud_x, cloud_y: t.cloud_y, river_y: t.river_y,
       }))
-      await this.supabase.from('tasks').insert(inserts)
+      const { error: snapshotError } = await this.supabase.from('tasks').insert(inserts)
+      if (snapshotError) throw new Error(`Failed to snapshot tasks to lane 1: ${snapshotError.message}`)
     }
   }
 
@@ -387,12 +404,14 @@ export class WebState {
     ])
     if (!wsResult || !weResult) throw new Error('Plan window not defined')
 
-    await this.supabase.from('tasks').delete()
+    const { error: delError } = await this.supabase.from('tasks').delete()
       .eq('user_id', this.userId).eq('timeline_id', mainId)
       .not('anchor', 'is', null).gte('anchor', wsResult).lte('anchor', weResult)
+    if (delError) throw new Error(`Failed to clear main tasks for commit: ${delError.message}`)
 
-    await this.supabase.from('tasks').update({ timeline_id: mainId })
+    const { error: moveError } = await this.supabase.from('tasks').update({ timeline_id: mainId })
       .eq('user_id', this.userId).eq('timeline_id', branchId)
+    if (moveError) throw new Error(`Failed to commit lane tasks to main: ${moveError.message}`)
 
     await this.cleanupPlan()
   }
@@ -500,16 +519,16 @@ export class WebState {
     if (!source) throw new Error(`Task ${taskId} not found in lane ${lane}`)
 
     const mainId = await this.getMainTimelineId()
-    await Promise.all([
-      this.supabase.from('tasks').delete()
-        .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId),
-      this.supabase.from('tasks').insert({
-        id: crypto.randomUUID(), user_id: this.userId, timeline_id: mainId,
-        name: source.name, mass: source.mass, anchor: null,
-        solidity: source.solidity, energy: source.energy, fixed: source.fixed,
-        alive: source.alive, tags: source.tags, created: source.created,
-      }),
-    ])
+    // Sequential: insert first so we don't lose the task if delete succeeds but insert fails
+    const { error: insertError } = await this.supabase.from('tasks').insert({
+      id: crypto.randomUUID(), user_id: this.userId, timeline_id: mainId,
+      name: source.name, mass: source.mass, anchor: null,
+      solidity: source.solidity, energy: source.energy, fixed: source.fixed,
+      alive: source.alive, tags: source.tags, created: source.created,
+    })
+    if (insertError) throw new Error(`Failed to move task to cloud: ${insertError.message}`)
+    await this.supabase.from('tasks').delete()
+      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId)
   }
 
   async addToLane(lane: number, taskId: string, position: number | null, copy: boolean): Promise<void> {
@@ -534,21 +553,19 @@ export class WebState {
     if (!source) throw new Error(`Task ${taskId} not found`)
 
     const anchor = position != null ? positionToAnchor(position) : (source.anchor as string | null)
-    const insertPromise = this.supabase.from('tasks').insert({
+
+    // Sequential: insert first so we don't lose the task if delete succeeds but insert fails
+    const { error: insertError } = await this.supabase.from('tasks').insert({
       id: crypto.randomUUID(), user_id: this.userId, timeline_id: branchId,
       name: source.name, mass: source.mass, anchor,
       solidity: source.solidity, energy: source.energy, fixed: source.fixed,
       alive: source.alive, tags: source.tags, created: source.created,
     })
+    if (insertError) throw new Error(`Failed to add task to lane: ${insertError.message}`)
 
     if (!copy) {
-      await Promise.all([
-        insertPromise,
-        this.supabase.from('tasks').delete()
-          .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', sourceTimeline),
-      ])
-    } else {
-      await insertPromise
+      await this.supabase.from('tasks').delete()
+        .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', sourceTimeline)
     }
   }
 
@@ -560,16 +577,16 @@ export class WebState {
       .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', fromBranchId).single()
     if (!source) throw new Error(`Task ${taskId} not found in lane ${fromLane}`)
 
-    await Promise.all([
-      this.supabase.from('tasks').delete()
-        .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', fromBranchId),
-      this.supabase.from('tasks').insert({
-        id: crypto.randomUUID(), user_id: this.userId, timeline_id: toBranchId,
-        name: source.name, mass: source.mass, anchor: positionToAnchor(position),
-        solidity: source.solidity, energy: source.energy, fixed: source.fixed,
-        alive: source.alive, tags: source.tags, created: source.created,
-      }),
-    ])
+    // Sequential: insert first so we don't lose the task if delete succeeds but insert fails
+    const { error: insertError } = await this.supabase.from('tasks').insert({
+      id: crypto.randomUUID(), user_id: this.userId, timeline_id: toBranchId,
+      name: source.name, mass: source.mass, anchor: positionToAnchor(position),
+      solidity: source.solidity, energy: source.energy, fixed: source.fixed,
+      alive: source.alive, tags: source.tags, created: source.created,
+    })
+    if (insertError) throw new Error(`Failed to move task between lanes: ${insertError.message}`)
+    await this.supabase.from('tasks').delete()
+      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', fromBranchId)
   }
 
   async copyBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): Promise<void> {
@@ -604,16 +621,16 @@ export class WebState {
 
     if (branches && branches.length > 0) {
       const branchIds = branches.map(b => b.id)
-      // Delete tasks and branches in parallel
-      await Promise.all([
-        this.supabase.from('tasks').delete()
-          .eq('user_id', this.userId).in('timeline_id', branchIds),
-        this.supabase.from('timeline_tasks').delete()
-          .eq('user_id', this.userId).in('timeline_id', branchIds),
-      ])
+      // Delete tasks from lane branches
+      await this.supabase.from('tasks').delete()
+        .eq('user_id', this.userId).in('timeline_id', branchIds)
       await this.supabase.from('timelines').delete()
         .eq('user_id', this.userId).in('id', branchIds)
     }
+
+    // Restore the pre-plan timeline (or fall back to main)
+    const prePlanTimelineId = await this.getMeta('pre_plan_timeline_id')
+    const restoreId = prePlanTimelineId ?? await this.getMainTimelineId()
 
     // Clean up meta in parallel
     await Promise.all([
@@ -624,10 +641,10 @@ export class WebState {
       this.deleteMeta('plan_lane_2_label'),
       this.deleteMeta('plan_lane_3_label'),
       this.deleteMeta('plan_lane_4_label'),
+      this.deleteMeta('pre_plan_timeline_id'),
     ])
 
-    const mainId = await this.getMainTimelineId()
-    await this.setMeta('current_timeline_id', mainId)
-    this._timelineId = mainId
+    await this.setMeta('current_timeline_id', restoreId)
+    this._timelineId = restoreId
   }
 }

@@ -31,10 +31,10 @@ export function registerRiverTools(
         cloud: z.boolean().optional().describe('If true, only return cloud tasks'),
       },
     },
-    async () => {
+    async (args) => {
       const state = createServiceState(getUser())
       await state.ensureUser()
-      const result = await state.look()
+      const result = await state.look({ horizon: args.horizon, id: args.id, cloud: args.cloud })
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
     },
   )
