@@ -43,7 +43,7 @@ window.River = {};
   // ── State ───────────────────────────────────────────────────────────
 
   R.state = null;
-  R.tasks = [];
+  // R.tasks is owned by river-store.js — initialized there
   R.planMode = false;
   R.planLanes = [];
   R.planWindowStart = null;
@@ -1339,6 +1339,26 @@ window.River = {};
   R.sync = function () {
     if (!R.state) return;
 
+    // ── Scroll-lock: shift actual positions to match scroll delta ──
+    // Without this, tasks lag behind scroll via spring physics (~100-400px at speed).
+    // By shifting actual positions by the same pixel delta as targets, tasks stay
+    // locked to the viewport during scroll instead of trailing.
+    var prevScroll = R._prevSyncScroll;
+    R._prevSyncScroll = R.scrollHours;
+    if (prevScroll !== undefined && prevScroll !== R.scrollHours) {
+      var pxShift = (R.scrollHours - prevScroll) * R.PIXELS_PER_HOUR;
+      for (var si = 0; si < R.tasks.length; si++) {
+        var sa = R.tasks[si];
+        if (R.dragging && R.dragging.id === sa.id) continue;
+        if (sa.position === null || sa.position === undefined) continue;
+        if (R.isMobile) {
+          sa.y += pxShift;
+        } else {
+          sa.x -= pxShift;
+        }
+      }
+    }
+
     // ── Detect plan mode (disabled on mobile) ──
     var wasPlanMode = R.planMode;
     R.planMode = R.isMobile ? false : !!(R.state.plan && R.state.plan.active !== false);
@@ -1426,8 +1446,11 @@ window.River = {};
         // But ALWAYS update target position (so scroll works correctly)
         if (a._dirtyUntil && Date.now() < a._dirtyUntil) {
           a.ctx = src.ctx;
-          a.tx = tgt.x;
-          a.ty = tgt.y;
+          // Use LOCAL (optimistic) state for target, not stale server data.
+          // src still has the pre-save position until the server round-trips.
+          var localTgt = computeTarget(a);
+          a.tx = localTgt.x;
+          a.ty = localTgt.y;
           continue;
         }
         delete a._dirtyUntil;
@@ -1455,7 +1478,12 @@ window.River = {};
     }
 
     spreadLaneTasks();
-    R.rebuildTagBar();
+    // Only rebuild tag bar when server state changes — not during scroll-only syncs.
+    // rebuildTagBar does full DOM teardown/rebuild which causes jank at 60fps scroll rate.
+    if (R._lastSyncState !== R.state) {
+      R._lastSyncState = R.state;
+      R.rebuildTagBar();
+    }
   };
 
   // After sync, spread overlapping lane tasks vertically
@@ -4270,41 +4298,177 @@ window.River = {};
   };
 
   // ── Touch Events ───────────────────────────────────────────────────
+  //
+  // State machine: IDLE → PENDING → DRAGGING or SCROLLING
+  //
+  // IDLE:
+  //   touchstart on task  → PENDING (start 250ms long-press timer)
+  //   touchstart on empty → SCROLLING immediately
+  //
+  // PENDING:
+  //   timer fires         → DRAGGING (haptic, set R.dragging)
+  //   finger moves >8px   → SCROLLING (cancel timer)
+  //   touchend            → TAP (show panel / double-tap quick-add)
+  //
+  // DRAGGING:
+  //   touchmove           → update task position (mirrors desktop mousemove)
+  //   touchend            → drop logic (mirrors desktop mouseup)
+  //
+  // SCROLLING:
+  //   touchmove           → shift R.scrollHours
+  //   touchend            → IDLE
 
-  var touchStart = null;
-  var touchScrolling = false;
+  var LONG_PRESS_MS = 250;
+  var TOUCH_MOVE_THRESHOLD = 8;
+
+  var touchState = 'idle';  // 'idle' | 'pending' | 'dragging' | 'scrolling'
+  var touchStart = null;    // { x, y, scrollH, hitTask }
+  var longPressTimer = null;
   var lastTapTime = 0;
   var lastTapX = 0;
   var lastTapY = 0;
+
+  function touchReset() {
+    touchState = 'idle';
+    touchStart = null;
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }
 
   if (R.canvas) {
     R.canvas.addEventListener('touchstart', function (e) {
       if (!R.isMobile) return;
       var t = e.touches[0];
-      touchStart = { x: t.clientX, y: t.clientY, time: Date.now(), scrollH: R.scrollHours };
-      touchScrolling = false;
+      var mx = t.clientX, my = t.clientY;
+      var hit = R.hitTest(mx, my);
+
+      touchStart = { x: mx, y: my, scrollH: R.scrollHours, hitTask: hit };
+
+      if (hit) {
+        // Finger on a task → PENDING, wait for long press
+        touchState = 'pending';
+        longPressTimer = setTimeout(function () {
+          longPressTimer = null;
+          if (touchState !== 'pending') return;
+
+          // ── PENDING → DRAGGING ──
+          touchState = 'dragging';
+          if (navigator.vibrate) navigator.vibrate(15);
+
+          // Re-find task for current position (physics may shift it during the wait)
+          var task = R.findTask(hit.id);
+          if (!task) { touchReset(); return; }
+
+          var zone, planLane;
+          if (task.ctx && task.ctx.type === 'lane') {
+            zone = 'plan'; planLane = task.ctx.lane;
+          } else if (task.position != null) {
+            zone = 'river';
+          } else {
+            zone = 'cloud';
+          }
+
+          R.dragging = {
+            id: task.id,
+            sx: task.x, sy: task.y,
+            mx: touchStart.x, my: touchStart.y,
+            moved: false,
+            zone: zone,
+            planLane: planLane
+          };
+
+          // Multi-select group offsets
+          if (R.selectedIds.length > 1 && R.isSelected(task.id)) {
+            R.dragging.group = R.selectedIds.map(function (id) {
+              var gt = R.findTask(id);
+              return gt ? { id: id, ox: gt.x - task.x, oy: gt.y - task.y } : null;
+            }).filter(Boolean);
+          }
+
+          // Disable pointer events on horizon bar during drag
+          var hzBar = document.getElementById('horizon-bar');
+          if (hzBar) hzBar.style.pointerEvents = 'none';
+        }, LONG_PRESS_MS);
+      } else {
+        // No task → SCROLLING immediately
+        touchState = 'scrolling';
+      }
     }, { passive: true });
 
     R.canvas.addEventListener('touchmove', function (e) {
       if (!R.isMobile || !touchStart) return;
       e.preventDefault();
       var t = e.touches[0];
-      var dy = t.clientY - touchStart.y;
-      var dx = t.clientX - touchStart.x;
+      var mx = t.clientX, my = t.clientY;
+      var dx = mx - touchStart.x;
+      var dy = my - touchStart.y;
 
-      if (!touchScrolling && (Math.abs(dy) > R.DRAG_THRESHOLD || Math.abs(dx) > R.DRAG_THRESHOLD)) {
-        touchScrolling = true;
-        R.dragging = null;
+      // ── PENDING: check if finger moved too far → SCROLLING ──
+      if (touchState === 'pending') {
+        if (Math.abs(dx) > TOUCH_MOVE_THRESHOLD || Math.abs(dy) > TOUCH_MOVE_THRESHOLD) {
+          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+          touchState = 'scrolling';
+          // Fall through to scrolling logic below
+        } else {
+          return; // Still waiting for timer
+        }
       }
 
-      if (touchScrolling) {
-        // Drag DOWN → scroll toward future (future is up, so adding hours reveals more future at top)
+      // ── SCROLLING: shift time view ──
+      if (touchState === 'scrolling') {
         var hoursPerPx = 1 / R.PIXELS_PER_HOUR;
         R.scrollHours = touchStart.scrollH + dy * hoursPerPx;
         R.sync();
-      } else {
-        var me = new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY });
-        R.canvas.dispatchEvent(me);
+        return;
+      }
+
+      // ── DRAGGING: move task, check wizard/dwell ──
+      if (touchState === 'dragging') {
+        R.mouseX = mx;
+        R.mouseY = my;
+        if (!R.dragging) return;
+        R.dragging.moved = true;
+
+        var a = R.findTask(R.dragging.id);
+        if (!a) return;
+
+        var boundary = R.surfaceY();
+
+        // Wizard activation (currently no-ops on mobile, but wired for future use)
+        var cloudThreshold = boundary + 30;
+        var inCloud = my > cloudThreshold;
+        if (R.wizardActivate) {
+          if (inCloud && !R.dragging.wizardStarted) {
+            R.wizardActivate(R.dragging.id);
+            R.dragging.wizardStarted = true;
+          }
+          if (R.wizardIsActive && R.wizardIsActive()) {
+            R.wizardMouseMove(mx, my);
+          }
+        }
+
+        // Dwell check on horizon bar buttons
+        if (R.dwellCheckStart && !(R.wizardIsActive && R.wizardIsActive())) {
+          R.dwellCheckStart(mx, my);
+        }
+
+        // Mobile: X moves freely, Y snaps to time grid
+        a.x = R.dragging.sx + dx;
+        var rawY = R.dragging.sy + dy;
+        a.y = R.snapY ? R.snapY(rawY) : rawY;
+        a.tx = a.x; a.ty = a.y;
+
+        // Group drag
+        if (R.dragging.group) {
+          for (var gi = 0; gi < R.dragging.group.length; gi++) {
+            var g = R.dragging.group[gi];
+            var gt = R.findTask(g.id);
+            if (gt && gt.id !== R.dragging.id) {
+              gt.x = a.x + g.ox;
+              gt.y = a.y + g.oy;
+              gt.tx = gt.x; gt.ty = gt.y;
+            }
+          }
+        }
       }
     }, { passive: false });
 
@@ -4312,32 +4476,137 @@ window.River = {};
       if (!R.isMobile) return;
       var endX = e.changedTouches[0].clientX;
       var endY = e.changedTouches[0].clientY;
+      var prevState = touchState;
 
-      if (touchScrolling) {
+      // ── SCROLLING → IDLE ──
+      if (prevState === 'scrolling') {
         R.dragging = null;
-        touchScrolling = false;
-        touchStart = null;
+        touchReset();
         return;
       }
 
-      // Detect double-tap (< 300ms, < 30px apart)
-      var now = Date.now();
-      if (now - lastTapTime < 300 && Math.abs(endX - lastTapX) < 30 && Math.abs(endY - lastTapY) < 30) {
-        var dbl = new MouseEvent('dblclick', { clientX: endX, clientY: endY });
-        R.canvas.dispatchEvent(dbl);
-        lastTapTime = 0;
-      } else {
-        // Single tap
-        var down = new MouseEvent('mousedown', { clientX: endX, clientY: endY });
-        R.canvas.dispatchEvent(down);
-        var up = new MouseEvent('mouseup', { clientX: endX, clientY: endY });
-        R.canvas.dispatchEvent(up);
-        lastTapTime = now;
-        lastTapX = endX;
-        lastTapY = endY;
+      // ── PENDING → TAP (timer hadn't fired yet) ──
+      if (prevState === 'pending') {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+
+        // Double-tap detection (< 300ms, < 30px apart)
+        var now = Date.now();
+        if (now - lastTapTime < 300 && Math.abs(endX - lastTapX) < 30 && Math.abs(endY - lastTapY) < 30) {
+          var dbl = new MouseEvent('dblclick', { clientX: endX, clientY: endY });
+          R.canvas.dispatchEvent(dbl);
+          lastTapTime = 0;
+        } else {
+          // Single tap — show panel if on a task, hide if not
+          var hit = touchStart ? touchStart.hitTask : null;
+          if (hit) {
+            R.selectedIds = [hit.id];
+            R.selectedId = hit.id;
+            R.showPanel(hit, endX, endY);
+          } else {
+            R.hidePanel();
+          }
+          lastTapTime = now;
+          lastTapX = endX;
+          lastTapY = endY;
+        }
+        touchReset();
+        return;
       }
 
-      touchStart = null;
+      // ── DRAGGING → DROP ──
+      if (prevState === 'dragging') {
+        var d = R.dragging;
+        R.dragging = null;
+
+        // Restore horizon bar pointer events
+        var hzBar = document.getElementById('horizon-bar');
+        if (hzBar) hzBar.style.pointerEvents = '';
+
+        // Clean up wizard and dwell
+        if (d && d.wizardStarted && R.wizardDeactivate) R.wizardDeactivate();
+        if (R.dwellReset) R.dwellReset();
+
+        if (!d) { touchReset(); return; }
+
+        // Long-press without moving → show panel
+        if (!d.moved) {
+          var a = R.findTask(d.id);
+          if (a) {
+            R.selectedIds = [d.id];
+            R.selectedId = d.id;
+            R.showPanel(a, endX, endY);
+          }
+          touchReset();
+          return;
+        }
+
+        // ── Drop logic (mirrors mouseup in river-input.js) ──
+        var a = R.findTask(d.id);
+        if (!a) { touchReset(); return; }
+
+        var boundary = R.surfaceY();
+        var wizardWasActive = d.wizardStarted;
+
+        // Convert drop Y to hours-from-now
+        var dropHours = R.screenYToHours ? R.screenYToHours(a.y) : 0;
+
+        // Build combined update
+        var updates = {};
+        if (wizardWasActive) {
+          updates.mass = a.mass;
+          updates.solidity = a.solidity;
+          updates.energy = a.energy;
+        }
+
+        // Mobile zones: river ABOVE boundary, cloud BELOW
+        var cTop = boundary + 10;
+        var cBot = R.H - 20;
+
+        if (d.zone === 'cloud' && a.y < boundary) {
+          // Cloud → river
+          updates.position = dropHours;
+          updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40)));
+        } else if (d.zone === 'river' && a.y > boundary) {
+          // River → cloud
+          updates.position = null;
+          updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
+          updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+        } else if (d.zone === 'river') {
+          // River → river reposition
+          updates.position = dropHours;
+          updates.river_y = Math.max(0, Math.min(1, (a.x - 20) / (R.W - 40)));
+        } else if (d.zone === 'cloud') {
+          // Cloud → cloud rearrange
+          updates.cloud_x = Math.max(0, Math.min(1, (a.x - R.W * 0.1) / (R.W * 0.8)));
+          updates.cloud_y = Math.max(0, Math.min(1, (a.y - cTop) / (cBot - cTop)));
+        }
+
+        if (Object.keys(updates).length > 0) {
+          R.save(d.id, updates);
+        }
+
+        // Group drops
+        if (d.group) {
+          for (var gi = 0; gi < d.group.length; gi++) {
+            var g = d.group[gi];
+            if (g.id === d.id) continue;
+            var gt = R.findTask(g.id);
+            if (!gt) continue;
+            var gUpdates = {};
+            if (gt.position != null && R.screenYToHours) {
+              gUpdates.position = R.screenYToHours(gt.y);
+              gUpdates.river_y = Math.max(0, Math.min(1, (gt.x - 20) / (R.W - 40)));
+            }
+            if (Object.keys(gUpdates).length > 0) R.save(g.id, gUpdates);
+          }
+        }
+
+        touchReset();
+        return;
+      }
+
+      // Fallback cleanup
+      touchReset();
     }, { passive: false });
   }
 
@@ -4535,19 +4804,25 @@ window.River = {};
       a.x += a.vx;
       a.y += a.vy;
 
-      // Mobile: hard boundary — entire blob stays in its zone (not just center)
+      // Mobile: zone boundary enforcement
+      // Only clamp when the task's TARGET is within its proper zone.
+      // When scrolling pushes the target past the boundary (e.g. a river
+      // task scrolled into the past), let the spring carry it through so
+      // it can flow off-screen instead of piling up at the surface.
       if (R.isMobile) {
         var sY = R.surfaceY();
         var blobHH = R.taskStretch(a).hh;
         if (a.position !== null && a.position !== undefined) {
-          // River task: bottom edge (center + hh) must stay above surface
-          if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
-          // Also clamp top edge to screen
+          // River task: clamp to surface only when target is in river zone
+          if (a.ty + blobHH <= sY) {
+            if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
+          }
+          // Clamp top edge to screen
           if (a.y - blobHH < 0) { a.y = blobHH; a.vy = 0; }
         } else {
           // Cloud task: top edge (center - hh) must stay below surface
           if (a.y - blobHH < sY) { a.y = sY + blobHH; a.vy = 0; }
-          // Also clamp bottom edge to screen
+          // Clamp bottom edge to screen
           if (a.y + blobHH > R.H) { a.y = R.H - blobHH; a.vy = 0; }
         }
       }
@@ -4579,9 +4854,8 @@ window.River = {};
 
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
-        var screenX = R.hoursToX(task.position);
         var cullHW = R.taskStretch(task).hw + 50;
-        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        if (task.x + cullHW < 0 || task.x - cullHW > R.W) continue;
         if (task.position >= pwStartH && task.position <= pwEndH) continue;
         R.drawBlob(task, t);
       }
@@ -4590,17 +4864,16 @@ window.River = {};
       if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
       // Normal mode (or mobile): draw all river tasks with culling
+      // Use animated position (task.x/y) not logical position for culling,
+      // so tasks don't pop in/out during spring animation
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
         if (R.isMobile) {
-          // Vertical culling: cull by Y position
-          var screenY = R.hoursToY ? R.hoursToY(task.position) : task.y;
           var cullHH = R.taskStretch(task).hh + 50;
-          if (screenY + cullHH < 0 || screenY - cullHH > R.H) continue;
+          if (task.y + cullHH < 0 || task.y - cullHH > R.H) continue;
         } else {
-          var screenX = R.hoursToX(task.position);
           var cullHW = R.taskStretch(task).hw + 50;
-          if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+          if (task.x + cullHW < 0 || task.x - cullHW > R.W) continue;
         }
         R.drawBlob(task, t);
       }
