@@ -757,10 +757,10 @@ input[type="checkbox"] {
   background: rgba(200, 165, 110, 0.06);
   color: rgba(200, 165, 110, 0.4);
   font-size: 14px;
-  line-height: 32px;
-  text-align: center;
   cursor: pointer;
   overflow: hidden;
+  align-items: center;
+  justify-content: center;
 }
 .lock-btn.active {
   background: rgba(200, 165, 110, 0.15);
