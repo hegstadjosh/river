@@ -337,6 +337,9 @@
     // Prevent browser from intercepting touch gestures on canvas
     R.canvas.style.touchAction = 'none';
 
+    // Debug: visible proof that applyMobile ran
+    console.log('[River] applyMobile: isMobile=' + R.isMobile + ' W=' + R.W + ' touchAction=' + R.canvas.style.touchAction);
+
     // Kill plan mode on mobile — force off, hide button
     R.planMode = false;
     R.planLanes = [];
@@ -456,10 +459,12 @@
 
   if (R.canvas) {
     R.canvas.addEventListener('touchstart', function (e) {
-      if (!R.isMobile) return;
+      if (!R.isMobile) { console.log('[River] touchstart blocked: isMobile=' + R.isMobile); return; }
       var t = e.touches[0];
       var mx = t.clientX, my = t.clientY;
       var hit = R.hitTest(mx, my);
+
+      console.log('[River] touchstart: hit=' + (hit ? hit.id.slice(0,8) : 'none') + ' xy=' + Math.round(mx) + ',' + Math.round(my) + ' surfaceY=' + Math.round(R.surfaceY()));
 
       touchStart = { x: mx, y: my, scrollH: R.scrollHours, hitTask: hit };
 
@@ -469,6 +474,7 @@
         if (!task) { touchReset(); return; }
 
         touchState = 'dragging';
+        console.log('[River] → DRAGGING task ' + task.name);
 
         var zone;
         if (task.position != null) {
