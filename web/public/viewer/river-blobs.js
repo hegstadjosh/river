@@ -199,7 +199,10 @@
     // Label — hide during resize
     if (R.resizing && R.resizing.id === a.id) return;
 
-    var fontSize = Math.max(10, Math.min(14, hh * 0.65));
+    // Font scales with task size — sqrt curve so small tasks aren't unreadable
+    // and large tasks don't have comically big text
+    var blobSize = Math.max(hw, hh);
+    var fontSize = Math.max(8, Math.min(14, 6 + Math.sqrt(blobSize) * 0.8));
     var labelA = Math.min(0.95, 0.75 + sol * 0.2) * dim;
     ctx.font = (sol > 0.6 ? '600 ' : '400 ') + fontSize + 'px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -207,7 +210,6 @@
     // Color label by tag (N/A or no tags = warm white)
     var labelColor = 'rgba(215, 200, 180, ' + labelA.toFixed(3) + ')';
     if (a.tags && a.tags.length > 0 && a.tags[0] !== 'N/A' && R.tagColor) {
-      // Parse the tag color and apply the label alpha
       var tc = R.tagColor(a.tags[0]);
       var m = tc.match(/[\d.]+/g);
       if (m && m.length >= 3) {
@@ -216,9 +218,9 @@
     }
     ctx.fillStyle = labelColor;
 
-    // Multi-line word-wrap: text floats ON the task, centered, overflows sides if needed
-    // Never split a word. Prefer fewer lines. Max width = task width * 2 (generous overflow)
-    var maxW = Math.max(hw * 2, 60);
+    // Multi-line word-wrap: text floats ON the task, overflows sides generously
+    // maxW is wide — prefer 1-2 lines with side overflow over many squeezed lines
+    var maxW = Math.max(hw * 3.5, 120);
     var words = a.name.split(' ');
     var lines = [];
     var line = '';
