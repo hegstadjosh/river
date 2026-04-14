@@ -235,21 +235,31 @@
       R.drawPlanMode(t, dt);
       if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
-      // Normal mode (or mobile): draw all river tasks with culling
-      // Use animated position (task.x/y) not logical position for culling,
-      // so tasks don't pop in/out during spring animation
+      // Normal mode (or mobile): draw all river tasks
+      // On mobile, clip to river zone so tasks smoothly slide behind the
+      // surface boundary — no pixel of a river task ever appears in the cloud
+      if (R.isMobile) {
+        R.ctx.save();
+        R.ctx.beginPath();
+        R.ctx.rect(0, 0, R.W, R.surfaceY());
+        R.ctx.clip();
+      }
+
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
         if (R.isMobile) {
-          // Cull river tasks that scroll off-screen top OR past the surface into cloud zone
+          // Cull tasks fully above screen or fully below surface
           var cullHH = R.taskStretch(task).hh + 50;
-          var sYCull = R.surfaceY();
-          if (task.y + cullHH < 0 || task.y - cullHH > sYCull) continue;
+          if (task.y + cullHH < 0 || task.y - cullHH > R.surfaceY()) continue;
         } else {
           var cullHW = R.taskStretch(task).hw + 50;
           if (task.x + cullHW < 0 || task.x - cullHW > R.W) continue;
         }
         R.drawBlob(task, t);
+      }
+
+      if (R.isMobile) {
+        R.ctx.restore();
       }
     }
 
