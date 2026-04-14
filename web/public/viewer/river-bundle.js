@@ -109,6 +109,7 @@ window.River = {};
     plan_start: 1, plan_end: 1, plan_commit: 1,
     plan_lane_put: 1, plan_to_cloud: 1, plan_add: 1,
     plan_move: 1, plan_copy: 1,
+    tag_create: 1, tag_delete: 1,
   };
 
   R.post = function (action, data, optimisticFn) {
