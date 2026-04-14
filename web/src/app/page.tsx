@@ -41,7 +41,7 @@ export default function LandingPage() {
 
         <p className="max-w-lg text-base leading-relaxed mb-10 relative" style={{ color: 'rgba(220, 200, 170, 0.7)' }}>
           Let Claude vibecode your schedule.
-          Tasks are shapes that drift in a current. Big ones take up space.
+          Tasks are multidimensional blobs in the current.
           Committed ones are vivid. Maybes are wisps.
         </p>
 
