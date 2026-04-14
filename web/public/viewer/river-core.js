@@ -209,6 +209,15 @@ window.River = {};
             }
           });
         break;
+      case 'tag_delete':
+        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle()
+          .then(function (r) {
+            var tags = r.data ? JSON.parse(r.data.value) : [];
+            tags = tags.filter(function (t) { return t !== data.name; });
+            sb.from('meta').upsert({ user_id: uid, key: 'known_tags', value: JSON.stringify(tags) })
+              .then(function (res) { if (res.error) console.error('River:', res.error); });
+          });
+        break;
       case 'plan_update_task':
         var lBranchP = sb.from('timelines').select('id')
           .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();

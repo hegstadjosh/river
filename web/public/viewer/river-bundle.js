@@ -209,6 +209,15 @@ window.River = {};
             }
           });
         break;
+      case 'tag_delete':
+        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle()
+          .then(function (r) {
+            var tags = r.data ? JSON.parse(r.data.value) : [];
+            tags = tags.filter(function (t) { return t !== data.name; });
+            sb.from('meta').upsert({ user_id: uid, key: 'known_tags', value: JSON.stringify(tags) })
+              .then(function (res) { if (res.error) console.error('River:', res.error); });
+          });
+        break;
       case 'plan_update_task':
         var lBranchP = sb.from('timelines').select('id')
           .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
@@ -1653,6 +1662,9 @@ window.River = {};
         item.className = 'tag-item' + (isHidden ? ' dimmed' : ' active');
         item.style.setProperty('--tag-color', color);
 
+        var swatchWrap = document.createElement('div');
+        swatchWrap.className = 'tag-swatch-wrap';
+
         var swatch = document.createElement('div');
         swatch.className = 'tag-swatch';
         swatch.style.background = color;
@@ -1667,10 +1679,83 @@ window.River = {};
           R.rebuildTagBar();
         });
 
-        // Double-click label to rename
+        swatchWrap.appendChild(swatch);
+
+        // Triple-dot menu button (not on N/A)
+        if (tag !== 'N/A') {
+          var menuBtn = document.createElement('button');
+          menuBtn.className = 'tag-menu-btn';
+          menuBtn.textContent = '\u22EE';
+          menuBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            // Dismiss any existing tag dropdown
+            var old = document.querySelector('.tag-dropdown');
+            if (old) { old.remove(); }
+
+            var dropdown = document.createElement('div');
+            dropdown.className = 'tag-dropdown';
+            var btnRect = menuBtn.getBoundingClientRect();
+            dropdown.style.left = btnRect.left + 'px';
+            dropdown.style.top = (btnRect.bottom + 4) + 'px';
+
+            // Rename option
+            var renameItem = document.createElement('div');
+            renameItem.className = 'tag-dropdown-item';
+            renameItem.textContent = 'Rename';
+            renameItem.addEventListener('click', function (re) {
+              re.stopPropagation();
+              dropdown.remove();
+              startRename(item, label, tag);
+            });
+            dropdown.appendChild(renameItem);
+
+            // Delete option
+            var deleteItem = document.createElement('div');
+            deleteItem.className = 'tag-dropdown-item tag-dropdown-delete';
+            deleteItem.textContent = 'Delete';
+            deleteItem.addEventListener('click', function (de) {
+              de.stopPropagation();
+              dropdown.remove();
+              // Remove tag from all tasks that have it
+              for (var ti = 0; ti < R.tasks.length; ti++) {
+                var t = R.tasks[ti];
+                if (t.tags && t.tags.indexOf(tag) >= 0) {
+                  var newTags = t.tags.filter(function (x) { return x !== tag; });
+                  R.save(t.id, { tags: newTags });
+                }
+              }
+              // Remove from hidden tags if present
+              if (R.hiddenTags[tag]) { delete R.hiddenTags[tag]; }
+              // Remove from known_tags on server
+              R.post('tag_delete', { name: tag });
+              R.rebuildTagBar();
+            });
+            dropdown.appendChild(deleteItem);
+
+            document.body.appendChild(dropdown);
+
+            // Click outside to dismiss
+            function dismissDropdown(ev) {
+              if (!dropdown.contains(ev.target)) {
+                dropdown.remove();
+                document.removeEventListener('pointerdown', dismissDropdown, true);
+              }
+            }
+            setTimeout(function () {
+              document.addEventListener('pointerdown', dismissDropdown, true);
+            }, 0);
+          });
+          swatchWrap.appendChild(menuBtn);
+        }
+
+        // Double-click label to rename (keep existing behavior)
         label.addEventListener('dblclick', function (e) {
           e.stopPropagation();
           if (tag === 'N/A') return;
+          startRename(item, label, tag);
+        });
+
+        function startRename(item, label, tag) {
           var input = document.createElement('input');
           input.className = 'tag-label-edit';
           input.value = tag;
@@ -1689,6 +1774,9 @@ window.River = {};
                 }
               }
               if (R.hiddenTags[tag]) { R.hiddenTags[newName] = true; delete R.hiddenTags[tag]; }
+              // Update known_tags: remove old, add new
+              R.post('tag_delete', { name: tag });
+              R.post('tag_create', { name: newName });
             }
             R.rebuildTagBar();
           }
@@ -1697,9 +1785,9 @@ window.River = {};
             if (ke.key === 'Enter') { ke.preventDefault(); input.blur(); }
             if (ke.key === 'Escape') { item.replaceChild(label, input); }
           });
-        });
+        }
 
-        item.appendChild(swatch);
+        item.appendChild(swatchWrap);
         item.appendChild(label);
         bar.appendChild(item);
       })(R.allTags[k]);
