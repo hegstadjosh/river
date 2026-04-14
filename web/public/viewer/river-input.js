@@ -13,11 +13,14 @@
       if (a.fixed !== b.fixed) return a.fixed ? -1 : 1;
       return 0;
     });
+    // Mobile needs bigger touch targets — fingers are ~44px
+    var minHit = R.isMobile ? 28 : R.MIN_HIT;
+    var pad = R.isMobile ? 10 : 5;
     for (var i = sorted.length - 1; i >= 0; i--) {
       var a = sorted[i];
       var d = R.taskStretch(a);
-      var hitHW = Math.max(R.MIN_HIT, d.hw + 5);
-      var hitHH = Math.max(R.MIN_HIT, d.hh + 5);
+      var hitHW = Math.max(minHit, d.hw + pad);
+      var hitHH = Math.max(minHit, d.hh + pad);
       if (Math.abs(mx - a.x) <= hitHW && Math.abs(my - a.y) <= hitHH) return a;
     }
     return null;

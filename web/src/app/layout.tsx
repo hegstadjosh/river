@@ -25,6 +25,18 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+    "mobile-web-app-capable": "yes",
+  },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({
@@ -37,7 +49,7 @@ export default function RootLayout({
       lang="en"
       className={`${instrumentSerif.variable} ${ibmPlex.variable} antialiased`}
     >
-      <body>{children}</body>
+      <body style={{ overflow: 'hidden', position: 'fixed', width: '100%', height: '100%' }}>{children}</body>
     </html>
   );
 }

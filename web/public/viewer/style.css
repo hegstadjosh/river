@@ -737,20 +737,32 @@ input[type="checkbox"] {
 
 .lock-btn {
   position: absolute;
-  top: 8px;
-  right: 56px;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  right: 48px;
   z-index: 200;
   display: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(200, 165, 110, 0.06);
+  color: rgba(200, 165, 110, 0.4);
+  font-size: 14px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
 }
 .lock-btn.active {
   background: rgba(200, 165, 110, 0.15);
+  color: rgba(200, 165, 110, 0.7);
 }
 
 /* ── Hamburger Menu ─────────────────────────────────────────── */
 
 .menu-btn {
   position: absolute;
-  top: 8px;
+  top: calc(8px + env(safe-area-inset-top, 0px));
   right: 16px;
   z-index: 200;
   box-sizing: border-box;
@@ -909,7 +921,7 @@ input[type="checkbox"] {
 
   /* Lock button: visible on mobile */
   .lock-btn {
-    display: block;
+    display: inline-flex;
   }
 
   /* Wizard field and dwell effects: disabled on mobile */
