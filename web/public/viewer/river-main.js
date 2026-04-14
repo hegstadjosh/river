@@ -191,14 +191,7 @@
       if (R.isMobile) {
         var sY = R.surfaceY();
         var blobHH = R.taskStretch(a).hh;
-        if (a.position !== null && a.position !== undefined) {
-          // River task: clamp to surface only when target is in river zone
-          if (a.ty + blobHH <= sY) {
-            if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
-          }
-          // Clamp top edge to screen
-          if (a.y - blobHH < 0) { a.y = blobHH; a.vy = 0; }
-        } else {
+        if (a.position === null || a.position === undefined) {
           // Cloud task: top edge (center - hh) must stay below surface
           if (a.y - blobHH < sY) { a.y = sY + blobHH; a.vy = 0; }
           // Clamp bottom edge to screen
