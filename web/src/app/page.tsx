@@ -40,7 +40,7 @@ export default function LandingPage() {
         </h1>
 
         <p className="max-w-lg text-base leading-relaxed mb-10 relative" style={{ color: 'rgba(220, 200, 170, 0.7)' }}>
-          Let Claude Code vibecode your schedule.
+          Let Claude vibecode your schedule.
           Tasks are shapes that drift in a current. Big ones take up space.
           Committed ones are vivid. Maybes are wisps.
         </p>
