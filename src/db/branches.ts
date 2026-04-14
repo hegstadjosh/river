@@ -186,7 +186,6 @@ export function createBranchFns(
 
     db.transaction(() => {
       db.prepare('DELETE FROM tasks WHERE timeline_id = ?').run(branch.id);
-      db.prepare('DELETE FROM timeline_tasks WHERE timeline_id = ?').run(branch.id);
       db.prepare('DELETE FROM timelines WHERE id = ?').run(branch.id);
     })();
   }

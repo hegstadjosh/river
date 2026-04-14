@@ -2,7 +2,6 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { type RiverState } from './state.js';
-import { HTTP_PORT } from './schema.js';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -15,8 +14,10 @@ export function createHttpServer(state: RiverState, viewerDir: string): Server {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url ?? '/';
 
-    // CORS headers for local dev
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS headers — restrict to localhost origins only
+    const origin = req.headers.origin ?? '';
+    const allowedOrigins = ['http://localhost:7433', 'http://localhost:7434', 'http://127.0.0.1:7433', 'http://127.0.0.1:7434'];
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes(origin) ? origin : 'http://localhost:7433');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 

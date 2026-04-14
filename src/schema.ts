@@ -86,26 +86,6 @@ export const PutSingleSchema = z.object({
 
 export type PutSingleInput = z.infer<typeof PutSingleSchema>;
 
-export const MoveSchema = z.object({
-  id: z.string().optional(),
-  ids: z.array(z.string()).optional(),
-  position: z.number().nullable().optional(),
-  shift: z.number().optional(),
-});
-
-export const LookSchema = z.object({
-  horizon: z.number().positive().optional(),
-  id: z.string().optional(),
-  cloud: z.boolean().optional(),
-});
-
-export const BranchSchema = z.object({
-  action: z.enum(['create', 'list', 'switch', 'commit', 'diff', 'delete']),
-  name: z.string().optional(),
-  a: z.string().optional(),
-  b: z.string().optional(),
-});
-
 export const SweepFilterSchema = z.object({
   in_river: z.boolean().optional(),
   cloud: z.boolean().optional(),
@@ -115,15 +95,6 @@ export const SweepFilterSchema = z.object({
   fixed: z.boolean().optional(),
   id_not: z.string().optional(),
   alive: z.boolean().optional(),
-});
-
-export const SweepSchema = z.object({
-  filter: SweepFilterSchema.optional(),
-  action: z.enum(['shift', 'set', 'remove']),
-  shift: z.number().optional(),
-  solidity: z.number().min(0).max(1).optional(),
-  mass: z.number().positive().optional(),
-  position: z.number().nullable().optional(),
 });
 
 export const PlanTaskSchema = z.object({

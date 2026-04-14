@@ -96,21 +96,6 @@ export class RiverState {
         FOREIGN KEY (timeline_id) REFERENCES timelines(id)
       );
 
-      CREATE TABLE IF NOT EXISTS timeline_tasks (
-        timeline_id TEXT NOT NULL,
-        task_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        mass REAL NOT NULL,
-        anchor TEXT,
-        solidity REAL NOT NULL,
-        fixed INTEGER NOT NULL,
-        alive INTEGER NOT NULL,
-        tags TEXT NOT NULL,
-        created TEXT NOT NULL,
-        PRIMARY KEY (timeline_id, task_id),
-        FOREIGN KEY (timeline_id) REFERENCES timelines(id)
-      );
-
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL

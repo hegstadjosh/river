@@ -23,7 +23,6 @@ describe('RiverState', () => {
       const tables = state.getTableNames();
       expect(tables).toContain('tasks');
       expect(tables).toContain('timelines');
-      expect(tables).toContain('timeline_tasks');
       expect(tables).toContain('meta');
     });
 

@@ -55,6 +55,7 @@ export function registerPut(server: McpServer, state: RiverState): void {
         // Batch mode
         for (const taskInput of args.tasks) {
           const task = state.putTask(taskInput);
+          if (taskInput.tags) state.ensureTaskTags(taskInput.tags);
           results.push(taskWithPosition(task));
         }
       } else {
@@ -65,6 +66,7 @@ export function registerPut(server: McpServer, state: RiverState): void {
           mass: args.mass,
           position: args.position,
           solidity: args.solidity,
+          energy: args.energy,
           fixed: args.fixed,
           alive: args.alive,
           tags: args.tags,
@@ -72,6 +74,7 @@ export function registerPut(server: McpServer, state: RiverState): void {
           cloud_y: args.cloud_y,
           river_y: args.river_y,
         });
+        if (args.tags) state.ensureTaskTags(args.tags);
         results.push(taskWithPosition(task));
       }
 
