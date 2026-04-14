@@ -183,19 +183,25 @@
       a.x += a.vx;
       a.y += a.vy;
 
-      // Mobile: hard boundary — entire blob stays in its zone (not just center)
+      // Mobile: zone boundary enforcement
+      // Only clamp when the task's TARGET is within its proper zone.
+      // When scrolling pushes the target past the boundary (e.g. a river
+      // task scrolled into the past), let the spring carry it through so
+      // it can flow off-screen instead of piling up at the surface.
       if (R.isMobile) {
         var sY = R.surfaceY();
         var blobHH = R.taskStretch(a).hh;
         if (a.position !== null && a.position !== undefined) {
-          // River task: bottom edge (center + hh) must stay above surface
-          if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
-          // Also clamp top edge to screen
+          // River task: clamp to surface only when target is in river zone
+          if (a.ty + blobHH <= sY) {
+            if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
+          }
+          // Clamp top edge to screen
           if (a.y - blobHH < 0) { a.y = blobHH; a.vy = 0; }
         } else {
           // Cloud task: top edge (center - hh) must stay below surface
           if (a.y - blobHH < sY) { a.y = sY + blobHH; a.vy = 0; }
-          // Also clamp bottom edge to screen
+          // Clamp bottom edge to screen
           if (a.y + blobHH > R.H) { a.y = R.H - blobHH; a.vy = 0; }
         }
       }
@@ -227,9 +233,8 @@
 
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
-        var screenX = R.hoursToX(task.position);
         var cullHW = R.taskStretch(task).hw + 50;
-        if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+        if (task.x + cullHW < 0 || task.x - cullHW > R.W) continue;
         if (task.position >= pwStartH && task.position <= pwEndH) continue;
         R.drawBlob(task, t);
       }
@@ -238,17 +243,16 @@
       if (R.drawPlanWindowOutline) R.drawPlanWindowOutline(t);
     } else {
       // Normal mode (or mobile): draw all river tasks with culling
+      // Use animated position (task.x/y) not logical position for culling,
+      // so tasks don't pop in/out during spring animation
       for (var j = 0; j < riverSorted.length; j++) {
         var task = riverSorted[j];
         if (R.isMobile) {
-          // Vertical culling: cull by Y position
-          var screenY = R.hoursToY ? R.hoursToY(task.position) : task.y;
           var cullHH = R.taskStretch(task).hh + 50;
-          if (screenY + cullHH < 0 || screenY - cullHH > R.H) continue;
+          if (task.y + cullHH < 0 || task.y - cullHH > R.H) continue;
         } else {
-          var screenX = R.hoursToX(task.position);
           var cullHW = R.taskStretch(task).hw + 50;
-          if (screenX + cullHW < 0 || screenX - cullHW > R.W) continue;
+          if (task.x + cullHW < 0 || task.x - cullHW > R.W) continue;
         }
         R.drawBlob(task, t);
       }
