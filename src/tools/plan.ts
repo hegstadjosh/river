@@ -12,8 +12,8 @@ export function registerPlan(server: McpServer, state: RiverState): void {
         'Actions:\n' +
         '- start: Enter plan mode. Provide window_start and window_end as ISO timestamps.\n' +
         '  Lane 1 auto-fills with current river tasks in that window (read-only reference).\n' +
-        '  Lanes 2-5 start empty.\n' +
-        '- fill: Populate a lane (2-5) with tasks. Lane 1 is read-only.\n' +
+        '  Lanes 2-4 start empty.\n' +
+        '- fill: Populate a lane (2-4) with tasks. Lane 1 is read-only.\n' +
         '- name: Give a lane a label describing its philosophy.\n' +
         '- commit: Accept a lane — replaces ONLY main tasks within the plan window. Everything outside is untouched.\n' +
         '- end: Exit plan mode without committing.\n' +
@@ -24,7 +24,6 @@ export function registerPlan(server: McpServer, state: RiverState): void {
         '- Generate genuinely DIFFERENT approaches in lanes 2-4, not permutations.\n' +
         '  Each lane should embody a different philosophy.\n' +
         '- Name each lane with its philosophy.\n' +
-        '- Leave lane 5 empty for the user.\n' +
         '- NEVER fill lane 1 — it is the user\'s current plan as reference.',
       inputSchema: {
         action: z
@@ -42,9 +41,9 @@ export function registerPlan(server: McpServer, state: RiverState): void {
           .number()
           .int()
           .min(1)
-          .max(5)
+          .max(4)
           .optional()
-          .describe('Lane number 1-5. Lane 1 is read-only. Required for fill, name, commit.'),
+          .describe('Lane number 1-4. Lane 1 is read-only. Required for fill, name, commit.'),
         label: z
           .string()
           .optional()
@@ -75,7 +74,7 @@ export function registerPlan(server: McpServer, state: RiverState): void {
           case 'fill': {
             if (args.lane === undefined) {
               return {
-                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (2-5) is required for fill. Lane 1 is read-only.' }) }],
+                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (2-4) is required for fill. Lane 1 is read-only.' }) }],
                 isError: true,
               };
             }
@@ -111,7 +110,7 @@ export function registerPlan(server: McpServer, state: RiverState): void {
           case 'commit': {
             if (args.lane === undefined) {
               return {
-                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (2-5) is required for commit. Lane 1 is read-only.' }) }],
+                content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Lane number (2-4) is required for commit. Lane 1 is read-only.' }) }],
                 isError: true,
               };
             }

@@ -59,7 +59,7 @@ export function createPlanFns(
     const now = new Date().toISOString();
 
     db.transaction(() => {
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 4; i++) {
         const branchName = laneBranchName(i);
         const branchId = randomUUID();
 
@@ -99,6 +99,7 @@ export function createPlanFns(
   function fillLane(lane: number, tasks: PlanTaskInput[]): { lane: number; tasks: Task[] } {
     assertPlanActive();
     assertValidLane(lane);
+    if (lane === 1) throw new Error('Lane 1 is a read-only snapshot of the current state');
 
     const branchId = getLaneBranchId(lane);
 
@@ -206,7 +207,7 @@ export function createPlanFns(
     const windowEnd = getMeta('plan_window_end');
     const lanes: PlanLaneInfo[] = [];
 
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 4; i++) {
       const branchName = laneBranchName(i);
       const branch = db
         .prepare('SELECT id FROM timelines WHERE name = ?')
@@ -224,7 +225,7 @@ export function createPlanFns(
           label,
           taskCount: countRow.cnt,
           branchName,
-          readonly: false,
+          readonly: i === 1,
         });
       }
     }
@@ -252,7 +253,7 @@ export function createPlanFns(
     const mainId = getMainTimelineId();
     let source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, mainId) as TaskRow | undefined;
     if (!source) {
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 4; i++) {
         const bid = getLaneBranchId(i);
         source = db.prepare('SELECT * FROM tasks WHERE id = ? AND timeline_id = ?').get(taskId, bid) as TaskRow | undefined;
         if (source) break;
@@ -262,9 +263,9 @@ export function createPlanFns(
 
     const anchor = position != null ? positionToAnchor(position) : source.anchor;
     db.prepare(
-      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(randomUUID(), branchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(randomUUID(), branchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created, source.cloud_x, source.cloud_y, source.river_y);
 
     if (!copy) {
       db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, mainId);
@@ -306,9 +307,9 @@ export function createPlanFns(
     db.transaction(() => {
       db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, branchId);
       db.prepare(
-        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(randomUUID(), mainId, source.name, source.mass, null, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(randomUUID(), mainId, source.name, source.mass, null, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created, source.cloud_x, source.cloud_y, source.river_y);
     })();
   }
 
@@ -335,9 +336,9 @@ export function createPlanFns(
     db.transaction(() => {
       db.prepare('DELETE FROM tasks WHERE id = ? AND timeline_id = ?').run(taskId, fromBranchId);
       db.prepare(
-        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(randomUUID(), toBranchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(randomUUID(), toBranchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created, source.cloud_x, source.cloud_y, source.river_y);
     })();
   }
 
@@ -366,9 +367,9 @@ export function createPlanFns(
 
     const anchor = positionToAnchor(position);
     db.prepare(
-      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(randomUUID(), toBranchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created);
+      `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(randomUUID(), toBranchId, source.name, source.mass, anchor, source.solidity, source.energy, source.fixed, source.alive, source.tags, source.created, source.cloud_x, source.cloud_y, source.river_y);
   }
 
   // ── Internal helpers ────────────────────────────────────────────
@@ -380,14 +381,14 @@ export function createPlanFns(
   }
 
   function assertValidLane(lane: number): void {
-    if (lane < 1 || lane > 5 || !Number.isInteger(lane)) {
-      throw new Error('Lane must be an integer from 1 to 5');
+    if (lane < 1 || lane > 4 || !Number.isInteger(lane)) {
+      throw new Error('Lane must be an integer from 1 to 4');
     }
   }
 
   function cleanupPlan(): void {
     db.transaction(() => {
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 4; i++) {
         const branchName = laneBranchName(i);
         const branch = db
           .prepare('SELECT id FROM timelines WHERE name = ?')

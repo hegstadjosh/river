@@ -165,13 +165,13 @@ window.River = {};
         } else {
           sb.from('tasks').insert({
             id: crypto.randomUUID(), user_id: uid, timeline_id: tid,
-            name: data.name || 'untitled', mass: data.mass || 30,
-            anchor: anchor || null, solidity: data.solidity || 0.1,
-            energy: data.energy || 0.5, fixed: data.fixed || false,
-            alive: data.alive || false, tags: data.tags || [],
+            name: data.name || 'untitled', mass: data.mass ?? 30,
+            anchor: anchor ?? null, solidity: data.solidity ?? 0.1,
+            energy: data.energy ?? 0.5, fixed: data.fixed ?? false,
+            alive: data.alive ?? false, tags: data.tags ?? [],
             created: new Date().toISOString(),
-            cloud_x: data.cloud_x || null, cloud_y: data.cloud_y || null,
-            river_y: data.river_y || null
+            cloud_x: data.cloud_x ?? null, cloud_y: data.cloud_y ?? null,
+            river_y: data.river_y ?? null
           }).then(function (res) { if (res.error) console.error('River:', res.error); });
         }
         break;
@@ -187,7 +187,7 @@ window.River = {};
           .then(function (res) { if (res.error) console.error('River:', res.error); });
         break;
       case 'tag_create':
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').single()
+        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle()
           .then(function (r) {
             var tags = r.data ? JSON.parse(r.data.value) : [];
             if (tags.indexOf(data.name) < 0) {

@@ -30,8 +30,8 @@ export function createBranchFns(
         .all(currentId) as TaskRow[];
 
       const insert = db.prepare(
-        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tasks (id, timeline_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       for (const task of tasks) {
@@ -46,7 +46,10 @@ export function createBranchFns(
           task.fixed,
           task.alive,
           task.tags,
-          task.created
+          task.created,
+          task.cloud_x,
+          task.cloud_y,
+          task.river_y,
         );
       }
     })();

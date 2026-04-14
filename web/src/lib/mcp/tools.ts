@@ -118,14 +118,14 @@ export function registerRiverTools(
         'Plan mode — explore different arrangements for a time window.\n' +
         'Actions: start, commit, end, status.\n' +
         '- start: Enter plan mode with window_start/window_end ISO timestamps\n' +
-        '- commit: Accept a lane (1-5), replacing main tasks in the window\n' +
+        '- commit: Accept a lane (2-4), replacing main tasks in the window\n' +
         '- end: Exit plan mode without committing\n' +
         '- status: Check current plan state',
       inputSchema: {
         action: z.enum(['start', 'commit', 'end', 'status']).describe('Plan operation'),
         window_start: z.string().optional().describe('ISO timestamp for plan window start'),
         window_end: z.string().optional().describe('ISO timestamp for plan window end'),
-        lane: z.number().int().min(1).max(5).optional().describe('Lane number for commit'),
+        lane: z.number().int().min(1).max(4).optional().describe('Lane number for commit (2-4, lane 1 is read-only)'),
       },
     },
     async (args) => {

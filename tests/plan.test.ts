@@ -22,7 +22,7 @@ describe('Plan Mode', () => {
   });
 
   describe('startPlan', () => {
-    it('creates lane 1 with tasks in window and lanes 2-5 empty', () => {
+    it('creates lane 1 with tasks in window and lanes 2-4 empty', () => {
       state.putTask({ name: 'In window', position: 1.0 });
       state.putTask({ name: 'Cloud task' }); // no anchor
 
@@ -30,13 +30,13 @@ describe('Plan Mode', () => {
       expect(plan.active).toBe(true);
       expect(plan.window_start).toBe(windowStart);
       expect(plan.window_end).toBe(windowEnd);
-      expect(plan.lanes).toHaveLength(5);
+      expect(plan.lanes).toHaveLength(4);
 
       const lane1 = plan.lanes.find((l) => l.number === 1)!;
       expect(lane1.taskCount).toBe(1);
-      expect(lane1.readonly).toBe(false);
+      expect(lane1.readonly).toBe(true);
 
-      for (let i = 2; i <= 5; i++) {
+      for (let i = 2; i <= 4; i++) {
         const lane = plan.lanes.find((l) => l.number === i)!;
         expect(lane.taskCount).toBe(0);
         expect(lane.readonly).toBe(false);
@@ -199,11 +199,11 @@ describe('Plan Mode', () => {
       expect(plan.active).toBe(true);
       expect(plan.window_start).toBe(windowStart);
       expect(plan.window_end).toBe(windowEnd);
-      expect(plan.lanes).toHaveLength(5);
+      expect(plan.lanes).toHaveLength(4);
 
       const lane1 = plan.lanes.find((l) => l.number === 1)!;
       expect(lane1.taskCount).toBe(1);
-      expect(lane1.readonly).toBe(false);
+      expect(lane1.readonly).toBe(true);
 
       const lane3 = plan.lanes.find((l) => l.number === 3)!;
       expect(lane3.taskCount).toBe(1);
@@ -387,17 +387,22 @@ describe('Plan Mode', () => {
   describe('lane validation', () => {
     it('rejects lane 0', () => {
       state.startPlan(windowStart, windowEnd);
-      expect(() => state.fillLane(0, [{ name: 'X' }])).toThrow('Lane must be an integer from 1 to 5');
+      expect(() => state.fillLane(0, [{ name: 'X' }])).toThrow('Lane must be an integer from 1 to 4');
     });
 
-    it('rejects lane 6', () => {
+    it('rejects lane 5', () => {
       state.startPlan(windowStart, windowEnd);
-      expect(() => state.fillLane(6, [{ name: 'X' }])).toThrow('Lane must be an integer from 1 to 5');
+      expect(() => state.fillLane(5, [{ name: 'X' }])).toThrow('Lane must be an integer from 1 to 4');
     });
 
     it('rejects non-integer lane', () => {
       state.startPlan(windowStart, windowEnd);
-      expect(() => state.fillLane(2.5, [{ name: 'X' }])).toThrow('Lane must be an integer from 1 to 5');
+      expect(() => state.fillLane(2.5, [{ name: 'X' }])).toThrow('Lane must be an integer from 1 to 4');
+    });
+
+    it('rejects filling lane 1 (read-only snapshot)', () => {
+      state.startPlan(windowStart, windowEnd);
+      expect(() => state.fillLane(1, [{ name: 'X' }])).toThrow('Lane 1 is a read-only snapshot');
     });
   });
 });

@@ -15,15 +15,12 @@ export function createLookFns(
   recirculate: () => Task[],
 ) {
   function look(options?: { horizon?: number; id?: string; cloud?: boolean }): LookResult {
-    // Run recirculation first
-    recirculate();
-
     const timelineId = currentTimelineId();
     const timeline = getCurrentTimeline();
     const now = new Date();
     const nowIso = now.toISOString();
 
-    // Single task lookup
+    // Single task lookup — no recirculation needed, just a read
     if (options?.id) {
       const task = getTask(options.id);
       return {
@@ -35,7 +32,7 @@ export function createLookFns(
       };
     }
 
-    // Cloud-only lookup
+    // Cloud-only lookup — no recirculation needed, cloud tasks have no anchors
     if (options?.cloud) {
       const rows = db
         .prepare('SELECT * FROM tasks WHERE timeline_id = ? AND anchor IS NULL')
@@ -49,7 +46,8 @@ export function createLookFns(
       };
     }
 
-    // Full look
+    // Full look — recirculate past tasks before reading
+    recirculate();
     let riverQuery = 'SELECT * FROM tasks WHERE timeline_id = ? AND anchor IS NOT NULL';
     const params: unknown[] = [timelineId];
 
