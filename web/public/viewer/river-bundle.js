@@ -1726,8 +1726,13 @@ window.River = {};
               }
               // Remove from hidden tags if present
               if (R.hiddenTags[tag]) { delete R.hiddenTags[tag]; }
-              // Remove from known_tags on server
+              // Remove from known_tags on server, then refresh
               R.post('tag_delete', { name: tag });
+              // Immediate local update — remove from allTags so tag bar shows change now
+              R.allTags = R.allTags.filter(function (t) { return t !== tag; });
+              if (R.state && R.state.known_tags) {
+                R.state.known_tags = R.state.known_tags.filter(function (t) { return t !== tag; });
+              }
               R.rebuildTagBar();
             });
             dropdown.appendChild(deleteItem);
@@ -1777,6 +1782,10 @@ window.River = {};
               // Update known_tags: remove old, add new
               R.post('tag_delete', { name: tag });
               R.post('tag_create', { name: newName });
+              // Immediate local update
+              if (R.state && R.state.known_tags) {
+                R.state.known_tags = R.state.known_tags.map(function (t) { return t === tag ? newName : t; });
+              }
             }
             R.rebuildTagBar();
           }
@@ -1818,6 +1827,11 @@ window.River = {};
         var name = inp.value.trim();
         if (name) {
           R.post('tag_create', { name: name });
+          // Immediate local update
+          if (R.state && R.state.known_tags && R.state.known_tags.indexOf(name) < 0) {
+            R.state.known_tags.push(name);
+          }
+          R.rebuildTagBar();
         }
         popup.remove();
       }
