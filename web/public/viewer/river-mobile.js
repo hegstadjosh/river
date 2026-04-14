@@ -432,31 +432,19 @@
 
   // ── Touch Events ───────────────────────────────────────────────────
   //
-  // State machine: IDLE → PENDING → DRAGGING or SCROLLING
+  // State machine: IDLE → DRAGGING or SCROLLING
   //
-  // IDLE:
-  //   touchstart on task  → PENDING (start 250ms long-press timer)
-  //   touchstart on empty → SCROLLING immediately
+  // touchstart on task   → DRAGGING immediately (you touched it, you own it)
+  // touchstart on empty  → SCROLLING (river zone) or IDLE (cloud zone)
   //
-  // PENDING:
-  //   timer fires         → DRAGGING (haptic, set R.dragging)
-  //   finger moves >8px   → SCROLLING (cancel timer)
-  //   touchend            → TAP (show panel / double-tap quick-add)
+  // DRAGGING + touchmove → move the task
+  // DRAGGING + touchend  → if moved: DROP (save position); if not: TAP (show panel)
   //
-  // DRAGGING:
-  //   touchmove           → update task position (mirrors desktop mousemove)
-  //   touchend            → drop logic (mirrors desktop mouseup)
-  //
-  // SCROLLING:
-  //   touchmove           → shift R.scrollHours
-  //   touchend            → IDLE
+  // SCROLLING + touchmove → shift R.scrollHours
+  // SCROLLING + touchend  → IDLE
 
-  var LONG_PRESS_MS = 150;
-  var TOUCH_MOVE_THRESHOLD = 20;
-
-  var touchState = 'idle';  // 'idle' | 'pending' | 'dragging' | 'scrolling'
+  var touchState = 'idle';  // 'idle' | 'dragging' | 'scrolling'
   var touchStart = null;    // { x, y, scrollH, hitTask }
-  var longPressTimer = null;
   var lastTapTime = 0;
   var lastTapX = 0;
   var lastTapY = 0;
@@ -464,7 +452,6 @@
   function touchReset() {
     touchState = 'idle';
     touchStart = null;
-    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
   }
 
   if (R.canvas) {
@@ -477,78 +464,37 @@
       touchStart = { x: mx, y: my, scrollH: R.scrollHours, hitTask: hit };
 
       if (hit) {
-        var hitTask = R.findTask(hit.id);
-        var isCloud = hitTask && (hitTask.position === null || hitTask.position === undefined);
+        // Touch on a task → DRAGGING immediately
+        var task = R.findTask(hit.id);
+        if (!task) { touchReset(); return; }
 
-        if (isCloud) {
-          // Cloud task → DRAGGING immediately (no long-press needed)
-          touchState = 'dragging';
-          if (navigator.vibrate) navigator.vibrate(15);
+        touchState = 'dragging';
 
-          R.dragging = {
-            id: hitTask.id,
-            sx: hitTask.x, sy: hitTask.y,
-            mx: mx, my: my,
-            moved: false,
-            zone: 'cloud'
-          };
-
-          // Multi-select group offsets
-          if (R.selectedIds.length > 1 && R.isSelected(hitTask.id)) {
-            R.dragging.group = R.selectedIds.map(function (id) {
-              var gt = R.findTask(id);
-              return gt ? { id: id, ox: gt.x - hitTask.x, oy: gt.y - hitTask.y } : null;
-            }).filter(Boolean);
-          }
-
-          var hzBar = document.getElementById('horizon-bar');
-          if (hzBar) hzBar.style.pointerEvents = 'none';
+        var zone;
+        if (task.position != null) {
+          zone = 'river';
         } else {
-          // River task → PENDING, wait for long press
-          touchState = 'pending';
-          longPressTimer = setTimeout(function () {
-            longPressTimer = null;
-            if (touchState !== 'pending') return;
-
-            // ── PENDING → DRAGGING ──
-            touchState = 'dragging';
-            if (navigator.vibrate) navigator.vibrate(15);
-
-            // Re-find task for current position (physics may shift it during the wait)
-            var task = R.findTask(hit.id);
-            if (!task) { touchReset(); return; }
-
-            var zone, planLane;
-            if (task.ctx && task.ctx.type === 'lane') {
-              zone = 'plan'; planLane = task.ctx.lane;
-            } else if (task.position != null) {
-              zone = 'river';
-            } else {
-              zone = 'cloud';
-            }
-
-            R.dragging = {
-              id: task.id,
-              sx: task.x, sy: task.y,
-              mx: touchStart.x, my: touchStart.y,
-              moved: false,
-              zone: zone,
-              planLane: planLane
-            };
-
-            // Multi-select group offsets
-            if (R.selectedIds.length > 1 && R.isSelected(task.id)) {
-              R.dragging.group = R.selectedIds.map(function (id) {
-                var gt = R.findTask(id);
-                return gt ? { id: id, ox: gt.x - task.x, oy: gt.y - task.y } : null;
-              }).filter(Boolean);
-            }
-
-            // Disable pointer events on horizon bar during drag
-            var hzBar = document.getElementById('horizon-bar');
-            if (hzBar) hzBar.style.pointerEvents = 'none';
-          }, LONG_PRESS_MS);
+          zone = 'cloud';
         }
+
+        R.dragging = {
+          id: task.id,
+          sx: task.x, sy: task.y,
+          mx: mx, my: my,
+          moved: false,
+          zone: zone
+        };
+
+        // Multi-select group offsets
+        if (R.selectedIds.length > 1 && R.isSelected(task.id)) {
+          R.dragging.group = R.selectedIds.map(function (id) {
+            var gt = R.findTask(id);
+            return gt ? { id: id, ox: gt.x - task.x, oy: gt.y - task.y } : null;
+          }).filter(Boolean);
+        }
+
+        var hzBar = document.getElementById('horizon-bar');
+        if (hzBar) hzBar.style.pointerEvents = 'none';
       } else {
         // No task hit — scroll only in river zone (above surface)
         if (my < R.surfaceY()) {
@@ -565,18 +511,6 @@
       var mx = t.clientX, my = t.clientY;
       var dx = mx - touchStart.x;
       var dy = my - touchStart.y;
-
-      // ── PENDING: check if finger moved too far → SCROLLING ──
-      if (touchState === 'pending') {
-        if (Math.abs(dx) > TOUCH_MOVE_THRESHOLD || Math.abs(dy) > TOUCH_MOVE_THRESHOLD) {
-          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-          if (R.scrollLocked) { touchReset(); return; }
-          touchState = 'scrolling';
-          // Fall through to scrolling logic below
-        } else {
-          return; // Still waiting for timer
-        }
-      }
 
       // ── SCROLLING: shift time view ──
       if (touchState === 'scrolling') {
@@ -651,35 +585,7 @@
         return;
       }
 
-      // ── PENDING → TAP (timer hadn't fired yet) ──
-      if (prevState === 'pending') {
-        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-
-        // Double-tap detection (< 300ms, < 30px apart)
-        var now = Date.now();
-        if (now - lastTapTime < 300 && Math.abs(endX - lastTapX) < 30 && Math.abs(endY - lastTapY) < 30) {
-          var dbl = new MouseEvent('dblclick', { clientX: endX, clientY: endY });
-          R.canvas.dispatchEvent(dbl);
-          lastTapTime = 0;
-        } else {
-          // Single tap — show panel if on a task, hide if not
-          var hit = touchStart ? touchStart.hitTask : null;
-          if (hit) {
-            R.selectedIds = [hit.id];
-            R.selectedId = hit.id;
-            R.showPanel(hit, endX, endY);
-          } else {
-            R.hidePanel();
-          }
-          lastTapTime = now;
-          lastTapX = endX;
-          lastTapY = endY;
-        }
-        touchReset();
-        return;
-      }
-
-      // ── DRAGGING → DROP ──
+      // ── DRAGGING → DROP or TAP ──
       if (prevState === 'dragging') {
         var d = R.dragging;
         R.dragging = null;
@@ -694,13 +600,24 @@
 
         if (!d) { touchReset(); return; }
 
-        // Long-press without moving → show panel
+        // Touch without moving → TAP (show panel or double-tap quick-add)
         if (!d.moved) {
-          var a = R.findTask(d.id);
-          if (a) {
-            R.selectedIds = [d.id];
-            R.selectedId = d.id;
-            R.showPanel(a, endX, endY);
+          // Double-tap detection (< 300ms, < 30px apart)
+          var now = Date.now();
+          if (now - lastTapTime < 300 && Math.abs(endX - lastTapX) < 30 && Math.abs(endY - lastTapY) < 30) {
+            var dbl = new MouseEvent('dblclick', { clientX: endX, clientY: endY });
+            R.canvas.dispatchEvent(dbl);
+            lastTapTime = 0;
+          } else {
+            var a = R.findTask(d.id);
+            if (a) {
+              R.selectedIds = [d.id];
+              R.selectedId = d.id;
+              R.showPanel(a, endX, endY);
+            }
+            lastTapTime = now;
+            lastTapX = endX;
+            lastTapY = endY;
           }
           touchReset();
           return;
