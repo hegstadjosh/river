@@ -244,6 +244,38 @@ export function registerRiverTools(
     },
   )
 
+  // ── delete_tag ────────────────────────────────────────────────
+  server.registerTool(
+    'delete_tag',
+    {
+      description: 'Nuke a tag from the system — removes it from all tasks AND the tag index.',
+      inputSchema: {
+        tag: z.string().describe('Tag name to delete'),
+      },
+    },
+    async (args) => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const count = await state.deleteTag(args.tag)
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ deleted_tag: args.tag, tasks_updated: count }, null, 2) }] }
+    },
+  )
+
+  // ── tags ──────────────────────────────────────────────────────
+  server.registerTool(
+    'tags',
+    {
+      description: 'List all tags in the system.',
+      inputSchema: {},
+    },
+    async () => {
+      const state = createServiceState(getUser())
+      await state.ensureUser()
+      const tags = await state.listTags()
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ tags }, null, 2) }] }
+    },
+  )
+
   // ── stats ─────────────────────────────────────────────────────
   server.registerTool(
     'stats',

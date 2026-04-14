@@ -498,6 +498,35 @@ export class WebState {
     for (const tag of taskTags) await this.addKnownTag(tag)
   }
 
+  async deleteTag(tag: string): Promise<number> {
+    // Remove from known_tags index
+    const tags = await this.getKnownTags()
+    const filtered = tags.filter(t => t !== tag)
+    await this.setMeta('known_tags', JSON.stringify(filtered))
+
+    // Remove from all tasks that have this tag
+    const timelineId = await this.getTimelineId()
+    const { data: tasks } = await this.supabase.from('tasks').select('id, tags')
+      .eq('user_id', this.userId).eq('timeline_id', timelineId)
+    let updated = 0
+    if (tasks) {
+      for (const t of tasks) {
+        const taskTags: string[] = t.tags || []
+        if (taskTags.includes(tag)) {
+          const newTags = taskTags.filter((x: string) => x !== tag)
+          await this.supabase.from('tasks').update({ tags: newTags })
+            .eq('id', t.id).eq('user_id', this.userId)
+          updated++
+        }
+      }
+    }
+    return updated
+  }
+
+  async listTags(): Promise<string[]> {
+    return this.getKnownTags()
+  }
+
   // ── Plan Mode ──────────────────────────────────────────────────
 
   async startPlan(windowStart: string, windowEnd: string): Promise<void> {
