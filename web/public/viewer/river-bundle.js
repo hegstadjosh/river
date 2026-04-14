@@ -2916,6 +2916,7 @@ window.River = {};
   // ── Mouse Down ──────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mousedown', function (e) {
+    if (R.isMobile) return;
     // Plan mode: check commit button first
     if (R.planMode) {
       var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
@@ -2984,6 +2985,7 @@ window.River = {};
   // ── Mouse Move ──────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mousemove', function (e) {
+    if (R.isMobile) return;
     R.mouseX = e.clientX; R.mouseY = e.clientY;
 
     // Update plan hover lane
@@ -3192,6 +3194,7 @@ window.River = {};
   // ── Mouse Up ────────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mouseup', function (e) {
+    if (R.isMobile) return;
     // Finish resize
     if (R.resizing) {
       var a = R.findTask(R.resizing.id);
@@ -4230,6 +4233,9 @@ window.River = {};
     R.drawPastFade = mDrawPastFade;
     R.drawTimeMarkers = mDrawTimeMarkers;
 
+    // Prevent browser from intercepting touch gestures on canvas
+    R.canvas.style.touchAction = 'none';
+
     // Kill plan mode on mobile — force off, hide button
     R.planMode = false;
     R.planLanes = [];
@@ -4237,6 +4243,26 @@ window.River = {};
     R.planWindowEnd = null;
     var planBtn = document.getElementById('plan-btn');
     if (planBtn) planBtn.style.display = 'none';
+
+    // Lock-river button
+    R.scrollLocked = false;
+    var lockBtn = document.createElement('button');
+    lockBtn.id = 'lock-btn';
+    lockBtn.className = 'menu-btn lock-btn';
+    lockBtn.innerHTML = '<span class="menu-icon">&#128275;</span>';
+    lockBtn.title = 'Lock river';
+    lockBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      R.scrollLocked = !R.scrollLocked;
+      lockBtn.innerHTML = R.scrollLocked
+        ? '<span class="menu-icon">&#128274;</span>'
+        : '<span class="menu-icon">&#128275;</span>';
+      lockBtn.classList.toggle('active', R.scrollLocked);
+    });
+    var menuBtn = document.getElementById('menu-btn');
+    if (menuBtn && menuBtn.parentNode) {
+      menuBtn.parentNode.insertBefore(lockBtn, menuBtn);
+    }
 
     // Reposition horizon bar to sit at the surface line (between river and cloud)
     var horizonBar = document.getElementById('horizon-bar');
@@ -4267,6 +4293,12 @@ window.River = {};
     R.drawNowLine = _origDrawNowLine;
     R.drawPastFade = _origDrawPastFade;
     R.drawTimeMarkers = _origDrawTimeMarkers;
+
+    R.canvas.style.touchAction = '';
+
+    R.scrollLocked = false;
+    var lockBtn = document.getElementById('lock-btn');
+    if (lockBtn) lockBtn.remove();
 
     var planBtn = document.getElementById('plan-btn');
     if (planBtn) planBtn.style.display = '';
@@ -4318,8 +4350,8 @@ window.River = {};
   //   touchmove           → shift R.scrollHours
   //   touchend            → IDLE
 
-  var LONG_PRESS_MS = 250;
-  var TOUCH_MOVE_THRESHOLD = 8;
+  var LONG_PRESS_MS = 150;
+  var TOUCH_MOVE_THRESHOLD = 20;
 
   var touchState = 'idle';  // 'idle' | 'pending' | 'dragging' | 'scrolling'
   var touchStart = null;    // { x, y, scrollH, hitTask }
@@ -4344,53 +4376,84 @@ window.River = {};
       touchStart = { x: mx, y: my, scrollH: R.scrollHours, hitTask: hit };
 
       if (hit) {
-        // Finger on a task → PENDING, wait for long press
-        touchState = 'pending';
-        longPressTimer = setTimeout(function () {
-          longPressTimer = null;
-          if (touchState !== 'pending') return;
+        var hitTask = R.findTask(hit.id);
+        var isCloud = hitTask && (hitTask.position === null || hitTask.position === undefined);
 
-          // ── PENDING → DRAGGING ──
+        if (isCloud) {
+          // Cloud task → DRAGGING immediately (no long-press needed)
           touchState = 'dragging';
           if (navigator.vibrate) navigator.vibrate(15);
 
-          // Re-find task for current position (physics may shift it during the wait)
-          var task = R.findTask(hit.id);
-          if (!task) { touchReset(); return; }
-
-          var zone, planLane;
-          if (task.ctx && task.ctx.type === 'lane') {
-            zone = 'plan'; planLane = task.ctx.lane;
-          } else if (task.position != null) {
-            zone = 'river';
-          } else {
-            zone = 'cloud';
-          }
-
           R.dragging = {
-            id: task.id,
-            sx: task.x, sy: task.y,
-            mx: touchStart.x, my: touchStart.y,
+            id: hitTask.id,
+            sx: hitTask.x, sy: hitTask.y,
+            mx: mx, my: my,
             moved: false,
-            zone: zone,
-            planLane: planLane
+            zone: 'cloud'
           };
 
           // Multi-select group offsets
-          if (R.selectedIds.length > 1 && R.isSelected(task.id)) {
+          if (R.selectedIds.length > 1 && R.isSelected(hitTask.id)) {
             R.dragging.group = R.selectedIds.map(function (id) {
               var gt = R.findTask(id);
-              return gt ? { id: id, ox: gt.x - task.x, oy: gt.y - task.y } : null;
+              return gt ? { id: id, ox: gt.x - hitTask.x, oy: gt.y - hitTask.y } : null;
             }).filter(Boolean);
           }
 
-          // Disable pointer events on horizon bar during drag
           var hzBar = document.getElementById('horizon-bar');
           if (hzBar) hzBar.style.pointerEvents = 'none';
-        }, LONG_PRESS_MS);
+        } else {
+          // River task → PENDING, wait for long press
+          touchState = 'pending';
+          longPressTimer = setTimeout(function () {
+            longPressTimer = null;
+            if (touchState !== 'pending') return;
+
+            // ── PENDING → DRAGGING ──
+            touchState = 'dragging';
+            if (navigator.vibrate) navigator.vibrate(15);
+
+            // Re-find task for current position (physics may shift it during the wait)
+            var task = R.findTask(hit.id);
+            if (!task) { touchReset(); return; }
+
+            var zone, planLane;
+            if (task.ctx && task.ctx.type === 'lane') {
+              zone = 'plan'; planLane = task.ctx.lane;
+            } else if (task.position != null) {
+              zone = 'river';
+            } else {
+              zone = 'cloud';
+            }
+
+            R.dragging = {
+              id: task.id,
+              sx: task.x, sy: task.y,
+              mx: touchStart.x, my: touchStart.y,
+              moved: false,
+              zone: zone,
+              planLane: planLane
+            };
+
+            // Multi-select group offsets
+            if (R.selectedIds.length > 1 && R.isSelected(task.id)) {
+              R.dragging.group = R.selectedIds.map(function (id) {
+                var gt = R.findTask(id);
+                return gt ? { id: id, ox: gt.x - task.x, oy: gt.y - task.y } : null;
+              }).filter(Boolean);
+            }
+
+            // Disable pointer events on horizon bar during drag
+            var hzBar = document.getElementById('horizon-bar');
+            if (hzBar) hzBar.style.pointerEvents = 'none';
+          }, LONG_PRESS_MS);
+        }
       } else {
-        // No task → SCROLLING immediately
-        touchState = 'scrolling';
+        // No task hit — scroll only in river zone (above surface)
+        if (my < R.surfaceY()) {
+          touchState = 'scrolling';
+        }
+        // Touch in cloud zone with no task → stay idle
       }
     }, { passive: true });
 
@@ -4406,6 +4469,7 @@ window.River = {};
       if (touchState === 'pending') {
         if (Math.abs(dx) > TOUCH_MOVE_THRESHOLD || Math.abs(dy) > TOUCH_MOVE_THRESHOLD) {
           if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+          if (R.scrollLocked) { touchReset(); return; }
           touchState = 'scrolling';
           // Fall through to scrolling logic below
         } else {
@@ -4415,6 +4479,7 @@ window.River = {};
 
       // ── SCROLLING: shift time view ──
       if (touchState === 'scrolling') {
+        if (R.scrollLocked) return;
         var hoursPerPx = 1 / R.PIXELS_PER_HOUR;
         R.scrollHours = touchStart.scrollH + dy * hoursPerPx;
         R.sync();
@@ -4812,14 +4877,7 @@ window.River = {};
       if (R.isMobile) {
         var sY = R.surfaceY();
         var blobHH = R.taskStretch(a).hh;
-        if (a.position !== null && a.position !== undefined) {
-          // River task: clamp to surface only when target is in river zone
-          if (a.ty + blobHH <= sY) {
-            if (a.y + blobHH > sY) { a.y = sY - blobHH; a.vy = 0; }
-          }
-          // Clamp top edge to screen
-          if (a.y - blobHH < 0) { a.y = blobHH; a.vy = 0; }
-        } else {
+        if (a.position === null || a.position === undefined) {
           // Cloud task: top edge (center - hh) must stay below surface
           if (a.y - blobHH < sY) { a.y = sY + blobHH; a.vy = 0; }
           // Clamp bottom edge to screen
