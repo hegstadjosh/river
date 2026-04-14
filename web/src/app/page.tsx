@@ -61,7 +61,7 @@ export default function LandingPage() {
           </div>
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(200, 165, 110, 0.1)', boxShadow: '0 0 80px rgba(200, 165, 110, 0.03)' }}>
             <video
-              src="https://hqhzpgeeibtwxvzf.private.blob.vercel-storage.com/demo-videos/river-video-demo.mp4"
+              src="/viewer/screenshots/river-video-demo.mp4"
               autoPlay
               loop
               muted
