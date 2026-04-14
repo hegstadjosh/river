@@ -19,7 +19,8 @@
   R.isMobile = false;
 
   R.checkMobile = function () {
-    R.isMobile = R.W < 768;
+    // Must be narrow AND a touch device — narrow desktop windows stay in desktop mode
+    R.isMobile = R.W < 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
   };
 
   // Store original functions before overriding
