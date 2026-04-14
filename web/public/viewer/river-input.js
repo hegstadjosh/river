@@ -59,6 +59,7 @@
   // ── Mouse Down ──────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mousedown', function (e) {
+    if (R.isMobile) return;
     // Plan mode: check commit button first
     if (R.planMode) {
       var commitLane = R.planCommitHitTest(e.clientX, e.clientY);
@@ -127,6 +128,7 @@
   // ── Mouse Move ──────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mousemove', function (e) {
+    if (R.isMobile) return;
     R.mouseX = e.clientX; R.mouseY = e.clientY;
 
     // Update plan hover lane
@@ -335,6 +337,7 @@
   // ── Mouse Up ────────────────────────────────────────────────────────
 
   R.canvas.addEventListener('mouseup', function (e) {
+    if (R.isMobile) return;
     // Finish resize
     if (R.resizing) {
       var a = R.findTask(R.resizing.id);

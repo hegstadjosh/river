@@ -730,6 +730,19 @@ input[type="checkbox"] {
   transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
+/* ── Lock Button (mobile only, left of menu) ──────────────── */
+
+.lock-btn {
+  position: absolute;
+  top: 8px;
+  right: 56px;
+  z-index: 200;
+  display: none;
+}
+.lock-btn.active {
+  background: rgba(200, 165, 110, 0.15);
+}
+
 /* ── Hamburger Menu ─────────────────────────────────────────── */
 
 .menu-btn {
@@ -889,6 +902,11 @@ input[type="checkbox"] {
   /* Plan button: hidden */
   .plan-btn {
     display: none !important;
+  }
+
+  /* Lock button: visible on mobile */
+  .lock-btn {
+    display: block;
   }
 
   /* Wizard field and dwell effects: disabled on mobile */
