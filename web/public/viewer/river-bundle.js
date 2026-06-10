@@ -88,11 +88,6 @@ window.River = {};
     return h;
   };
 
-  // ── Supabase helpers ───────────────────────────────────────────
-  R.sb = function () { return window._riverSB; };
-  R.userId = function () { return window._riverUserId; };
-  R.timelineId = function () { return window._riverTimelineId; };
-
   R.positionToAnchor = function (pos) {
     return new Date(Date.now() + pos * 3600000).toISOString();
   };
@@ -101,168 +96,23 @@ window.River = {};
     return (new Date(anchor).getTime() - Date.now()) / 3600000;
   };
 
-  // ── Direct Supabase operations ─────────────────────────────────
-  // CRUD goes direct to Supabase (no API route, no cold start).
-  // Plan operations still go through /api/state (multi-step transactions).
-
-  var PLAN_ACTIONS = {
-    plan_start: 1, plan_end: 1, plan_commit: 1,
-    plan_lane_put: 1, plan_to_cloud: 1, plan_add: 1,
-    plan_move: 1, plan_copy: 1,
-    tag_create: 1, tag_delete: 1, tag_rename: 1,
-  };
+  // ── Server operations ──────────────────────────────────────────
+  // Every mutation goes through /api/state (cookie-authenticated).
+  // The response is the full fresh state — applied immediately so the
+  // viewer reconciles without waiting for the next poll.
 
   R.post = function (action, data, optimisticFn) {
     if (optimisticFn) {
       try { optimisticFn(R.tasks); } catch (e) { console.error('optimistic', e); }
     }
 
-    // Plan operations go through API route (need server-side transactions)
-    if (PLAN_ACTIONS[action]) {
-      fetch('/api/state', {
-        method: 'POST', headers: R.authHeaders(),
-        body: JSON.stringify(Object.assign({ action: action }, data))
-      }).then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d && d.river !== undefined) { R.state = d; R.sync(); }
-        }).catch(function () {});
-      return;
-    }
-
-    // CRUD goes direct to Supabase
-    var sb = R.sb();
-    var uid = R.userId();
-    var tid = R.timelineId();
-    if (!sb || !uid || !tid) {
-      // Fallback to API route if Supabase client not ready
-      fetch('/api/state', {
-        method: 'POST', headers: R.authHeaders(),
-        body: JSON.stringify(Object.assign({ action: action }, data))
+    fetch('/api/state', {
+      method: 'POST', headers: R.authHeaders(),
+      body: JSON.stringify(Object.assign({ action: action }, data))
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.river !== undefined) { R.state = d; R.sync(); }
       }).catch(function () {});
-      return;
-    }
-
-    switch (action) {
-      case 'put':
-        var anchor = data.position !== undefined
-          ? (data.position === null ? null : R.positionToAnchor(data.position))
-          : undefined;
-        if (data.id) {
-          var updates = {};
-          if (data.name !== undefined) updates.name = data.name;
-          if (data.mass !== undefined) updates.mass = data.mass;
-          if (anchor !== undefined) updates.anchor = anchor;
-          if (data.solidity !== undefined) updates.solidity = data.solidity;
-          if (data.energy !== undefined) updates.energy = data.energy;
-          if (data.fixed !== undefined) updates.fixed = data.fixed;
-          if (data.alive !== undefined) updates.alive = data.alive;
-          if (data.tags !== undefined) updates.tags = data.tags;
-          if (data.cloud_x !== undefined) updates.cloud_x = data.cloud_x;
-          if (data.cloud_y !== undefined) updates.cloud_y = data.cloud_y;
-          if (data.river_y !== undefined) updates.river_y = data.river_y;
-          sb.from('tasks').update(updates)
-            .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-            .then(function (res) {
-              if (res.error) { console.error('River save failed:', res.error); return; }
-              // Save confirmed — fetch fresh state so R.state has the new data,
-              // THEN clear dirty flag. Order matters: if we clear first, a sync
-              // with stale R.state would snap the task back.
-              R.fetchState();
-            });
-        } else {
-          sb.from('tasks').insert({
-            id: crypto.randomUUID(), user_id: uid, timeline_id: tid,
-            name: data.name || 'untitled', mass: data.mass ?? 30,
-            anchor: anchor ?? null, solidity: data.solidity ?? 0.1,
-            energy: data.energy ?? 0.5, fixed: data.fixed ?? false,
-            alive: data.alive ?? false, tags: data.tags ?? [],
-            created: new Date().toISOString(),
-            cloud_x: data.cloud_x ?? null, cloud_y: data.cloud_y ?? null,
-            river_y: data.river_y ?? null
-          }).then(function (res) { if (res.error) console.error('River:', res.error); });
-        }
-        break;
-      case 'move':
-        var moveAnchor = data.position === null ? null : R.positionToAnchor(data.position);
-        sb.from('tasks').update({ anchor: moveAnchor })
-          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function (res) {
-            if (res.error) { console.error('River move failed:', res.error); return; }
-            R.fetchState();
-          });
-        break;
-      case 'delete':
-        sb.from('tasks').delete()
-          .eq('id', data.id).eq('user_id', uid).eq('timeline_id', tid)
-          .then(function (res) {
-            if (res.error) { console.error('River delete failed:', res.error); return; }
-            R.fetchState();
-          });
-        break;
-      case 'tag_create':
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle()
-          .then(function (r) {
-            var tags = r.data ? JSON.parse(r.data.value) : [];
-            if (tags.indexOf(data.name) < 0) {
-              tags.push(data.name);
-              sb.from('meta').update({ value: JSON.stringify(tags) })
-                .eq('user_id', uid).eq('key', 'known_tags')
-                .then(function (res) {
-                  if (res.error) { console.error('River tag_create failed:', res.error); return; }
-                  R.fetchState();
-                });
-            }
-          });
-        break;
-      case 'tag_delete':
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle()
-          .then(function (r) {
-            var tags = r.data ? JSON.parse(r.data.value) : [];
-            tags = tags.filter(function (t) { return t !== data.name; });
-            sb.from('meta').update({ value: JSON.stringify(tags) })
-              .eq('user_id', uid).eq('key', 'known_tags')
-              .then(function (res) {
-                if (res.error) { console.error('River tag_delete failed:', res.error); return; }
-                R.fetchState();
-              });
-          });
-        break;
-      case 'plan_update_task':
-        var lBranchP = sb.from('timelines').select('id')
-          .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
-        lBranchP.then(function (r) {
-          if (!r.data) return;
-          var patch = {};
-          if (data.mass !== undefined) patch.mass = data.mass;
-          if (data.solidity !== undefined) patch.solidity = data.solidity;
-          if (data.energy !== undefined) patch.energy = data.energy;
-          if (data.position !== undefined) patch.anchor = R.positionToAnchor(data.position);
-          sb.from('tasks').update(patch)
-            .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
-            .then(function (res) { if (res.error) console.error('River:', res.error); });
-        });
-        break;
-      case 'plan_reposition':
-        var rpBranch = sb.from('timelines').select('id')
-          .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
-        rpBranch.then(function (r) {
-          if (!r.data) return;
-          sb.from('tasks').update({ anchor: R.positionToAnchor(data.position) })
-            .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
-            .then(function (res) { if (res.error) console.error('River:', res.error); });
-        });
-        break;
-      case 'plan_remove':
-        var rmBranch = sb.from('timelines').select('id')
-          .eq('user_id', uid).eq('name', '_plan_lane_' + (data.lane + 1)).single();
-        rmBranch.then(function (r) {
-          if (!r.data) return;
-          sb.from('tasks').delete()
-            .eq('id', data.task_id).eq('user_id', uid).eq('timeline_id', r.data.id)
-            .then(function (res) { if (res.error) console.error('River:', res.error); });
-        });
-        break;
-    }
   };
 
 })();
@@ -1306,7 +1156,8 @@ window.River = {};
     if (!t || !t.ctx) return;
 
     // Mark dirty — sync will skip overwriting this task until server confirms
-    // 15s window handles slow mobile networks; cleared early on fetchState success
+    // 15s window handles slow mobile networks; expires on its own — applied
+    // responses skip dirty tasks rather than clearing the flag early
     t._dirtyUntil = Date.now() + 15000;
 
     // Optimistic: apply changes locally NOW
@@ -1933,161 +1784,34 @@ window.River = {};
     }
   };
 
-  // ── Direct Supabase fetch (no API route, no cold start) ─────────
+  // ── State fetch ─────────────────────────────────────────────────
+  // Single source of truth: GET /api/state (cookie-authenticated).
+  // The server computes positions, breathing room, plan lanes, and
+  // recirculation — the client just renders what it gets.
 
   R.fetchState = function () {
-    var sb = window._riverSB;
-    var uid = window._riverUserId;
-    if (!sb || !uid) {
-      // Fallback: API route (before Supabase client is ready)
-      fetch('/api/state', { headers: R.authHeaders() })
-        .then(function (r) { return r.json(); })
-        .then(function (d) { R.state = d; R.sync(); })
-        .catch(function () {});
-      return;
-    }
-
-    // Get timeline ID (cached or from meta)
-    var tidPromise;
-    if (window._riverTimelineId) {
-      tidPromise = Promise.resolve(window._riverTimelineId);
-    } else {
-      tidPromise = sb.from('meta').select('value')
-        .eq('user_id', uid).eq('key', 'current_timeline_id').single()
-        .then(function (r) {
-          var id = r.data ? r.data.value : null;
-          window._riverTimelineId = id;
-          return id;
-        });
-    }
-
-    tidPromise.then(function (tid) {
-      if (!tid) return;
-      var now = new Date();
-      var nowIso = now.toISOString();
-
-      // All queries in parallel — direct to Supabase
-      Promise.all([
-        sb.from('tasks').select('*').eq('user_id', uid).eq('timeline_id', tid)
-          .not('anchor', 'is', null).order('anchor', { ascending: true }),
-        sb.from('tasks').select('*').eq('user_id', uid).eq('timeline_id', tid)
-          .is('anchor', null),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle(),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_mode').maybeSingle(),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_window_start').maybeSingle(),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_window_end').maybeSingle(),
-      ]).then(function (results) {
-        var riverRows = results[0].data || [];
-        var cloudRows = results[1].data || [];
-        var knownTagsRaw = results[2].data ? results[2].data.value : null;
-        var planActive = results[3].data && results[3].data.value === 'true';
-        var planWinStart = results[4].data ? results[4].data.value : null;
-        var planWinEnd = results[5].data ? results[5].data.value : null;
-
-        // Compute positions client-side
-        function withPos(t) {
-          t.position = t.anchor ? (new Date(t.anchor).getTime() - Date.now()) / 3600000 : null;
-          t.tags = t.tags || [];
-          return t;
-        }
-
-        var river = riverRows.map(withPos);
-        var cloud = cloudRows.map(withPos);
-
-        // Breathing room
-        var endOf4h = new Date(now.getTime() + 4 * 3600000);
-        var endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
-        var usedNext4h = river.filter(function (t) {
-          return t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOf4h;
-        }).reduce(function (s, t) { return s + t.mass; }, 0);
-        var usedRoD = river.filter(function (t) {
-          return t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOfDay;
-        }).reduce(function (s, t) { return s + t.mass; }, 0);
-        var minsToEoD = (endOfDay.getTime() - now.getTime()) / 60000;
-
-        var state = {
-          river: river, cloud: cloud,
-          breathing_room: { next_4h: Math.max(0, 240 - usedNext4h), rest_of_day: Math.max(0, minsToEoD - usedRoD) },
-          now: nowIso, timeline: 'main',
-          known_tags: knownTagsRaw ? JSON.parse(knownTagsRaw).sort() : [],
-        };
-
-        // Plan state — IMPORTANT: only call R.sync() ONCE, after all data is ready
-        if (planActive) {
-          // Fetch lane tasks in parallel
-          var laneNums = [1, 2, 3, 4];
-          var lanePromises = laneNums.map(function (n) {
-            return sb.from('timelines').select('id')
-              .eq('user_id', uid).eq('name', '_plan_lane_' + n).maybeSingle()
-              .then(function (r) {
-                if (!r.data) return null;
-                return Promise.all([
-                  sb.from('tasks').select('*').eq('user_id', uid).eq('timeline_id', r.data.id),
-                  sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_lane_' + n + '_label').maybeSingle(),
-                ]).then(function (lr) {
-                  return {
-                    number: n, label: lr[1].data ? lr[1].data.value : null,
-                    taskCount: (lr[0].data || []).length, branchName: '_plan_lane_' + n, readonly: false,
-                    tasks: (lr[0].data || []).map(withPos),
-                  };
-                });
-              });
-          });
-          Promise.all(lanePromises).then(function (lanes) {
-            state.plan = {
-              active: true, window_start: planWinStart, window_end: planWinEnd,
-              lanes: lanes.filter(function (l) { return l !== null; }),
-            };
-            R.state = state; R.sync();
-          });
-          // Do NOT call R.sync() here — wait for lane data
-        } else {
-          R.state = state; R.sync();
-        }
-
-        // Fire-and-forget recirculation
-        var pastIds = river.filter(function (t) {
-          return t.anchor && new Date(t.anchor) < now && !t.fixed && !t.alive;
-        }).map(function (t) { return t.id; });
-        if (pastIds.length > 0) {
-          sb.from('tasks').update({ anchor: null, solidity: 0.0 })
-            .eq('user_id', uid).eq('timeline_id', tid).in('id', pastIds)
-            .then(function () {});
-        }
-      });
-    });
+    fetch('/api/state', { headers: R.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.river !== undefined) { R.state = d; R.sync(); }
+      })
+      .catch(function () {});
   };
 
-  // ── Supabase Realtime (replaces polling) ───────────────────────
-
-  R._realtimeChannel = null;
+  // ── Polling heartbeat ───────────────────────────────────────────
+  // Mutations apply their response state instantly; the poll exists to
+  // pick up out-of-band changes (an MCP agent rearranging the river,
+  // another device) and to drift past-due tasks back to the cloud.
 
   R.connectSSE = function () {
-    var sb = window._riverSB;
-    var uid = window._riverUserId;
-
-    if (sb && uid) {
-      // Subscribe to task changes via Supabase Realtime
-      R._realtimeChannel = sb.channel('river-live')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'tasks', filter: 'user_id=eq.' + uid },
-          function () { R.fetchState(); }
-        )
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'meta', filter: 'user_id=eq.' + uid },
-          function () { R.fetchState(); }
-        )
-        .subscribe();
-    }
-
-    // Fallback heartbeat — if Realtime disconnects, poll every 30s
-    setInterval(function () { R.fetchState(); }, 30000);
+    R.fetchState();  // immediate, in case the parent's preload failed
+    setInterval(function () { R.fetchState(); }, 10000);
   };
 
   // Initialization is handled by the parent page (app/page.tsx):
-  // 1. Parent sets window globals (_riverSB, _riverUserId, _riverTimelineId)
+  // 1. Parent optionally sets window._riverPreloadedState
   // 2. Parent applies preloaded state via R.state + R.sync()
-  // 3. Parent calls R.connectSSE() to start Realtime
+  // 3. Parent calls R.connectSSE() to start the polling heartbeat
   // No auto-init here — avoids race conditions with the parent.
 })();
 // viewer/river-panel.js — panel show/hide/position, duration presets, time formatting, all panel listeners

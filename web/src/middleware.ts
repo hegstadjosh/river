@@ -1,13 +1,9 @@
-import { type NextRequest } from 'next/server'
-import { updateSession } from '@/lib/supabase/middleware'
+import { auth } from '@/lib/auth/server'
 
-export async function middleware(request: NextRequest) {
-  return await updateSession(request)
-}
+// Protects /app and /mcp behind a session; refreshes the session cookie.
+// API routes authenticate themselves (cookie session or bearer API key).
+export default auth.middleware({ loginUrl: '/login' })
 
 export const config = {
-  matcher: [
-    // Exclude static assets, viewer, AND api routes (api uses getSession — local JWT, no auth server call)
-    '/((?!_next/static|_next/image|favicon.ico|viewer/|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/app/:path*', '/mcp/:path*'],
 }

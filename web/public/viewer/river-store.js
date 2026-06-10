@@ -49,7 +49,8 @@
     if (!t || !t.ctx) return;
 
     // Mark dirty — sync will skip overwriting this task until server confirms
-    // 15s window handles slow mobile networks; cleared early on fetchState success
+    // 15s window handles slow mobile networks; expires on its own — applied
+    // responses skip dirty tasks rather than clearing the flag early
     t._dirtyUntil = Date.now() + 15000;
 
     // Optimistic: apply changes locally NOW
@@ -676,160 +677,33 @@
     }
   };
 
-  // ── Direct Supabase fetch (no API route, no cold start) ─────────
+  // ── State fetch ─────────────────────────────────────────────────
+  // Single source of truth: GET /api/state (cookie-authenticated).
+  // The server computes positions, breathing room, plan lanes, and
+  // recirculation — the client just renders what it gets.
 
   R.fetchState = function () {
-    var sb = window._riverSB;
-    var uid = window._riverUserId;
-    if (!sb || !uid) {
-      // Fallback: API route (before Supabase client is ready)
-      fetch('/api/state', { headers: R.authHeaders() })
-        .then(function (r) { return r.json(); })
-        .then(function (d) { R.state = d; R.sync(); })
-        .catch(function () {});
-      return;
-    }
-
-    // Get timeline ID (cached or from meta)
-    var tidPromise;
-    if (window._riverTimelineId) {
-      tidPromise = Promise.resolve(window._riverTimelineId);
-    } else {
-      tidPromise = sb.from('meta').select('value')
-        .eq('user_id', uid).eq('key', 'current_timeline_id').single()
-        .then(function (r) {
-          var id = r.data ? r.data.value : null;
-          window._riverTimelineId = id;
-          return id;
-        });
-    }
-
-    tidPromise.then(function (tid) {
-      if (!tid) return;
-      var now = new Date();
-      var nowIso = now.toISOString();
-
-      // All queries in parallel — direct to Supabase
-      Promise.all([
-        sb.from('tasks').select('*').eq('user_id', uid).eq('timeline_id', tid)
-          .not('anchor', 'is', null).order('anchor', { ascending: true }),
-        sb.from('tasks').select('*').eq('user_id', uid).eq('timeline_id', tid)
-          .is('anchor', null),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'known_tags').maybeSingle(),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_mode').maybeSingle(),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_window_start').maybeSingle(),
-        sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_window_end').maybeSingle(),
-      ]).then(function (results) {
-        var riverRows = results[0].data || [];
-        var cloudRows = results[1].data || [];
-        var knownTagsRaw = results[2].data ? results[2].data.value : null;
-        var planActive = results[3].data && results[3].data.value === 'true';
-        var planWinStart = results[4].data ? results[4].data.value : null;
-        var planWinEnd = results[5].data ? results[5].data.value : null;
-
-        // Compute positions client-side
-        function withPos(t) {
-          t.position = t.anchor ? (new Date(t.anchor).getTime() - Date.now()) / 3600000 : null;
-          t.tags = t.tags || [];
-          return t;
-        }
-
-        var river = riverRows.map(withPos);
-        var cloud = cloudRows.map(withPos);
-
-        // Breathing room
-        var endOf4h = new Date(now.getTime() + 4 * 3600000);
-        var endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
-        var usedNext4h = river.filter(function (t) {
-          return t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOf4h;
-        }).reduce(function (s, t) { return s + t.mass; }, 0);
-        var usedRoD = river.filter(function (t) {
-          return t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOfDay;
-        }).reduce(function (s, t) { return s + t.mass; }, 0);
-        var minsToEoD = (endOfDay.getTime() - now.getTime()) / 60000;
-
-        var state = {
-          river: river, cloud: cloud,
-          breathing_room: { next_4h: Math.max(0, 240 - usedNext4h), rest_of_day: Math.max(0, minsToEoD - usedRoD) },
-          now: nowIso, timeline: 'main',
-          known_tags: knownTagsRaw ? JSON.parse(knownTagsRaw).sort() : [],
-        };
-
-        // Plan state — IMPORTANT: only call R.sync() ONCE, after all data is ready
-        if (planActive) {
-          // Fetch lane tasks in parallel
-          var laneNums = [1, 2, 3, 4];
-          var lanePromises = laneNums.map(function (n) {
-            return sb.from('timelines').select('id')
-              .eq('user_id', uid).eq('name', '_plan_lane_' + n).maybeSingle()
-              .then(function (r) {
-                if (!r.data) return null;
-                return Promise.all([
-                  sb.from('tasks').select('*').eq('user_id', uid).eq('timeline_id', r.data.id),
-                  sb.from('meta').select('value').eq('user_id', uid).eq('key', 'plan_lane_' + n + '_label').maybeSingle(),
-                ]).then(function (lr) {
-                  return {
-                    number: n, label: lr[1].data ? lr[1].data.value : null,
-                    taskCount: (lr[0].data || []).length, branchName: '_plan_lane_' + n, readonly: false,
-                    tasks: (lr[0].data || []).map(withPos),
-                  };
-                });
-              });
-          });
-          Promise.all(lanePromises).then(function (lanes) {
-            state.plan = {
-              active: true, window_start: planWinStart, window_end: planWinEnd,
-              lanes: lanes.filter(function (l) { return l !== null; }),
-            };
-            R.state = state; R.sync();
-          });
-          // Do NOT call R.sync() here — wait for lane data
-        } else {
-          R.state = state; R.sync();
-        }
-
-        // Fire-and-forget recirculation
-        var pastIds = river.filter(function (t) {
-          return t.anchor && new Date(t.anchor) < now && !t.fixed && !t.alive;
-        }).map(function (t) { return t.id; });
-        if (pastIds.length > 0) {
-          sb.from('tasks').update({ anchor: null, solidity: 0.0 })
-            .eq('user_id', uid).eq('timeline_id', tid).in('id', pastIds)
-            .then(function () {});
-        }
-      });
-    });
+    fetch('/api/state', { headers: R.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.river !== undefined) { R.state = d; R.sync(); }
+      })
+      .catch(function () {});
   };
 
-  // ── Supabase Realtime (replaces polling) ───────────────────────
-
-  R._realtimeChannel = null;
+  // ── Polling heartbeat ───────────────────────────────────────────
+  // Mutations apply their response state instantly; the poll exists to
+  // pick up out-of-band changes (an MCP agent rearranging the river,
+  // another device) and to drift past-due tasks back to the cloud.
 
   R.connectSSE = function () {
-    var sb = window._riverSB;
-    var uid = window._riverUserId;
-
-    if (sb && uid) {
-      // Subscribe to task changes via Supabase Realtime
-      R._realtimeChannel = sb.channel('river-live')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'tasks', filter: 'user_id=eq.' + uid },
-          function () { R.fetchState(); }
-        )
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'meta', filter: 'user_id=eq.' + uid },
-          function () { R.fetchState(); }
-        )
-        .subscribe();
-    }
-
-    // Fallback heartbeat — if Realtime disconnects, poll every 30s
-    setInterval(function () { R.fetchState(); }, 30000);
+    R.fetchState();  // immediate, in case the parent's preload failed
+    setInterval(function () { R.fetchState(); }, 10000);
   };
 
   // Initialization is handled by the parent page (app/page.tsx):
-  // 1. Parent sets window globals (_riverSB, _riverUserId, _riverTimelineId)
+  // 1. Parent optionally sets window._riverPreloadedState
   // 2. Parent applies preloaded state via R.state + R.sync()
-  // 3. Parent calls R.connectSSE() to start Realtime
+  // 3. Parent calls R.connectSSE() to start the polling heartbeat
   // No auto-init here — avoids race conditions with the parent.
 })();

@@ -1,10 +1,11 @@
-// Web state layer — all River operations using Supabase
-// Optimized: parallel queries, cached timeline ID, minimal roundtrips
+// Web state layer — all River operations as direct SQL against Neon Postgres.
+// Schema: tasks (lane NULL = main, 1-4 = plan lanes), known_tags, plan_state, api_keys.
+// Every query is scoped by user_id — that is the sole tenancy boundary.
 
-import { type SupabaseClient } from '@supabase/supabase-js'
+import type { PoolClient } from 'pg'
+import { pool } from '@/lib/db'
 import {
   type Task,
-  type TaskWithPosition,
   type LookResult,
   type PlanState,
   type PlanLaneInfo,
@@ -15,225 +16,147 @@ import {
   rowToTask,
 } from './schema'
 
-const LANE_PREFIX = '_plan_lane_'
 function laneBranchName(lane: number): string {
-  return `${LANE_PREFIX}${lane}`
+  return `_plan_lane_${lane}`
 }
 
+const iso = (v: unknown): string | null =>
+  v instanceof Date ? v.toISOString() : ((v as string | null) ?? null)
+
+// Columns written when copying a task into/out of a lane. Lane copies drop
+// spatial coords (cloud_x/cloud_y/river_y) — matches the previous behavior.
+const COPY_COLS = 'name, mass, anchor, solidity, energy, fixed, alive, tags, created'
+
 export class WebState {
-  private _timelineId: string | null = null
+  constructor(private userId: string) {}
 
-  constructor(
-    private supabase: SupabaseClient,
-    private userId: string,
-  ) {}
-
-  // ── Cached timeline ID ─────────────────────────────────────────
-
-  private async getTimelineId(): Promise<string> {
-    if (this._timelineId) return this._timelineId
-    const { data } = await this.supabase
-      .from('meta')
-      .select('value')
-      .eq('user_id', this.userId)
-      .eq('key', 'current_timeline_id')
-      .single()
-    this._timelineId = data?.value ?? null
-    return this._timelineId!
-  }
-
-  // ── Meta helpers ───────────────────────────────────────────────
-
-  private async getMeta(key: string): Promise<string | null> {
-    const { data } = await this.supabase
-      .from('meta')
-      .select('value')
-      .eq('user_id', this.userId)
-      .eq('key', key)
-      .single()
-    return data?.value ?? null
-  }
-
-  private async setMeta(key: string, value: string): Promise<void> {
-    const { error } = await this.supabase.from('meta').upsert({ user_id: this.userId, key, value })
-    if (error) throw new Error(`Failed to set meta '${key}': ${error.message}`)
-  }
-
-  private async deleteMeta(key: string): Promise<void> {
-    await this.supabase.from('meta').delete().eq('user_id', this.userId).eq('key', key)
-  }
-
-  // ── Timeline helpers ───────────────────────────────────────────
-
-  private async getMainTimelineId(): Promise<string> {
-    const { data } = await this.supabase
-      .from('timelines')
-      .select('id')
-      .eq('user_id', this.userId)
-      .eq('name', 'main')
-      .single()
-    return data!.id
-  }
-
-  async ensureUser(): Promise<void> {
-    const { data } = await this.supabase
-      .from('timelines')
-      .select('id')
-      .eq('user_id', this.userId)
-      .eq('name', 'main')
-      .maybeSingle()
-
-    if (!data) {
-      const id = crypto.randomUUID()
-      const { error } = await this.supabase.from('timelines').insert({
-        id, user_id: this.userId, name: 'main', created: new Date().toISOString(),
-      })
-      if (error) throw new Error(`Failed to create main timeline: ${error.message}`)
-      await this.setMeta('current_timeline_id', id)
-      this._timelineId = id
-    } else {
-      this._timelineId = data.id
-      // Ensure meta entry exists
-      const { data: meta } = await this.supabase
-        .from('meta')
-        .select('value')
-        .eq('user_id', this.userId)
-        .eq('key', 'current_timeline_id')
-        .maybeSingle()
-      if (!meta) {
-        await this.setMeta('current_timeline_id', data.id)
-      }
+  private async tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await fn(client)
+      await client.query('COMMIT')
+      return result
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
+      throw err
+    } finally {
+      client.release()
     }
   }
 
   // ── Task CRUD ──────────────────────────────────────────────────
 
   async putTask(input: Record<string, unknown>): Promise<Task> {
-    const timelineId = await this.getTimelineId()
-
     let anchor: string | null | undefined = undefined
     if (input.position !== undefined) {
       anchor = input.position === null ? null : positionToAnchor(input.position as number)
     }
 
     if (input.id) {
-      const updates: Record<string, unknown> = {}
-      if (input.name !== undefined) updates.name = input.name
-      if (input.mass !== undefined) updates.mass = input.mass
-      if (anchor !== undefined) updates.anchor = anchor
-      if (input.solidity !== undefined) updates.solidity = input.solidity
-      if (input.energy !== undefined) updates.energy = input.energy
-      if (input.fixed !== undefined) updates.fixed = input.fixed
-      if (input.alive !== undefined) updates.alive = input.alive
-      if (input.tags !== undefined) updates.tags = input.tags
-      if (input.cloud_x !== undefined) updates.cloud_x = input.cloud_x
-      if (input.cloud_y !== undefined) updates.cloud_y = input.cloud_y
-      if (input.river_y !== undefined) updates.river_y = input.river_y
+      const sets: string[] = []
+      const vals: unknown[] = []
+      const set = (col: string, v: unknown) => {
+        vals.push(v)
+        sets.push(`${col} = $${vals.length + 2}`)
+      }
+      if (input.name !== undefined) set('name', input.name)
+      if (input.mass !== undefined) set('mass', input.mass)
+      if (anchor !== undefined) set('anchor', anchor)
+      if (input.solidity !== undefined) set('solidity', input.solidity)
+      if (input.energy !== undefined) set('energy', input.energy)
+      if (input.fixed !== undefined) set('fixed', input.fixed)
+      if (input.alive !== undefined) set('alive', input.alive)
+      if (input.tags !== undefined) set('tags', input.tags)
+      if (input.cloud_x !== undefined) set('cloud_x', input.cloud_x)
+      if (input.cloud_y !== undefined) set('cloud_y', input.cloud_y)
+      if (input.river_y !== undefined) set('river_y', input.river_y)
 
-      if (Object.keys(updates).length > 0) {
-        const { error } = await this.supabase
-          .from('tasks')
-          .update(updates)
-          .eq('id', input.id)
-          .eq('user_id', this.userId)
-          .eq('timeline_id', timelineId)
-        if (error) throw new Error(`Failed to update task ${input.id}: ${error.message}`)
+      if (sets.length === 0) {
+        const { rows } = await pool.query(
+          'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
+          [input.id, this.userId],
+        )
+        if (!rows[0]) throw new Error(`Task ${input.id} not found`)
+        return rowToTask(rows[0])
       }
 
-      const { data } = await this.supabase
-        .from('tasks').select('*').eq('id', input.id).eq('user_id', this.userId).single()
-      if (!data) throw new Error(`Task ${input.id} not found after update`)
-      return rowToTask(data)
-    } else {
-      const id = crypto.randomUUID()
-      const row = {
-        id, user_id: this.userId, timeline_id: timelineId,
-        name: (input.name as string) || 'untitled',
-        mass: (input.mass as number) ?? DEFAULT_MASS,
-        anchor: anchor ?? null,
-        solidity: (input.solidity as number) ?? DEFAULT_SOLIDITY,
-        energy: (input.energy as number) ?? 0.5,
-        fixed: (input.fixed as boolean) ?? false,
-        alive: (input.alive as boolean) ?? false,
-        tags: (input.tags as string[]) ?? [],
-        created: new Date().toISOString(),
-        cloud_x: (input.cloud_x as number) ?? null,
-        cloud_y: (input.cloud_y as number) ?? null,
-        river_y: (input.river_y as number) ?? null,
-      }
-      const { error } = await this.supabase.from('tasks').insert(row)
-      if (error) throw new Error(`Failed to create task: ${error.message}`)
-      return rowToTask(row)
+      const { rows } = await pool.query(
+        `UPDATE tasks SET ${sets.join(', ')}
+         WHERE id = $1 AND user_id = $2 AND lane IS NULL
+         RETURNING *`,
+        [input.id, this.userId, ...vals],
+      )
+      if (!rows[0]) throw new Error(`Task ${input.id} not found`)
+      return rowToTask(rows[0])
     }
+
+    const { rows } = await pool.query(
+      `INSERT INTO tasks (id, user_id, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, $12, $13)
+       RETURNING *`,
+      [
+        crypto.randomUUID(),
+        this.userId,
+        (input.name as string) || 'untitled',
+        (input.mass as number) ?? DEFAULT_MASS,
+        anchor ?? null,
+        (input.solidity as number) ?? DEFAULT_SOLIDITY,
+        (input.energy as number) ?? 0.5,
+        (input.fixed as boolean) ?? false,
+        (input.alive as boolean) ?? false,
+        (input.tags as string[]) ?? [],
+        (input.cloud_x as number) ?? null,
+        (input.cloud_y as number) ?? null,
+        (input.river_y as number) ?? null,
+      ],
+    )
+    return rowToTask(rows[0])
   }
 
   async deleteTask(id: string): Promise<void> {
-    const timelineId = await this.getTimelineId()
-    const { error } = await this.supabase.from('tasks').delete()
-      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
-    if (error) throw new Error(`Failed to delete task ${id}: ${error.message}`)
+    await pool.query(
+      'DELETE FROM tasks WHERE id = $1 AND user_id = $2 AND lane IS NULL',
+      [id, this.userId],
+    )
   }
 
   async moveTask(id: string, position: number | null): Promise<void> {
     const anchor = position === null ? null : positionToAnchor(position)
-    const timelineId = await this.getTimelineId()
-    const { error } = await this.supabase.from('tasks').update({ anchor })
-      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
-    if (error) throw new Error(`Failed to move task ${id}: ${error.message}`)
+    await pool.query(
+      'UPDATE tasks SET anchor = $3 WHERE id = $1 AND user_id = $2 AND lane IS NULL',
+      [id, this.userId, anchor],
+    )
   }
 
-  // ── Look (full state read) — PARALLELIZED ──────────────────────
+  // ── Look (full state read) ─────────────────────────────────────
 
   async look(options?: { horizon?: number; id?: string; cloud?: boolean }): Promise<LookResult> {
-    const timelineId = await this.getTimelineId()
     const now = new Date()
     const nowIso = now.toISOString()
 
-    // Run ALL queries in parallel — this is the key optimization
-    const [
-      riverResult,
-      cloudResult,
-      recirculateResult,
-      planModeResult,
-      planWindowStartResult,
-      planWindowEndResult,
-      knownTagsResult,
-    ] = await Promise.all([
-      // 1. River tasks
-      this.supabase.from('tasks').select('*')
-        .eq('user_id', this.userId).eq('timeline_id', timelineId)
-        .not('anchor', 'is', null).order('anchor', { ascending: true }),
-      // 2. Cloud tasks
-      this.supabase.from('tasks').select('*')
-        .eq('user_id', this.userId).eq('timeline_id', timelineId)
-        .is('anchor', null),
-      // 3. Find past tasks to recirculate (non-fixed, non-alive, past anchor)
-      this.supabase.from('tasks').select('id')
-        .eq('user_id', this.userId).eq('timeline_id', timelineId)
-        .not('anchor', 'is', null).lt('anchor', nowIso)
-        .eq('fixed', false).eq('alive', false),
-      // 4-6. Plan state meta (3 keys in parallel)
-      this.getMeta('plan_mode'),
-      this.getMeta('plan_window_start'),
-      this.getMeta('plan_window_end'),
-      // 7. Known tags
-      this.getMeta('known_tags'),
+    // Recirculate first: past, non-fixed, non-alive river tasks drift back to
+    // the cloud. One conditional UPDATE on the DB clock — atomic, awaited.
+    await pool.query(
+      `UPDATE tasks SET anchor = NULL, solidity = 0
+       WHERE user_id = $1 AND lane IS NULL AND anchor < now() AND NOT fixed AND NOT alive`,
+      [this.userId],
+    )
+
+    const [tasksRes, planRes, tagsRes] = await Promise.all([
+      pool.query(
+        'SELECT * FROM tasks WHERE user_id = $1 ORDER BY anchor ASC NULLS LAST',
+        [this.userId],
+      ),
+      pool.query('SELECT * FROM plan_state WHERE user_id = $1', [this.userId]),
+      pool.query('SELECT name FROM known_tags WHERE user_id = $1 ORDER BY name', [this.userId]),
     ])
 
-    // Fire-and-forget recirculation update (don't block response)
-    const pastTasks = recirculateResult.data
-    if (pastTasks && pastTasks.length > 0) {
-      const ids = pastTasks.map((t: { id: string }) => t.id)
-      void this.supabase.from('tasks')
-        .update({ anchor: null, solidity: 0.0 })
-        .eq('user_id', this.userId).eq('timeline_id', timelineId)
-        .in('id', ids)
-    }
+    const mainRows = tasksRes.rows.filter(r => r.lane === null)
+    const river = mainRows.filter(r => r.anchor !== null).map(r => taskWithPosition(rowToTask(r)))
+    const cloud = mainRows.filter(r => r.anchor === null).map(r => taskWithPosition(rowToTask(r)))
 
-    const river = (riverResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r)))
-    const cloud = (cloudResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r)))
-
-    // Handle filtered lookups
+    // Single-task lookup keeps its narrow historical shape
     if (options?.id) {
       const match = [...river, ...cloud].find(t => t.id === options.id)
       return {
@@ -247,10 +170,7 @@ export class WebState {
     }
 
     let filteredRiver = river
-    let filteredCloud = cloud
-    if (options?.cloud) {
-      filteredRiver = []
-    }
+    if (options?.cloud) filteredRiver = []
     if (options?.horizon !== undefined) {
       filteredRiver = filteredRiver.filter(t => t.position !== null && t.position <= options.horizon!)
     }
@@ -259,157 +179,115 @@ export class WebState {
     const endOf4h = new Date(now.getTime() + 4 * 3_600_000)
     const endOfDay = new Date(now)
     endOfDay.setHours(23, 59, 59, 999)
-    const usedNext4h = river.filter(t => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOf4h).reduce((s, t) => s + t.mass, 0)
-    const usedRestOfDay = river.filter(t => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOfDay).reduce((s, t) => s + t.mass, 0)
+    const usedNext4h = river
+      .filter(t => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOf4h)
+      .reduce((s, t) => s + t.mass, 0)
+    const usedRestOfDay = river
+      .filter(t => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOfDay)
+      .reduce((s, t) => s + t.mass, 0)
     const minutesUntilEndOfDay = (endOfDay.getTime() - now.getTime()) / 60_000
 
-    // Plan state
-    const planActive = planModeResult === 'true'
-    let plan = undefined
-    if (planActive) {
-      // Fetch lane data — parallelize lane queries
-      const lanePromises = []
-      for (let i = 1; i <= 4; i++) {
-        lanePromises.push(this.getLaneFast(i))
+    // Plan state — lane tasks come from the same single SELECT
+    let plan: LookResult['plan'] = undefined
+    const ps = planRes.rows[0]
+    if (ps) {
+      const lanes = []
+      for (let n = 1; n <= 4; n++) {
+        const tasks = tasksRes.rows
+          .filter(r => r.lane === n)
+          .map(r => taskWithPosition(rowToTask(r)))
+        lanes.push({
+          number: n,
+          label: null,
+          taskCount: tasks.length,
+          branchName: laneBranchName(n),
+          readonly: false,
+          tasks,
+        })
       }
-      const laneResults = await Promise.all(lanePromises)
-      const lanes = laneResults.filter(l => l !== null)
       plan = {
         active: true,
-        window_start: planWindowStartResult,
-        window_end: planWindowEndResult,
+        window_start: iso(ps.window_start),
+        window_end: iso(ps.window_end),
         lanes,
       }
     }
 
-    let knownTags: string[] = []
-    if (knownTagsResult) {
-      try { knownTags = JSON.parse(knownTagsResult).sort() } catch { knownTags = [] }
-    }
-
     return {
-      river: filteredRiver, cloud: filteredCloud,
+      river: filteredRiver,
+      cloud,
       breathing_room: {
         next_4h: Math.max(0, 240 - usedNext4h),
         rest_of_day: Math.max(0, minutesUntilEndOfDay - usedRestOfDay),
       },
       now: nowIso,
       timeline: 'main',
-      known_tags: knownTags,
+      known_tags: tagsRes.rows.map(r => r.name),
       plan,
     }
   }
 
-  // Fast lane fetch — single query for both branch ID and tasks
-  private async getLaneFast(lane: number): Promise<(PlanLaneInfo & { tasks: TaskWithPosition[] }) | null> {
-    const branchName = laneBranchName(lane)
-    const { data: branch } = await this.supabase
-      .from('timelines').select('id')
-      .eq('user_id', this.userId).eq('name', branchName).maybeSingle()
-    if (!branch) return null
-
-    const [tasksResult, labelResult] = await Promise.all([
-      this.supabase.from('tasks').select('*')
-        .eq('user_id', this.userId).eq('timeline_id', branch.id),
-      this.getMeta(`plan_lane_${lane}_label`),
-    ])
-
-    const allTasks = (tasksResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r)))
-
-    return {
-      number: lane,
-      label: labelResult,
-      taskCount: allTasks.length,
-      branchName,
-      readonly: false,
-      tasks: allTasks,
-    }
-  }
-
-  // ── Clear ──────────────────────────────────────────────────────
+  // ── Clear / Bulk Sweep / Rename ────────────────────────────────
 
   async clear(timeRange?: { start?: number; end?: number }): Promise<number> {
-    const timelineId = await this.getTimelineId()
-
     if (timeRange && (timeRange.start !== undefined || timeRange.end !== undefined)) {
-      let query = this.supabase.from('tasks').delete()
-        .eq('user_id', this.userId).eq('timeline_id', timelineId)
-        .not('anchor', 'is', null)
-
+      const conds = ['user_id = $1', 'lane IS NULL', 'anchor IS NOT NULL']
+      const vals: unknown[] = [this.userId]
       if (timeRange.start !== undefined) {
-        query = query.gte('anchor', positionToAnchor(timeRange.start))
+        vals.push(positionToAnchor(timeRange.start))
+        conds.push(`anchor >= $${vals.length}`)
       }
       if (timeRange.end !== undefined) {
-        query = query.lte('anchor', positionToAnchor(timeRange.end))
+        vals.push(positionToAnchor(timeRange.end))
+        conds.push(`anchor <= $${vals.length}`)
       }
-
-      const { data, error } = await query.select('id')
-      if (error) throw new Error(`Failed to clear tasks: ${error.message}`)
-      return data?.length ?? 0
+      const res = await pool.query(`DELETE FROM tasks WHERE ${conds.join(' AND ')}`, vals)
+      return res.rowCount ?? 0
     }
 
-    // No time range: delete everything on this timeline
-    const { data, error } = await this.supabase.from('tasks').delete()
-      .eq('user_id', this.userId).eq('timeline_id', timelineId).select('id')
-    if (error) throw new Error(`Failed to clear all tasks: ${error.message}`)
-    return data?.length ?? 0
+    const res = await pool.query(
+      'DELETE FROM tasks WHERE user_id = $1 AND lane IS NULL',
+      [this.userId],
+    )
+    return res.rowCount ?? 0
   }
-
-  // ── Bulk Sweep ────────────────────────────────────────────────
 
   async bulkSweep(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0
-    const timelineId = await this.getTimelineId()
-    const { data, error } = await this.supabase.from('tasks').delete()
-      .eq('user_id', this.userId).eq('timeline_id', timelineId)
-      .in('id', ids).select('id')
-    if (error) throw new Error(`Failed to bulk sweep tasks: ${error.message}`)
-    return data?.length ?? 0
+    const res = await pool.query(
+      'DELETE FROM tasks WHERE user_id = $1 AND lane IS NULL AND id = ANY($2)',
+      [this.userId, ids],
+    )
+    return res.rowCount ?? 0
   }
 
-  // ── Rename ────────────────────────────────────────────────────
-
   async rename(id: string, name: string): Promise<Task> {
-    const timelineId = await this.getTimelineId()
-    const { error } = await this.supabase.from('tasks').update({ name })
-      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
-    if (error) throw new Error(`Failed to rename task ${id}: ${error.message}`)
-
-    const { data } = await this.supabase.from('tasks').select('*')
-      .eq('id', id).eq('user_id', this.userId).single()
-    if (!data) throw new Error(`Task ${id} not found after rename`)
-    return rowToTask(data)
+    const { rows } = await pool.query(
+      `UPDATE tasks SET name = $3 WHERE id = $1 AND user_id = $2 AND lane IS NULL RETURNING *`,
+      [id, this.userId, name],
+    )
+    if (!rows[0]) throw new Error(`Task ${id} not found`)
+    return rowToTask(rows[0])
   }
 
   // ── Tag / Untag ───────────────────────────────────────────────
 
   async tag(id: string, tags: string[], action: 'add' | 'remove'): Promise<Task> {
-    const timelineId = await this.getTimelineId()
-
-    const { data: existing } = await this.supabase.from('tasks').select('tags')
-      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId).single()
-    if (!existing) throw new Error(`Task ${id} not found`)
-
-    const currentTags: string[] = (existing.tags ?? []) as string[]
-    let newTags: string[]
-
-    if (action === 'add') {
-      const tagSet = new Set(currentTags)
-      for (const t of tags) tagSet.add(t)
-      newTags = [...tagSet]
-    } else {
-      const removeSet = new Set(tags)
-      newTags = currentTags.filter((t: string) => !removeSet.has(t))
-    }
-
-    const { error } = await this.supabase.from('tasks').update({ tags: newTags })
-      .eq('id', id).eq('user_id', this.userId).eq('timeline_id', timelineId)
-    if (error) throw new Error(`Failed to update tags on task ${id}: ${error.message}`)
-
-    const { data } = await this.supabase.from('tasks').select('*')
-      .eq('id', id).eq('user_id', this.userId).single()
-    if (!data) throw new Error(`Task ${id} not found after tag update`)
-    return rowToTask(data)
+    // Single statement, order-preserving: add appends only missing tags,
+    // remove filters them out. No read-modify-write round trip.
+    tags = [...new Set(tags)]
+    const expr =
+      action === 'add'
+        ? `tags || ARRAY(SELECT t FROM unnest($3::text[]) t WHERE NOT (t = ANY(tags)))`
+        : `ARRAY(SELECT t FROM unnest(tags) t WHERE NOT (t = ANY($3::text[])))`
+    const { rows } = await pool.query(
+      `UPDATE tasks SET tags = ${expr}
+       WHERE id = $1 AND user_id = $2 AND lane IS NULL
+       RETURNING *`,
+      [id, this.userId, tags],
+    )
+    if (!rows[0]) throw new Error(`Task ${id} not found`)
+    return rowToTask(rows[0])
   }
 
   // ── Stats ─────────────────────────────────────────────────────
@@ -423,18 +301,17 @@ export class WebState {
     avg_energy: number
     breathing_room: { next_4h: number; rest_of_day: number }
   }> {
-    const timelineId = await this.getTimelineId()
     const now = new Date()
+    const { rows: allRows } = await pool.query(
+      'SELECT * FROM tasks WHERE user_id = $1 AND lane IS NULL',
+      [this.userId],
+    )
 
-    const { data: allTasks } = await this.supabase.from('tasks').select('*')
-      .eq('user_id', this.userId).eq('timeline_id', timelineId)
-
-    const rows = (allTasks ?? []).map((r: Record<string, unknown>) => rowToTask(r))
+    const rows = allRows.map(rowToTask)
     const total = rows.length
     const riverTasks = rows.filter(t => t.anchor !== null)
     const cloudTasks = rows.filter(t => t.anchor === null)
 
-    // Tag distribution
     const tagDist: Record<string, number> = {}
     for (const task of rows) {
       for (const t of task.tags) {
@@ -442,7 +319,6 @@ export class WebState {
       }
     }
 
-    // Averages
     const avgSolidity = total > 0
       ? Math.round((rows.reduce((s, t) => s + t.solidity, 0) / total) * 100) / 100
       : 0
@@ -450,7 +326,6 @@ export class WebState {
       ? Math.round((rows.reduce((s, t) => s + t.energy, 0) / total) * 100) / 100
       : 0
 
-    // Breathing room
     const endOf4h = new Date(now.getTime() + 4 * 3_600_000)
     const endOfDay = new Date(now)
     endOfDay.setHours(23, 59, 59, 999)
@@ -480,47 +355,43 @@ export class WebState {
   // ── Tags ───────────────────────────────────────────────────────
 
   async getKnownTags(): Promise<string[]> {
-    const raw = await this.getMeta('known_tags')
-    if (!raw) return []
-    try { return JSON.parse(raw).sort() } catch { return [] }
+    const { rows } = await pool.query(
+      'SELECT name FROM known_tags WHERE user_id = $1 ORDER BY name',
+      [this.userId],
+    )
+    return rows.map(r => r.name)
   }
 
   async addKnownTag(tag: string): Promise<void> {
-    const tags = await this.getKnownTags()
-    if (!tags.includes(tag)) {
-      tags.push(tag)
-      await this.setMeta('known_tags', JSON.stringify(tags))
-    }
+    await pool.query(
+      'INSERT INTO known_tags (user_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [this.userId, tag],
+    )
   }
 
   async ensureTaskTags(taskTags: string[] | undefined): Promise<void> {
-    if (!taskTags) return
-    for (const tag of taskTags) await this.addKnownTag(tag)
+    if (!taskTags || taskTags.length === 0) return
+    await pool.query(
+      `INSERT INTO known_tags (user_id, name)
+       SELECT $1, t FROM unnest($2::text[]) t
+       ON CONFLICT DO NOTHING`,
+      [this.userId, taskTags],
+    )
   }
 
   async deleteTag(tag: string): Promise<number> {
-    // Remove from known_tags index
-    const tags = await this.getKnownTags()
-    const filtered = tags.filter(t => t !== tag)
-    await this.setMeta('known_tags', JSON.stringify(filtered))
-
-    // Remove from all tasks that have this tag
-    const timelineId = await this.getTimelineId()
-    const { data: tasks } = await this.supabase.from('tasks').select('id, tags')
-      .eq('user_id', this.userId).eq('timeline_id', timelineId)
-    let updated = 0
-    if (tasks) {
-      for (const t of tasks) {
-        const taskTags: string[] = t.tags || []
-        if (taskTags.includes(tag)) {
-          const newTags = taskTags.filter((x: string) => x !== tag)
-          await this.supabase.from('tasks').update({ tags: newTags })
-            .eq('id', t.id).eq('user_id', this.userId)
-          updated++
-        }
-      }
-    }
-    return updated
+    return this.tx(async c => {
+      await c.query(
+        'DELETE FROM known_tags WHERE user_id = $1 AND name = $2',
+        [this.userId, tag],
+      )
+      const res = await c.query(
+        `UPDATE tasks SET tags = array_remove(tags, $2)
+         WHERE user_id = $1 AND lane IS NULL AND $2 = ANY(tags)`,
+        [this.userId, tag],
+      )
+      return res.rowCount ?? 0
+    })
   }
 
   async listTags(): Promise<string[]> {
@@ -528,327 +399,225 @@ export class WebState {
   }
 
   async renameTag(oldName: string, newName: string): Promise<void> {
-    // Update known_tags index atomically — read, replace, write
-    const tags = await this.getKnownTags()
-    const updated = tags.map(t => t === oldName ? newName : t)
-    if (!updated.includes(newName)) updated.push(newName)
-    const deduped = [...new Set(updated)]
-    await this.setMeta('known_tags', JSON.stringify(deduped))
-
-    // Update all tasks that have the old tag
-    const timelineId = await this.getTimelineId()
-    const { data: tasks } = await this.supabase.from('tasks').select('id, tags')
-      .eq('user_id', this.userId).eq('timeline_id', timelineId)
-    if (tasks) {
-      for (const t of tasks) {
-        const taskTags: string[] = t.tags || []
-        if (taskTags.includes(oldName)) {
-          const newTags = taskTags.map((x: string) => x === oldName ? newName : x)
-          await this.supabase.from('tasks').update({ tags: newTags })
-            .eq('id', t.id).eq('user_id', this.userId)
-        }
-      }
-    }
+    await this.tx(async c => {
+      await c.query(
+        'DELETE FROM known_tags WHERE user_id = $1 AND name = $2',
+        [this.userId, oldName],
+      )
+      await c.query(
+        'INSERT INTO known_tags (user_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [this.userId, newName],
+      )
+      // array_replace + dedupe keeping first-occurrence order
+      await c.query(
+        `UPDATE tasks SET tags = (
+           SELECT COALESCE(array_agg(t ORDER BY min_ord), '{}')
+           FROM (
+             SELECT t, min(ord) AS min_ord
+             FROM unnest(array_replace(tags, $2, $3)) WITH ORDINALITY AS u(t, ord)
+             GROUP BY t
+           ) s
+         )
+         WHERE user_id = $1 AND lane IS NULL AND $2 = ANY(tags)`,
+        [this.userId, oldName, newName],
+      )
+    })
   }
 
   // ── Plan Mode ──────────────────────────────────────────────────
+  // Lanes are a column (1-4); the snapshot never leaves Postgres and every
+  // lifecycle step is one transaction — no partial states on a crash.
 
   async startPlan(windowStart: string, windowEnd: string): Promise<void> {
-    // Save the current timeline so we can restore it when plan ends
-    const currentTimeline = await this.getTimelineId()
-    await this.setMeta('pre_plan_timeline_id', currentTimeline)
-
-    const mainId = await this.getMainTimelineId()
-    const now = new Date().toISOString()
-
-    // Create all 4 lane branches in parallel
-    const branchInserts = []
-    const branchIds: string[] = []
-    for (let i = 1; i <= 4; i++) {
-      const branchId = crypto.randomUUID()
-      branchIds.push(branchId)
-      branchInserts.push({
-        id: branchId, user_id: this.userId,
-        name: laneBranchName(i), parent_id: mainId, created: now,
-      })
-    }
-    const { error: branchError } = await this.supabase.from('timelines').insert(branchInserts)
-    if (branchError) throw new Error(`Failed to create plan branches: ${branchError.message}`)
-
-    // Snapshot main tasks into lane 1, set meta — in parallel
-    const [tasksResult] = await Promise.all([
-      this.supabase.from('tasks').select('*')
-        .eq('user_id', this.userId).eq('timeline_id', mainId)
-        .not('anchor', 'is', null).gte('anchor', windowStart).lte('anchor', windowEnd),
-      this.setMeta('plan_mode', 'true'),
-      this.setMeta('plan_window_start', windowStart),
-      this.setMeta('plan_window_end', windowEnd),
-    ])
-
-    if (tasksResult.data && tasksResult.data.length > 0) {
-      const inserts = tasksResult.data.map((t: Record<string, unknown>) => ({
-        id: crypto.randomUUID(), user_id: this.userId, timeline_id: branchIds[0],
-        name: t.name, mass: t.mass, anchor: t.anchor, solidity: t.solidity,
-        energy: t.energy, fixed: t.fixed, alive: t.alive, tags: t.tags,
-        created: t.created, cloud_x: t.cloud_x, cloud_y: t.cloud_y, river_y: t.river_y,
-      }))
-      const { error: snapshotError } = await this.supabase.from('tasks').insert(inserts)
-      if (snapshotError) throw new Error(`Failed to snapshot tasks to lane 1: ${snapshotError.message}`)
-    }
+    await this.tx(async c => {
+      await c.query(
+        `INSERT INTO plan_state (user_id, window_start, window_end)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id) DO UPDATE
+           SET window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end`,
+        [this.userId, windowStart, windowEnd],
+      )
+      // Restarting a plan clears any previous lane scratch space
+      await c.query(
+        'DELETE FROM tasks WHERE user_id = $1 AND lane IS NOT NULL',
+        [this.userId],
+      )
+      // Lane 1 = snapshot of the main river inside the window
+      await c.query(
+        `INSERT INTO tasks (id, user_id, lane, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y)
+         SELECT gen_random_uuid()::text, user_id, 1, name, mass, anchor, solidity, energy, fixed, alive, tags, created, cloud_x, cloud_y, river_y
+         FROM tasks
+         WHERE user_id = $1 AND lane IS NULL AND anchor >= $2 AND anchor <= $3`,
+        [this.userId, windowStart, windowEnd],
+      )
+    })
   }
 
-  async endPlan(): Promise<void> { await this.cleanupPlan() }
+  async endPlan(): Promise<void> {
+    await this.tx(async c => {
+      await c.query('DELETE FROM tasks WHERE user_id = $1 AND lane IS NOT NULL', [this.userId])
+      await c.query('DELETE FROM plan_state WHERE user_id = $1', [this.userId])
+    })
+  }
 
   async commitLane(lane: number): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    const mainId = await this.getMainTimelineId()
-    const [wsResult, weResult] = await Promise.all([
-      this.getMeta('plan_window_start'),
-      this.getMeta('plan_window_end'),
-    ])
-    if (!wsResult || !weResult) throw new Error('Plan window not defined')
+    await this.tx(async c => {
+      const ps = await c.query(
+        'SELECT window_start, window_end FROM plan_state WHERE user_id = $1',
+        [this.userId],
+      )
+      if (!ps.rows[0]) throw new Error('Plan window not defined')
+      const { window_start, window_end } = ps.rows[0]
 
-    const { error: delError } = await this.supabase.from('tasks').delete()
-      .eq('user_id', this.userId).eq('timeline_id', mainId)
-      .not('anchor', 'is', null).gte('anchor', wsResult).lte('anchor', weResult)
-    if (delError) throw new Error(`Failed to clear main tasks for commit: ${delError.message}`)
-
-    const { error: moveError } = await this.supabase.from('tasks').update({ timeline_id: mainId })
-      .eq('user_id', this.userId).eq('timeline_id', branchId)
-    if (moveError) throw new Error(`Failed to commit lane tasks to main: ${moveError.message}`)
-
-    await this.cleanupPlan()
+      await c.query(
+        `DELETE FROM tasks
+         WHERE user_id = $1 AND lane IS NULL AND anchor IS NOT NULL
+           AND anchor >= $2 AND anchor <= $3`,
+        [this.userId, window_start, window_end],
+      )
+      await c.query(
+        'UPDATE tasks SET lane = NULL WHERE user_id = $1 AND lane = $2',
+        [this.userId, lane],
+      )
+      await c.query('DELETE FROM tasks WHERE user_id = $1 AND lane IS NOT NULL', [this.userId])
+      await c.query('DELETE FROM plan_state WHERE user_id = $1', [this.userId])
+    })
   }
 
   async getPlanState(): Promise<PlanState> {
-    const [active, windowStart, windowEnd] = await Promise.all([
-      this.getMeta('plan_mode'),
-      this.getMeta('plan_window_start'),
-      this.getMeta('plan_window_end'),
+    const [planRes, countRes] = await Promise.all([
+      pool.query('SELECT * FROM plan_state WHERE user_id = $1', [this.userId]),
+      pool.query(
+        `SELECT lane, count(*)::int AS n FROM tasks
+         WHERE user_id = $1 AND lane IS NOT NULL GROUP BY lane`,
+        [this.userId],
+      ),
     ])
-    if (active !== 'true')
-      return { active: false, window_start: null, window_end: null, lanes: [] }
+    const ps = planRes.rows[0]
+    if (!ps) return { active: false, window_start: null, window_end: null, lanes: [] }
 
+    const counts = new Map<number, number>(countRes.rows.map(r => [r.lane, r.n]))
     const lanes: PlanLaneInfo[] = []
-    const laneQueries = []
-    for (let i = 1; i <= 4; i++) {
-      laneQueries.push(
-        this.supabase.from('timelines').select('id')
-          .eq('user_id', this.userId).eq('name', laneBranchName(i)).maybeSingle()
-      )
+    for (let n = 1; n <= 4; n++) {
+      lanes.push({
+        number: n,
+        label: null,
+        taskCount: counts.get(n) ?? 0,
+        branchName: laneBranchName(n),
+        readonly: false,
+      })
     }
-    const laneResults = await Promise.all(laneQueries)
-
-    const countQueries = laneResults.map((r, i) => {
-      if (!r.data) return Promise.resolve(null)
-      return Promise.all([
-        this.supabase.from('tasks').select('*', { count: 'exact', head: true })
-          .eq('user_id', this.userId).eq('timeline_id', r.data.id),
-        this.getMeta(`plan_lane_${i + 1}_label`),
-      ])
-    })
-    const countResults = await Promise.all(countQueries)
-
-    for (let i = 0; i < 4; i++) {
-      if (laneResults[i].data && countResults[i]) {
-        const [countRes, label] = countResults[i]!
-        lanes.push({
-          number: i + 1, label, taskCount: countRes.count ?? 0,
-          branchName: laneBranchName(i + 1), readonly: false,
-        })
-      }
-    }
-
-    return { active: true, window_start: windowStart, window_end: windowEnd, lanes }
-  }
-
-  async getLaneTasks(lane: number): Promise<{ river: TaskWithPosition[]; cloud: TaskWithPosition[] }> {
-    const branchId = await this.getLaneBranchId(lane).catch(() => null)
-    if (!branchId) return { river: [], cloud: [] }
-
-    const [riverResult, cloudResult] = await Promise.all([
-      this.supabase.from('tasks').select('*')
-        .eq('user_id', this.userId).eq('timeline_id', branchId)
-        .not('anchor', 'is', null).order('anchor', { ascending: true }),
-      this.supabase.from('tasks').select('*')
-        .eq('user_id', this.userId).eq('timeline_id', branchId).is('anchor', null),
-    ])
-
     return {
-      river: (riverResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r))),
-      cloud: (cloudResult.data ?? []).map((r: Record<string, unknown>) => taskWithPosition(rowToTask(r))),
+      active: true,
+      window_start: iso(ps.window_start),
+      window_end: iso(ps.window_end),
+      lanes,
     }
   }
 
   // ── Lane manipulation ──────────────────────────────────────────
+  // Moves are single UPDATEs (task identity preserved); copies are
+  // INSERT ... SELECT with a fresh id. Lane copies drop spatial coords.
 
   async putTaskInLane(lane: number, name: string, position: number | null): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    await this.supabase.from('tasks').insert({
-      id: crypto.randomUUID(), user_id: this.userId, timeline_id: branchId,
-      name, mass: DEFAULT_MASS, anchor: position != null ? positionToAnchor(position) : null,
-      solidity: DEFAULT_SOLIDITY, energy: 0.5, fixed: false, alive: false,
-      tags: [], created: new Date().toISOString(),
-    })
+    await pool.query(
+      `INSERT INTO tasks (id, user_id, lane, name, mass, anchor, solidity, energy, fixed, alive, tags, created)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 0.5, false, false, '{}', now())`,
+      [
+        crypto.randomUUID(),
+        this.userId,
+        lane,
+        name,
+        DEFAULT_MASS,
+        position != null ? positionToAnchor(position) : null,
+        DEFAULT_SOLIDITY,
+      ],
+    )
   }
 
-  async updateTaskInLane(lane: number, taskId: string, updates: { mass?: number; solidity?: number; energy?: number; position?: number }): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    const patch: Record<string, unknown> = {}
-    if (updates.mass !== undefined) patch.mass = updates.mass
-    if (updates.solidity !== undefined) patch.solidity = updates.solidity
-    if (updates.energy !== undefined) patch.energy = updates.energy
-    if (updates.position !== undefined) patch.anchor = positionToAnchor(updates.position)
-    if (Object.keys(patch).length === 0) return
-    await this.supabase.from('tasks').update(patch)
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId)
+  async updateTaskInLane(
+    lane: number,
+    taskId: string,
+    updates: { mass?: number; solidity?: number; energy?: number; position?: number },
+  ): Promise<void> {
+    const sets: string[] = []
+    const vals: unknown[] = [taskId, this.userId, lane]
+    const set = (col: string, v: unknown) => {
+      vals.push(v)
+      sets.push(`${col} = $${vals.length}`)
+    }
+    if (updates.mass !== undefined) set('mass', updates.mass)
+    if (updates.solidity !== undefined) set('solidity', updates.solidity)
+    if (updates.energy !== undefined) set('energy', updates.energy)
+    if (updates.position !== undefined) set('anchor', positionToAnchor(updates.position))
+    if (sets.length === 0) return
+    await pool.query(
+      `UPDATE tasks SET ${sets.join(', ')} WHERE id = $1 AND user_id = $2 AND lane = $3`,
+      vals,
+    )
   }
 
   async removeFromLane(lane: number, taskId: string): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    await this.supabase.from('tasks').delete()
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId)
+    await pool.query(
+      'DELETE FROM tasks WHERE id = $1 AND user_id = $2 AND lane = $3',
+      [taskId, this.userId, lane],
+    )
   }
 
   async repositionInLane(lane: number, taskId: string, position: number): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    await this.supabase.from('tasks').update({ anchor: positionToAnchor(position) })
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId)
+    await pool.query(
+      'UPDATE tasks SET anchor = $4 WHERE id = $1 AND user_id = $2 AND lane = $3',
+      [taskId, this.userId, lane, positionToAnchor(position)],
+    )
   }
 
   async laneToCloud(lane: number, taskId: string): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    const { data: source } = await this.supabase.from('tasks').select('*')
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId).single()
-    if (!source) throw new Error(`Task ${taskId} not found in lane ${lane}`)
-
-    const mainId = await this.getMainTimelineId()
-    // Sequential: insert first so we don't lose the task if delete succeeds but insert fails
-    const { error: insertError } = await this.supabase.from('tasks').insert({
-      id: crypto.randomUUID(), user_id: this.userId, timeline_id: mainId,
-      name: source.name, mass: source.mass, anchor: null,
-      solidity: source.solidity, energy: source.energy, fixed: source.fixed,
-      alive: source.alive, tags: source.tags, created: source.created,
-    })
-    if (insertError) throw new Error(`Failed to move task to cloud: ${insertError.message}`)
-    await this.supabase.from('tasks').delete()
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', branchId)
+    const res = await pool.query(
+      `UPDATE tasks SET lane = NULL, anchor = NULL, cloud_x = NULL, cloud_y = NULL, river_y = NULL
+       WHERE id = $1 AND user_id = $2 AND lane = $3`,
+      [taskId, this.userId, lane],
+    )
+    if (res.rowCount === 0) throw new Error(`Task ${taskId} not found in lane ${lane}`)
   }
 
   async addToLane(lane: number, taskId: string, position: number | null, copy: boolean): Promise<void> {
-    const branchId = await this.getLaneBranchId(lane)
-    const mainId = await this.getMainTimelineId()
-
-    let source: Record<string, unknown> | null = null
-    let sourceTimeline = mainId
-
-    const { data: mainTask } = await this.supabase.from('tasks').select('*')
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', mainId).maybeSingle()
-
-    if (mainTask) { source = mainTask } else {
-      for (let i = 1; i <= 4; i++) {
-        const bid = await this.getLaneBranchId(i).catch(() => null)
-        if (!bid) continue
-        const { data } = await this.supabase.from('tasks').select('*')
-          .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', bid).maybeSingle()
-        if (data) { source = data; sourceTimeline = bid; break }
-      }
+    if (copy) {
+      const res = await pool.query(
+        `INSERT INTO tasks (id, user_id, lane, ${COPY_COLS})
+         SELECT gen_random_uuid()::text, user_id, $3, name, mass,
+                COALESCE($4, anchor), solidity, energy, fixed, alive, tags, created
+         FROM tasks WHERE id = $1 AND user_id = $2`,
+        [taskId, this.userId, lane, position != null ? positionToAnchor(position) : null],
+      )
+      if (res.rowCount === 0) throw new Error(`Task ${taskId} not found`)
+      return
     }
-    if (!source) throw new Error(`Task ${taskId} not found`)
 
-    const anchor = position != null ? positionToAnchor(position) : (source.anchor as string | null)
-
-    // Sequential: insert first so we don't lose the task if delete succeeds but insert fails
-    const { error: insertError } = await this.supabase.from('tasks').insert({
-      id: crypto.randomUUID(), user_id: this.userId, timeline_id: branchId,
-      name: source.name, mass: source.mass, anchor,
-      solidity: source.solidity, energy: source.energy, fixed: source.fixed,
-      alive: source.alive, tags: source.tags, created: source.created,
-    })
-    if (insertError) throw new Error(`Failed to add task to lane: ${insertError.message}`)
-
-    if (!copy) {
-      await this.supabase.from('tasks').delete()
-        .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', sourceTimeline)
-    }
+    const res = await pool.query(
+      `UPDATE tasks SET lane = $3, anchor = COALESCE($4, anchor),
+                        cloud_x = NULL, cloud_y = NULL, river_y = NULL
+       WHERE id = $1 AND user_id = $2`,
+      [taskId, this.userId, lane, position != null ? positionToAnchor(position) : null],
+    )
+    if (res.rowCount === 0) throw new Error(`Task ${taskId} not found`)
   }
 
   async moveBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): Promise<void> {
-    const [fromBranchId, toBranchId] = await Promise.all([
-      this.getLaneBranchId(fromLane), this.getLaneBranchId(toLane),
-    ])
-    const { data: source } = await this.supabase.from('tasks').select('*')
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', fromBranchId).single()
-    if (!source) throw new Error(`Task ${taskId} not found in lane ${fromLane}`)
-
-    // Sequential: insert first so we don't lose the task if delete succeeds but insert fails
-    const { error: insertError } = await this.supabase.from('tasks').insert({
-      id: crypto.randomUUID(), user_id: this.userId, timeline_id: toBranchId,
-      name: source.name, mass: source.mass, anchor: positionToAnchor(position),
-      solidity: source.solidity, energy: source.energy, fixed: source.fixed,
-      alive: source.alive, tags: source.tags, created: source.created,
-    })
-    if (insertError) throw new Error(`Failed to move task between lanes: ${insertError.message}`)
-    await this.supabase.from('tasks').delete()
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', fromBranchId)
+    const res = await pool.query(
+      `UPDATE tasks SET lane = $4, anchor = $5
+       WHERE id = $1 AND user_id = $2 AND lane = $3`,
+      [taskId, this.userId, fromLane, toLane, positionToAnchor(position)],
+    )
+    if (res.rowCount === 0) throw new Error(`Task ${taskId} not found in lane ${fromLane}`)
   }
 
   async copyBetweenLanes(fromLane: number, toLane: number, taskId: string, position: number): Promise<void> {
-    const [fromBranchId, toBranchId] = await Promise.all([
-      this.getLaneBranchId(fromLane), this.getLaneBranchId(toLane),
-    ])
-    const { data: source } = await this.supabase.from('tasks').select('*')
-      .eq('id', taskId).eq('user_id', this.userId).eq('timeline_id', fromBranchId).single()
-    if (!source) throw new Error(`Task ${taskId} not found in lane ${fromLane}`)
-
-    await this.supabase.from('tasks').insert({
-      id: crypto.randomUUID(), user_id: this.userId, timeline_id: toBranchId,
-      name: source.name, mass: source.mass, anchor: positionToAnchor(position),
-      solidity: source.solidity, energy: source.energy, fixed: source.fixed,
-      alive: source.alive, tags: source.tags, created: source.created,
-    })
-  }
-
-  // ── Private helpers ────────────────────────────────────────────
-
-  private async getLaneBranchId(lane: number): Promise<string> {
-    const { data } = await this.supabase.from('timelines').select('id')
-      .eq('user_id', this.userId).eq('name', laneBranchName(lane)).single()
-    if (!data) throw new Error(`Lane ${lane} branch not found`)
-    return data.id
-  }
-
-  private async cleanupPlan(): Promise<void> {
-    // Get all lane branches in one query
-    const { data: branches } = await this.supabase.from('timelines').select('id, name')
-      .eq('user_id', this.userId).like('name', `${LANE_PREFIX}%`)
-
-    if (branches && branches.length > 0) {
-      const branchIds = branches.map(b => b.id)
-      // Delete tasks from lane branches
-      await this.supabase.from('tasks').delete()
-        .eq('user_id', this.userId).in('timeline_id', branchIds)
-      await this.supabase.from('timelines').delete()
-        .eq('user_id', this.userId).in('id', branchIds)
-    }
-
-    // Restore the pre-plan timeline (or fall back to main)
-    const prePlanTimelineId = await this.getMeta('pre_plan_timeline_id')
-    const restoreId = prePlanTimelineId ?? await this.getMainTimelineId()
-
-    // Clean up meta in parallel
-    await Promise.all([
-      this.deleteMeta('plan_mode'),
-      this.deleteMeta('plan_window_start'),
-      this.deleteMeta('plan_window_end'),
-      this.deleteMeta('plan_lane_1_label'),
-      this.deleteMeta('plan_lane_2_label'),
-      this.deleteMeta('plan_lane_3_label'),
-      this.deleteMeta('plan_lane_4_label'),
-      this.deleteMeta('pre_plan_timeline_id'),
-    ])
-
-    await this.setMeta('current_timeline_id', restoreId)
-    this._timelineId = restoreId
+    const res = await pool.query(
+      `INSERT INTO tasks (id, user_id, lane, ${COPY_COLS})
+       SELECT gen_random_uuid()::text, user_id, $4, name, mass, $5, solidity, energy, fixed, alive, tags, created
+       FROM tasks WHERE id = $1 AND user_id = $2 AND lane = $3`,
+      [taskId, this.userId, fromLane, toLane, positionToAnchor(position)],
+    )
+    if (res.rowCount === 0) throw new Error(`Task ${taskId} not found in lane ${fromLane}`)
   }
 }

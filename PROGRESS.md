@@ -1,89 +1,49 @@
-# River Overhaul — Build Progress
+# River — Build Progress
 
-## Status: COMPLETE
+## Status: MIGRATED TO NEON (June 9, 2026)
 
 ## Deployment URL
-**https://river-silk.vercel.app**
+**https://river-silk.vercel.app** (also https://www.taskriver.dev)
 
-## Architecture Overview
-- **Production path**: `/app` → `app/page.tsx` → loads `river-bundle.js` (contains ALL viewer code including mobile + clouds)
-- **Standalone viewer**: `/viewer/index.html` → loads individual JS files
-- **MCP transport**: Streamable HTTP (SSE was broken, switched in commit a777771)
-- **Backend**: Supabase (tasks, timelines, meta, api_keys tables with RLS)
-- **Local MCP server**: SQLite-backed, separate codebase in `src/`
+## Architecture Overview (post-Neon migration)
+- **Web app**: Next.js 16 App Router in `web/`, deployed on Vercel (team joshs-projects, project `river`)
+- **Database**: Neon Postgres (`river-db` resource, Vercel Marketplace native integration, **Free plan**). All data access is server-side SQL via `pg` Pool (`web/src/lib/db.ts`, pooled `DATABASE_URL`, `attachDatabasePool` for fluid compute)
+- **Auth**: Neon Auth (Better-Auth-based, beta) — email/password. Server: `web/src/lib/auth/server.ts` (`createNeonAuth`), catch-all handler at `/api/auth/[...path]`, `auth.middleware` protects `/app` and `/mcp`. Users live in `neon_auth."user"` (uuid ids) in the same Neon database. Trusted origins are stored in `neon_auth.project_config` (the three app domains)
+- **Schema** (`web/migrations/001_init.sql`): `tasks` (lane smallint — NULL = main, 1-4 = plan lanes), `known_tags`, `plan_state` (row exists = plan active), `api_keys`. No timelines table, no meta key-value table — those were Supabase-era indirection
+- **Viewer**: vanilla canvas JS in `web/public/viewer/`. ALL data flows through `/api/state` (cookie auth). `river-bundle.js` is a plain concatenation of the 13 `river-*.js` files in order: core, layout, render, grid, blobs, plan, store, panel, drag-wizard, input, clouds, mobile, main — regenerate with `cat` after editing any source file
+- **Sync**: mutations POST `/api/state` and apply the returned full state; a 10s poll picks up out-of-band changes (MCP agents, other devices). No realtime subscription
+- **MCP**: Streamable HTTP at `/api/mcp/mcp`, bearer `river_*` API keys (sha-256 hashes in `api_keys`). 13 tools. Keys survived the migration verbatim
+- **Local MCP server**: separate SQLite-backed codebase in `src/` — NOT migrated, unrelated to the web app
 
-## What Was Done
+## Supabase → Neon Migration (2026-06-09)
+Full first-principles rework, not a port (7-agent analysis + adversarial review):
+- Killed all browser-direct DB access (PostgREST + anon key + RLS) and the Supabase Realtime subscription — the viewer's `/api/state` fallback became the only path. The same `look()` logic previously existed in 3 drifting copies (server, page preload, viewer store)
+- Plan lanes: fake `_plan_lane_N` timeline rows → a `lane` column. Plan lifecycle (start/commit/end) is now transactional — the old `commitLane` could destroy the user's main window if it crashed between its delete and move calls
+- `known_tags`: JSON string in a `meta` text row (with real read-modify-write races) → a real table with `ON CONFLICT DO NOTHING`. Tag delete/rename: N+1 JS loops → single UPDATE with array ops
+- `anchor`/`created`: ISO strings in text columns → timestamptz (wire format unchanged — `rowToTask` serializes Dates back to ISO)
+- Recirculation: fire-and-forget client+server race → one awaited conditional UPDATE on the DB clock inside `look()`
+- Auth: Supabase Auth → Neon Auth. **Password hashes could not be migrated** (different algorithms) — all 4 users were recreated with temp passwords; data remapped to new user ids. API keys carried over (hash lookup unchanged)
+- Data migrated: 7 real tasks (4 jhegstad12, 3 jlh2288), 3 known tags, 9 API keys (7 active), 4 users. 41 orphaned tasks on deleted plan-lane timelines (junk from the old non-atomic cleanup) were intentionally dropped
+- Migration script: `web/scripts/migrate-from-supabase.mjs` (idempotent; reads the Supabase export JSON)
+- The old Supabase project was left untouched as a rollback fallback
 
-### Full Code Review (2026-04-13)
-Comprehensive audit of all ~7,000 LOC across server, viewer, web app, MCP, and tests. Found and fixed issues at every severity level.
+## Wire Contract (unchanged — the viewer depends on it)
+- `GET /api/state` → LookResult; `POST /api/state {action, ...}` → full LookResult after the mutation
+- Lane numbers are 0-indexed on the wire, 1-indexed in the server (`route.ts` does the +1)
+- `PlanLaneInfo.label` is now always null (nothing ever wrote labels in the web app); `branchName` is synthesized as `_plan_lane_N`
 
-### P0 — Show-Stoppers (previously fixed)
-- MCP SSE endpoint dead → switched to Streamable HTTP (a777771)
-- Mobile touch handlers couldn't drag → series of mobile fixes (fee8030 and prior)
+## Verification done (2026-06-09, local + production)
+- Login (Neon Auth email/password), viewer renders migrated tasks/tags
+- put/delete via `R.post`, plan start → lane put → commit lifecycle
+- MCP initialize + look with a real migrated API key; 401 on bad keys
+- Multi-agent adversarial review of the full diff before deploy
 
-### P1 — Production Bugs (all fixed)
-1. `river-bundle.js` stale → regenerated from individual files (dd9e8fd)
-2. `index.html` missing script tags → added `river-clouds.js` and `river-mobile.js` (dd9e8fd)
-3. MCP `look` tool ignoring input params → callback now takes `args` and passes them through (3de06cd)
-4. `energy` field dropped in local MCP `put` tool → added to single-mode object (f86ab4a)
-5. Tags not synced via MCP `put` → added `ensureTaskTags()` call (f86ab4a)
-6. No Supabase error checking → added error throws on all critical mutations (3de06cd)
-7. `JSON.parse(knownTagsResult)` crashing on corruption → wrapped in try/catch (3de06cd)
-8. `cleanupPlan` losing branch context → saves/restores `pre_plan_timeline_id` (3de06cd)
-9. Race conditions in lane operations → made sequential (insert first, then delete) (3de06cd)
-10. Panel position drift → removed double scroll-offset subtraction (dd9e8fd)
+## Known limitations / loose ends
+- Neon Auth is beta (SDK 0.4.2-beta); GA expected Q2 2026
+- Neon free plan: compute scales to zero after 5 idle minutes → first request after idle adds ~0.5s
+- A legacy `viewer` Vercel project (prj_lUZsRtid1rOo5MNIXrn0HXmbnqGv) still serves the old standalone viewer with hardcoded Supabase creds — should be deleted
+- Supabase env vars still exist on the Vercel project (rollback safety); remove once the migration has soaked
+- `river-bundle.js` still has no build step — keep the `cat` concatenation order above
 
-### P2 — Dead Code (all removed)
-- Unused schemas: MoveSchema, LookSchema, BranchSchema, SweepSchema removed (f86ab4a)
-- `timeline_tasks` table: CREATE TABLE and DELETE FROM statements removed (f86ab4a)
-- Unused viewer functions/constants: R.blobR, R.riverMidY, R.CLOUD_RATIO, R.SURFACE_GLOW, R.wizardGetSelections, R.wizardIsCompleted, R.getCalendarHorizon removed (dd9e8fd)
-- Dead import: HTTP_PORT removed from http.ts (f86ab4a)
-
-### P3 — Architecture Fixes (all fixed)
-- Side-effectful reads: `look()` now only calls `recirculate()` on full look, not single-task or cloud-only queries (220f38e)
-- Lane 1 read-only: programmatic enforcement via `fillLane` guard, `readonly: true` in plan state (220f38e)
-- CORS `*` on localhost: restricted to `localhost:7433/7434` and `127.0.0.1:7433/7434` (f86ab4a)
-- Missing column copies: `createBranch`, `addToLane`, `laneToCloud`, `moveBetweenLanes`, `copyBetweenLanes` now preserve `cloud_x`/`cloud_y`/`river_y` (220f38e)
-- Lane count mismatch: aligned local server to 4 lanes matching web viewer (220f38e)
-- Falsy-zero defaults: `||` → `??` for solidity/energy/mass in viewer task creation (220f38e)
-- `.single()` → `.maybeSingle()` for tag_create meta lookup to avoid errors on first use (220f38e)
-
-### Tests
-- 124 tests passing (29 plan tests including new lane 1 read-only test)
-- Web build passing (Next.js 16.2.3 with Turbopack)
-- Local MCP server build passing (tsup)
-
-## Architectural Decisions
-- Kept 4-lane plan model (lane 1 = snapshot, lanes 2-4 = alternatives) aligned between local and web
-- Service role key in MCP path is a deliberate design choice — all queries manually filter by `user_id`
-- Supabase operations made sequential (not parallel) for lane manipulation to prevent data loss at the cost of slightly higher latency
-
-### Viewer Deep Dive (agent team, 2026-04-13)
-Full line-by-line analysis of all 13 viewer JS files by a 3-agent team. Found and fixed:
-
-1. **Mobile boundary clamp traps tasks at surface (MAJOR)** — frame loop unconditionally clamped river tasks above surfaceY, preventing them from scrolling off-screen. Tasks piled up at the boundary. Fix: only clamp when target is in the river zone; release when scroll pushes target past surface. (fc2626b)
-
-2. **Culling uses logical position, not animated position (MEDIUM)** — tasks popped in/out during spring animation after scroll. Fix: cull by animated a.x/a.y instead of hoursToX/hoursToY. (fc2626b)
-
-3. **Scroll lag from spring-only target updates (HIGH)** — sync() only updated targets during scroll, so spring physics caused 100-400px lag at speed. Fix: shift actual positions by scroll delta so tasks stay locked to viewport. (07b6784)
-
-4. **Dirty target rubber-band (MEDIUM)** — computeTarget used stale server data for tasks with pending optimistic saves, causing snap-back. Fix: use local state during dirty window. (07b6784)
-
-5. **Tag bar DOM thrash (MEDIUM)** — rebuildTagBar() did full DOM teardown on every sync including during 60fps scroll events. Fix: only rebuild when server state changes, not scroll-only syncs. (07b6784)
-
-6. **Mobile touch handlers completely broken (CRITICAL)** — touchend fired simultaneous mousedown+mouseup (click only), tasks could NOT be dragged. Fix: complete rewrite with long-press-to-drag state machine (IDLE→PENDING→DRAGGING/SCROLLING). 250ms long-press timer, 8px movement threshold, haptic feedback, full zone-transition drop logic matching desktop. (19b6c94)
-
-## Known Limitations (not bugs)
-- Service role key bypasses RLS in MCP path — mitigated by manual `user_id` filtering in every query
-- No Supabase transactions — lane operations are sequential but not atomic; a server crash mid-operation could leave partial state
-- `river-bundle.js` is manually concatenated — no build step to auto-generate it
-
-## Git Log (overhaul commits)
-- 19b6c94: fix: rewrite mobile touch handlers with long-press-to-drag state machine
-- 07b6784: fix: scroll-lock, dirty targets, tag bar jank in store/core
-- fc2626b: fix: mobile scroll — boundary clamp + culling bugs in frame loop
-- 220f38e: fix: P3 architecture fixes — side-effectful reads, lane enforcement, data integrity
-- 3de06cd: fix: harden state layer — error checking, race safety, plan context restore
-- f86ab4a: fix: MCP server cleanup — energy field, tag sync, dead code, CORS
-- dd9e8fd: fix: viewer — missing scripts, panel drift, dead code, stale bundle
-- a2e1d07: fix: error logging in viewer post(), look() options, getPlanState off-by-one
+## Older history (pre-migration)
+See git history for the April 2026 overhaul (P0-P3 fixes, mobile touch rewrite, viewer deep dive). The Supabase-era architecture notes that used to live here describe a design that no longer exists.

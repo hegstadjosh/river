@@ -1,95 +1,33 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth/client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Script from 'next/script'
-
-// Supabase config (public)
-const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export default function AppPage() {
   const [ready, setReady] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    const supabase = createClient()
-
     async function init() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { router.push('/login'); return }
-
-      const uid = session.user.id
-
-      // Set globals BEFORE viewer script loads
-      window._riverAuthToken = session.access_token
-      window._riverUserId = uid
-      window._riverSBConfig = { url: SB_URL, key: SB_ANON, token: session.access_token }
-
-      // Query timeline ID + initial state directly from Supabase — parallel
-      const tidRes = await supabase.from('meta').select('value')
-        .eq('user_id', uid).eq('key', 'current_timeline_id').maybeSingle()
-      const tid = tidRes.data?.value ?? null
-      window._riverTimelineId = tid
-
-      if (tid) {
-        const now = new Date()
-        const [riverRes, cloudRes, tagsRes, planRes] = await Promise.all([
-          supabase.from('tasks').select('*')
-            .eq('user_id', uid).eq('timeline_id', tid)
-            .not('anchor', 'is', null).order('anchor', { ascending: true }),
-          supabase.from('tasks').select('*')
-            .eq('user_id', uid).eq('timeline_id', tid).is('anchor', null),
-          supabase.from('meta').select('value')
-            .eq('user_id', uid).eq('key', 'known_tags').maybeSingle(),
-          supabase.from('meta').select('value')
-            .eq('user_id', uid).eq('key', 'plan_mode').maybeSingle(),
-        ])
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const withPos = (t: any) => ({
-          ...t,
-          position: t.anchor ? (new Date(t.anchor).getTime() - Date.now()) / 3600000 : null,
-          tags: t.tags || [],
-        })
-
-        const river = (riverRes.data ?? []).map(withPos)
-        const cloud = (cloudRes.data ?? []).map(withPos)
-        const endOf4h = new Date(now.getTime() + 4 * 3600000)
-        const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999)
-
-        window._riverPreloadedState = {
-          river, cloud,
-          breathing_room: {
-            next_4h: Math.max(0, 240 - river.filter((t: any) => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOf4h).reduce((s: number, t: any) => s + t.mass, 0)),
-            rest_of_day: Math.max(0, (endOfDay.getTime() - now.getTime()) / 60000 - river.filter((t: any) => t.anchor && new Date(t.anchor) >= now && new Date(t.anchor) <= endOfDay).reduce((s: number, t: any) => s + t.mass, 0)),
-          },
-          now: now.toISOString(), timeline: 'main',
-          known_tags: tagsRes.data ? JSON.parse(tagsRes.data.value).sort() : [],
-          // Don't preload partial plan state — let fetchState() load it fully
-          // to avoid entering broken plan mode with no lanes or window bounds
+      // Preload state from the API so tasks appear on the viewer's first frame.
+      // Middleware guarantees a session; a 401 here means it expired mid-flight.
+      try {
+        const res = await fetch('/api/state')
+        if (res.status === 401) { router.push('/login'); return }
+        if (res.ok) {
+          window._riverPreloadedState = await res.json()
         }
-      }
+      } catch { /* viewer's own fetchState will retry */ }
 
       // Check API keys for MCP badge
-      supabase.from('api_keys').select('id')
-        .eq('user_id', uid).is('revoked_at', null)
-        .then(({ data }) => { window._riverHasApiKeys = !!(data && data.length > 0) })
-
-      // Listen for token refresh
-      supabase.auth.onAuthStateChange((_event, newSession) => {
-        if (newSession) {
-          window._riverAuthToken = newSession.access_token
-          // Update Supabase client headers if it exists
-          if (window._riverSB) {
-            window._riverSB = window.supabase.createClient(SB_URL, SB_ANON, {
-              global: { headers: { Authorization: 'Bearer ' + newSession.access_token } },
-              auth: { persistSession: false, autoRefreshToken: false },
-            })
-          }
-        }
-      })
+      fetch('/api/keys')
+        .then(r => (r.ok ? r.json() : []))
+        .then((keys: { revoked_at: string | null }[]) => {
+          window._riverHasApiKeys = keys.some(k => !k.revoked_at)
+        })
+        .catch(() => { window._riverHasApiKeys = false })
 
       setReady(true)
     }
@@ -98,7 +36,7 @@ export default function AppPage() {
   }, [router])
 
   function handleSignOut() {
-    createClient().auth.signOut().then(() => router.push('/'))
+    authClient.signOut().then(() => router.push('/'))
   }
 
   if (!ready) {
@@ -212,21 +150,11 @@ export default function AppPage() {
         </div>
       </div>
 
-      {/* Supabase client + viewer bundle — loaded AFTER DOM is ready */}
-      <Script src="/viewer/supabase.min.js" strategy="afterInteractive" />
+      {/* Viewer bundle — loaded AFTER DOM is ready */}
       <Script
         src="/viewer/river-bundle.js"
         strategy="afterInteractive"
         onLoad={() => {
-          // Viewer scripts have executed. Create Supabase client and apply preloaded state.
-          const cfg = window._riverSBConfig
-          if (cfg && window.supabase) {
-            window._riverSB = window.supabase.createClient(cfg.url, cfg.key, {
-              global: { headers: { Authorization: 'Bearer ' + cfg.token } },
-              auth: { persistSession: false, autoRefreshToken: false },
-            })
-          }
-
           const R = window.River
           if (!R) return
 
@@ -240,7 +168,7 @@ export default function AppPage() {
             R.sync()
           }
 
-          // Start Realtime subscription
+          // Start the polling heartbeat
           if (R.connectSSE) R.connectSSE()
 
           // Set up MCP badge
@@ -268,14 +196,8 @@ export default function AppPage() {
 // Type declarations for window globals
 declare global {
   interface Window {
-    _riverAuthToken: string | null
-    _riverUserId: string | null
-    _riverTimelineId: string | null
-    _riverSBConfig: { url: string; key: string; token: string } | null
     _riverPreloadedState: Record<string, unknown> | null
     _riverHasApiKeys: boolean
-    _riverSB: ReturnType<typeof import('@supabase/supabase-js').createClient> | null
-    supabase: { createClient: typeof import('@supabase/supabase-js').createClient }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     River: any
   }

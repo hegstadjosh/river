@@ -65,19 +65,25 @@ export function taskWithPosition(task: Task): TaskWithPosition {
   };
 }
 
-// Supabase row → Task
+// Postgres row → Task. pg returns timestamptz columns as JS Date objects;
+// the wire format stays ISO strings so the viewer contract is unchanged.
+function toIso(v: unknown): string | null {
+  if (v instanceof Date) return v.toISOString();
+  return (v as string | null) ?? null;
+}
+
 export function rowToTask(row: Record<string, unknown>): Task {
   return {
     id: row.id as string,
     name: row.name as string,
     mass: row.mass as number,
-    anchor: row.anchor as string | null,
+    anchor: toIso(row.anchor),
     solidity: row.solidity as number,
     energy: row.energy as number,
     fixed: row.fixed as boolean,
     alive: row.alive as boolean,
     tags: (row.tags ?? []) as string[],
-    created: row.created as string,
+    created: toIso(row.created) as string,
     cloud_x: (row.cloud_x ?? null) as number | null,
     cloud_y: (row.cloud_y ?? null) as number | null,
     river_y: (row.river_y ?? null) as number | null,

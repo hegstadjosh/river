@@ -1,6 +1,5 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -22,21 +21,17 @@ export default function McpSetupPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    checkAuthAndLoad()
+    loadKeys()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function checkAuthAndLoad() {
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
+  // Middleware protects this page; a 401 means the session expired mid-flight.
+  async function loadKeys() {
+    const res = await fetch('/api/keys')
+    if (res.status === 401) {
       router.push('/login')
       return
     }
-    await loadKeys()
-  }
-
-  async function loadKeys() {
-    const res = await fetch('/api/keys')
     if (res.ok) {
       const data = await res.json()
       setKeys(data.filter((k: ApiKey) => !k.revoked_at))

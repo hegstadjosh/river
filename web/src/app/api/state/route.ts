@@ -1,41 +1,11 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth/server'
 import { WebState } from '@/lib/river/state'
 
-// Cache ensured user IDs so we don't query timelines on every request
-const ensuredUsers = new Set<string>()
-
 async function getAuthedState() {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options))
-          } catch { /* ignored */ }
-        },
-      },
-    },
-  )
-
-  // getUser() verifies the JWT against Supabase Auth (not just local decode)
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const state = new WebState(supabase, user.id)
-
-  if (!ensuredUsers.has(user.id)) {
-    await state.ensureUser()
-    ensuredUsers.add(user.id)
-  }
-
-  return state
+  const { data: session } = await auth.getSession()
+  if (!session?.user) return null
+  return new WebState(session.user.id)
 }
 
 export const dynamic = 'force-dynamic'
@@ -52,7 +22,14 @@ export async function POST(request: Request) {
   const state = await getAuthedState()
   if (!state) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const data = await request.json()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any
+  try {
+    data = await request.json()
+    if (!data || typeof data !== 'object') throw new Error('invalid body')
+  } catch {
+    return NextResponse.json({ error: 'invalid request body' }, { status: 400 })
+  }
   const action = data.action as string
 
   try {
@@ -60,7 +37,7 @@ export async function POST(request: Request) {
       case 'put': {
         const { action: _, ...rest } = data
         await state.putTask(rest)
-        if (rest.tags) await state.ensureTaskTags(rest.tags)
+        if (rest.tags) await state.ensureTaskTags(rest.tags as string[])
         break
       }
       case 'move':

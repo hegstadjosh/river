@@ -1,8 +1,9 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth/client'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense, useState } from 'react'
+import Link from 'next/link'
 
 function LoginContent() {
   const searchParams = useSearchParams()
@@ -19,23 +20,21 @@ function LoginContent() {
     setLoading(true)
     setMessage('')
 
-    const supabase = createClient()
-
     if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({
+      const { error } = await authClient.signUp.email({
         email,
         password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        name: email.split('@')[0],
       })
       if (error) {
-        setMessage(error.message)
+        setMessage(error.message ?? 'Could not create account')
       } else {
         router.push('/app')
       }
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await authClient.signIn.email({ email, password })
       if (error) {
-        setMessage(error.message)
+        setMessage(error.message ?? 'Could not sign in')
       } else {
         router.push('/app')
       }
@@ -80,7 +79,7 @@ function LoginContent() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="password"
             required
-            minLength={6}
+            minLength={8}
             className="w-full py-3 px-4 rounded-lg text-sm outline-none"
             style={{
               background: 'rgba(200, 165, 110, 0.08)',
@@ -119,13 +118,13 @@ function LoginContent() {
           {mode === 'login' ? 'need an account? sign up' : 'already have one? sign in'}
         </button>
 
-        <a
+        <Link
           href="/"
           className="block text-xs transition-colors"
           style={{ color: 'rgba(200, 165, 110, 0.3)' }}
         >
           &larr; back
-        </a>
+        </Link>
       </div>
     </div>
   )

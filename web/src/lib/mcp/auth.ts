@@ -1,16 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
+import { pool } from '@/lib/db'
 
 export interface McpUser {
   id: string
   email: string
-}
-
-function getServiceClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
 }
 
 export function hashApiKey(key: string): string {
@@ -25,28 +18,23 @@ export async function resolveUser(bearerToken: string): Promise<McpUser | null> 
     : bearerToken
 
   const keyHash = hashApiKey(rawKey)
-  const supabase = getServiceClient()
-
-  const { data: apiKey } = await supabase
-    .from('api_keys')
-    .select('id, user_id')
-    .eq('key_hash', keyHash)
-    .is('revoked_at', null)
-    .single()
-
+  const { rows } = await pool.query(
+    `SELECT k.id, k.user_id, u.email
+     FROM api_keys k
+     JOIN neon_auth."user" u ON u.id = k.user_id::uuid
+     WHERE k.key_hash = $1 AND k.revoked_at IS NULL`,
+    [keyHash],
+  )
+  const apiKey = rows[0]
   if (!apiKey) return null
 
-  const { data: { user } } = await supabase.auth.admin.getUserById(apiKey.user_id)
-  if (!user) return null
-
-  void supabase
-    .from('api_keys')
-    .update({ last_used_at: new Date().toISOString() })
-    .eq('id', apiKey.id)
+  void pool
+    .query('UPDATE api_keys SET last_used_at = now() WHERE id = $1', [apiKey.id])
+    .catch(() => {})
 
   return {
     id: apiKey.user_id,
-    email: user.email ?? '',
+    email: apiKey.email ?? '',
   }
 }
 

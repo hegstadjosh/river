@@ -1,17 +1,12 @@
-// Remote MCP tools — registers all 6 River tools against a WebState instance
+// Remote MCP tools — registers all 13 River tools against a WebState instance
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebState } from '@/lib/river/state'
 import { taskWithPosition } from '@/lib/river/schema'
 import type { McpUser } from './auth'
-import { createClient } from '@supabase/supabase-js'
 
 function createServiceState(user: McpUser): WebState {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-  return new WebState(supabase, user.id)
+  return new WebState(user.id)
 }
 
 export function registerRiverTools(
@@ -33,7 +28,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const result = await state.look({ horizon: args.horizon, id: args.id, cloud: args.cloud })
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
     },
@@ -64,7 +58,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const task = await state.putTask(args)
       if (args.tags) await state.ensureTaskTags(args.tags)
       return {
@@ -86,7 +79,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       await state.moveTask(args.id, args.position)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, id: args.id, position: args.position }) }] }
     },
@@ -104,7 +96,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       await state.deleteTask(args.id)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, deleted: args.id }) }] }
     },
@@ -130,7 +121,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
 
       try {
         let result: unknown
@@ -179,7 +169,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const timeRange =
         args.start !== undefined || args.end !== undefined
           ? { start: args.start, end: args.end }
@@ -200,7 +189,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const count = await state.bulkSweep(args.ids)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ deleted: count, requested: args.ids.length }, null, 2) }] }
     },
@@ -218,7 +206,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const task = await state.rename(args.id, args.name)
       return { content: [{ type: 'text' as const, text: JSON.stringify(taskWithPosition(task), null, 2) }] }
     },
@@ -237,7 +224,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const task = await state.tag(args.id, args.tags, args.action)
       if (args.action === 'add') await state.ensureTaskTags(args.tags)
       return { content: [{ type: 'text' as const, text: JSON.stringify(taskWithPosition(task), null, 2) }] }
@@ -255,7 +241,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const count = await state.deleteTag(args.tag)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ deleted_tag: args.tag, tasks_updated: count }, null, 2) }] }
     },
@@ -270,7 +255,6 @@ export function registerRiverTools(
     },
     async () => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const tags = await state.listTags()
       return { content: [{ type: 'text' as const, text: JSON.stringify({ tags }, null, 2) }] }
     },
@@ -287,7 +271,6 @@ export function registerRiverTools(
     },
     async () => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       const result = await state.stats()
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
     },
@@ -304,7 +287,6 @@ export function registerRiverTools(
     },
     async (args) => {
       const state = createServiceState(getUser())
-      await state.ensureUser()
       await state.addKnownTag(args.tag)
       return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, tag: args.tag }) }] }
     },
