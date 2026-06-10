@@ -168,6 +168,9 @@
   function frame(t) {
     requestAnimationFrame(frame);
 
+    // Apply any server snapshot deferred during a drag/resize gesture
+    if (R.flushPendingState) R.flushPendingState();
+
     var dt = R.lastTime ? (t - R.lastTime) / 1000 : 1/60;
     dt = Math.min(dt, 0.1);
     R.lastTime = t;

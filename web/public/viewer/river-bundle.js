@@ -110,9 +110,8 @@ window.River = {};
       method: 'POST', headers: R.authHeaders(),
       body: JSON.stringify(Object.assign({ action: action }, data))
     }).then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d && d.river !== undefined) { R.state = d; R.sync(); }
-      }).catch(function () {});
+      .then(function (d) { R.applyState(d); })
+      .catch(function () {});
   };
 
 })();
@@ -1315,8 +1314,11 @@ window.River = {};
       incomingMap[key] = incoming[j];
     }
 
-    // Remove tasks that no longer exist
+    // Remove tasks that no longer exist — but never one with an unconfirmed
+    // local change (e.g. a just-created temp task whose INSERT this snapshot
+    // predates); it reconciles when its dirty window expires.
     R.tasks = R.tasks.filter(function (a) {
+      if (a._dirtyUntil && Date.now() < a._dirtyUntil) return true;
       var key = a.ctx && a.ctx.type === 'lane'
         ? a.id + '_L' + a.ctx.lane
         : a.id;
@@ -1789,12 +1791,32 @@ window.River = {};
   // The server computes positions, breathing room, plan lanes, and
   // recirculation — the client just renders what it gets.
 
+  // Apply a server state snapshot — deferred while the user is mid-drag or
+  // mid-resize, because syncing then would fight the interaction (remove the
+  // optimistic temp task being dragged, overwrite wizard edits in flight).
+  // The frame loop flushes the pending snapshot as soon as the gesture ends.
+  R._pendingState = null;
+
+  R.applyState = function (d) {
+    if (!d || d.river === undefined) return;
+    if (R.dragging || R.resizing) { R._pendingState = d; return; }
+    R._pendingState = null;
+    R.state = d;
+    R.sync();
+  };
+
+  R.flushPendingState = function () {
+    if (!R._pendingState || R.dragging || R.resizing) return;
+    var d = R._pendingState;
+    R._pendingState = null;
+    R.state = d;
+    R.sync();
+  };
+
   R.fetchState = function () {
     fetch('/api/state', { headers: R.authHeaders() })
       .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d && d.river !== undefined) { R.state = d; R.sync(); }
-      })
+      .then(function (d) { R.applyState(d); })
       .catch(function () {});
   };
 
@@ -4642,6 +4664,9 @@ window.River = {};
 
   function frame(t) {
     requestAnimationFrame(frame);
+
+    // Apply any server snapshot deferred during a drag/resize gesture
+    if (R.flushPendingState) R.flushPendingState();
 
     var dt = R.lastTime ? (t - R.lastTime) / 1000 : 1/60;
     dt = Math.min(dt, 0.1);

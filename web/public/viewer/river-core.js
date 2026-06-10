@@ -110,9 +110,8 @@ window.River = {};
       method: 'POST', headers: R.authHeaders(),
       body: JSON.stringify(Object.assign({ action: action }, data))
     }).then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d && d.river !== undefined) { R.state = d; R.sync(); }
-      }).catch(function () {});
+      .then(function (d) { R.applyState(d); })
+      .catch(function () {});
   };
 
 })();
